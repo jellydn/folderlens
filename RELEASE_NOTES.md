@@ -1,3 +1,28 @@
+## Shelf 0.2.0-beta.1 — prerelease
+
+Preview of provider/model support and publisher-verified updates for Apple Silicon Macs, macOS 14 or later. This release is **not latest stable** and is not installed by the stable Homebrew cask.
+
+- Ask Agent adapters for GitHub Copilot CLI, Pi and OpenCode, alongside Grok/Antigravity. OpenCode requires verified version 2.0.23.
+- Per-agent model choices in Settings, exact saved-session launchers, current-selection read broker, inline error recovery and privacy/account/cost notes. Free-model access can require an account/key and has limits; blank defaults can be paid. There are no automatic agent requests.
+- Settings → Updates: daily checks, opt-in downloads, stable default and opt-in prereleases. Installation/restart always requires separate confirmation; nothing installs on quit. Homebrew installations use `brew upgrade` and are never self-replaced.
+- Dedicated pinned Ed25519 publisher signatures on update metadata/assets, using Oak's signing-tool/Actions-secret pattern with a separate Shelf key. No unsigned fallback; metadata expires one year after signing.
+
+**Confirm only records a choice. Shelf never deletes files or runs cleanup.**
+
+### Install and security
+
+Download the DMG or ZIP explicitly from this prerelease. The app is ad-hoc signed, **not Developer ID signed or notarized**; no Apple Developer account was used. Publisher update signatures authenticate releases but do not replace Apple's trust decisions. macOS may require **System Settings → Privacy & Security → Open Anyway**. Shelf never removes quarantine or disables Gatekeeper. Intel builds are not provided.
+
+Signed metadata and ZIP size/SHA-256 are checked before installation, followed by bundle identity/version/key continuity and strict code-signature validation. Installation requires a writable non-translocated app location. A previous app copy is retained for rollback; settings/chats are preserved.
+
+### Verification limits
+
+Harmless protocol stubs cover provider failures, exact sessions, model validation and broker boundaries. Native metadata checks verified Copilot plan/Auto, Pi model state and OpenCode private-mode/exact-model selection without a model prompt. Real native model turns, tool routing during a turn and Terminal continuation remain unverified. Grok's existing sandbox startup issue is reported, not bypassed. Grok/Antigravity Terminal continuation retains native plan/sandbox rather than the new broker.
+
+Updater tests cover signature/metadata/archive rejection, versions/channels, Homebrew detection and policy defaults. Native installation/restart is a separate verification boundary; see the PR for actual exercised paths. Do not treat a successful signature check as proof of a completed application replacement.
+
+---
+
 ## Shelf 0.1.0
 
 First public release for Apple Silicon Macs running macOS 14 or later.

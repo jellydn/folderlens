@@ -10,6 +10,9 @@ use rune::{
 
 use crate::prefs::{self, Agent, Prefs};
 
+#[path = "settings_updates.rs"]
+mod updates;
+
 const PANEL: &str = "#1c1c1e";
 const CARD: &str = "#2c2c2e";
 const INK: &str = "#f5f5f7";
@@ -23,6 +26,7 @@ pub enum Page {
     Agent,
     Protected,
     Access,
+    Updates,
 }
 
 pub struct Settings {
@@ -30,6 +34,9 @@ pub struct Settings {
     pub path: PathBuf,
     pub page: Page,
     pub custom: TextEdit,
+    pub model: TextEdit,
+    pub model_error: String,
+    pub update_note: String,
 }
 
 pub fn spec() -> AppSpec<Settings> {
@@ -37,8 +44,27 @@ pub fn spec() -> AppSpec<Settings> {
         scenes: &[
             ("general", |state| state.page = Page::General),
             ("agent", |state| state.page = Page::Agent),
+            ("agent-copilot", |state| {
+                preview_agent(state, "copilot", "auto")
+            }),
+            ("agent-pi", |state| {
+                preview_agent(state, "pi", "openrouter/openrouter/free")
+            }),
+            ("agent-opencode", |state| {
+                preview_agent(state, "opencode", "opencode/glm-5.3-flash-free")
+            }),
+            ("agent-model-error", |state| {
+                preview_agent(state, "pi", "unknown");
+                save_model(state);
+            }),
             ("access", |state| state.page = Page::Access),
             ("protected", |state| state.page = Page::Protected),
+            ("updates", |state| state.page = Page::Updates),
+            ("updates-preview", |state| {
+                state.page = Page::Updates;
+                state.prefs.update_downloads = true;
+                state.prefs.update_prereleases = true;
+            }),
         ],
         on_key: Some(|_, event, tx| {
             if event.is_command('q') {
@@ -60,12 +86,47 @@ pub fn state() -> Settings {
         custom.anchor = custom.text.len();
         custom.focus = custom.anchor;
     }
-    Settings {
+    let mut state = Settings {
         prefs,
         path,
         page: Page::General,
         custom,
+        model: TextEdit::default(),
+        model_error: String::new(),
+        update_note: String::new(),
+    };
+    load_model(&mut state);
+    state
+}
+
+fn load_model(state: &mut Settings) {
+    state.model = TextEdit::default();
+    state.model.text = state.prefs.model().into();
+    state.model.anchor = state.model.text.len();
+    state.model.focus = state.model.anchor;
+    state.model_error.clear();
+}
+
+fn preview_agent(state: &mut Settings, id: &str, model: &str) {
+    state.page = Page::Agent;
+    state.prefs.agent_id = id.into();
+    state.prefs.agent_bin = id.into();
+    state.prefs.models.insert(id.into(), model.into());
+    load_model(state);
+}
+
+fn save_model(state: &mut Settings) {
+    let model = state.model.text.trim();
+    if let Err(error) = crate::agent::validate_model(&state.prefs.agent_bin, model) {
+        state.model_error = error;
+        return;
     }
+    state
+        .prefs
+        .models
+        .insert(state.prefs.model_key(), model.into());
+    state.model_error.clear();
+    persist(state);
 }
 
 static HANDLE: OnceLock<AppHandle<Settings>> = OnceLock::new();
@@ -83,6 +144,7 @@ pub fn open(page: Page) {
     handle.update(move |state, _tx: &mut Tx| {
         state.page = page;
         state.prefs = prefs::load_from(&state.path);
+        load_model(state);
     });
     handle.open();
 }
@@ -140,6 +202,7 @@ fn sidebar(state: &Settings) -> El {
         (Page::Agent, "Agent", "A", BLUE),
         (Page::Protected, "Protected", "P", GREEN),
         (Page::Access, "Access", "K", GREEN),
+        (Page::Updates, "Updates", "U", BLUE),
     ] {
         let on = state.page == page;
         side = side.child(side_row(page, label, mark, tint, on));
@@ -159,6 +222,7 @@ fn side_row(
         Page::Agent => "nav-agent",
         Page::Protected => "nav-protected",
         Page::Access => "nav-access",
+        Page::Updates => "nav-updates",
     };
     let mut line = row()
         .key(key)
@@ -202,6 +266,7 @@ fn page(state: &Settings) -> El {
         Page::Agent => agent(state),
         Page::Protected => protected(state),
         Page::Access => access(state),
+        Page::Updates => updates::view(state),
     };
     col().w_full().padding(24.0).gap(16.0).child(body)
 }
@@ -324,8 +389,61 @@ fn agent(state: &Settings) -> El {
                 .wrap()
                 .w_full(),
         )
+        .child(section(&format!(
+            "Model for {}",
+            prefs::agent_name(&state.prefs.agent_id).unwrap_or("the selected command")
+        )))
+        .child(card(
+            col()
+                .w_full()
+                .gap(8.0)
+                .padding(8.0)
+                .child(
+                    row()
+                        .w_full()
+                        .gap(8.0)
+                        .center_y()
+                        .child(
+                            text_input(&state.model, TextStyle::new(13.0, 400.0))
+                                .key("agent-model")
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .h(32.0)
+                                .single_line()
+                                .placeholder("Model ID (or CLI default)", paint(MUTED))
+                                .color(paint(INK))
+                                .on_edit(|state: &mut Settings| &mut state.model),
+                        )
+                        .child(
+                            text("Apply")
+                                .key("apply-model")
+                                .font(type_::BODY)
+                                .color(paint(BLUE))
+                                .on_press(save_model),
+                        ),
+                )
+                .child(
+                    text(crate::agent::model_note(&state.prefs.agent_bin))
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                )
+                .child(if state.model_error.is_empty() {
+                    el()
+                } else {
+                    text(state.model_error.clone())
+                        .key("model-error")
+                        .font(type_::LABEL)
+                        .color(paint("#ff9f0a"))
+                        .wrap()
+                        .w_full()
+                }),
+        ))
         .child(section("On this Mac"))
-        .child(card(list))
+        .child(card(list.max_h(160.0).scroll(ScrollSpec {
+            stick_bottom: false,
+        })))
         .child(section("Other command"))
         .child(
             row()
@@ -354,6 +472,7 @@ fn agent(state: &Settings) -> El {
                             }
                             state.prefs.agent_id = "custom".into();
                             state.prefs.agent_bin = bin;
+                            load_model(state);
                             persist(state);
                         }),
                 ),
@@ -375,6 +494,7 @@ fn agent_row(state: &Settings, agent: &Agent) -> El {
         .on_press(move |state: &mut Settings| {
             state.prefs.agent_id = id.clone();
             state.prefs.agent_bin = bin.clone();
+            load_model(state);
             persist(state);
         })
         .child(radio(on))
@@ -707,6 +827,53 @@ mod tests {
         assert!(!loaded.gauge_cpu);
         assert!(loaded.gauge_memory);
         let _ = std::fs::remove_file(&state.path);
+    }
+
+    #[test]
+    fn model_apply_preserves_agent_choices_and_rejects_flags_without_saving() {
+        use rune::{Env, Runtime};
+        let mut state = state();
+        let path = state.path.clone();
+        preview_agent(&mut state, "copilot", "auto");
+        preview_agent(&mut state, "pi", "openrouter/openrouter/free");
+        let mut rt = Runtime::new(
+            state,
+            view,
+            (760.0, 560.0),
+            Env {
+                system_dark: true,
+                scale: 2.0,
+            },
+        );
+        rt.frame(0.0);
+        let (rect, _) = rt.presented("agent-model").unwrap();
+        assert!(rect[1] >= 0.0 && rect[1] + rect[3] <= 560.0);
+        let (x, y) = rt.find("apply-model").unwrap();
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(
+            prefs::load_from(&path).model(),
+            "openrouter/openrouter/free"
+        );
+        rt.state.model.text = "--allow-all".into();
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert!(!rt.state.model_error.is_empty());
+        assert_eq!(
+            prefs::load_from(&path).model(),
+            "openrouter/openrouter/free"
+        );
+        rt.state.prefs.agent_id = "copilot".into();
+        rt.state.prefs.agent_bin = "copilot".into();
+        load_model(&mut rt.state);
+        assert_eq!(rt.state.model.text, "auto");
+        rt.state.prefs.agent_id = "pi".into();
+        rt.state.prefs.agent_bin = "pi".into();
+        load_model(&mut rt.state);
+        assert_eq!(rt.state.model.text, "openrouter/openrouter/free");
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

@@ -7,8 +7,14 @@ cargo build --release --locked
 metadata=$(cargo metadata --locked --no-deps --format-version 1)
 target=$(printf '%s' "$metadata" | plutil -extract target_directory raw -o - -)
 version=$(printf '%s' "$metadata" | plutil -extract packages.0.version raw -o - -)
+short_version=${version%%-*}
+build_version=$(printf '%s' "$version" | sed 's/-beta\./b/')
 app="$target/release/Shelf.app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+xcrun swiftc -parse-as-library -O -target arm64-apple-macosx14.0 native/Updater.swift -o "$app/Contents/MacOS/ShelfUpdater"
+"$app/Contents/MacOS/ShelfUpdater" --self-test
+cp native/update-public-key.txt "$app/Contents/Resources/update-public-key.txt"
+codesign --force --sign - "$app/Contents/MacOS/ShelfUpdater"
 cp "$target/release/shelf" "$app/Contents/MacOS/Shelf.new"
 mv -f "$app/Contents/MacOS/Shelf.new" "$app/Contents/MacOS/Shelf"
 cat > "$app/Contents/Info.plist" <<EOF
@@ -21,8 +27,9 @@ cat > "$app/Contents/Info.plist" <<EOF
   <key>CFBundleExecutable</key><string>Shelf</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleShortVersionString</key><string>$version</string>
-  <key>CFBundleVersion</key><string>$version</string>
+  <key>CFBundleShortVersionString</key><string>$short_version</string>
+  <key>CFBundleVersion</key><string>$build_version</string>
+  <key>ShelfVersion</key><string>$version</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
