@@ -2490,7 +2490,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=53c7f60f51ce12bd5da53145d9d86ce1552324e4#53c7f60f51ce12bd5da53145d9d86ce1552324e4"
+source = "git+https://github.com/anomalyco/rune?rev=d12581bc66f51068890304ab13e4ce22c355b62a#d12581bc66f51068890304ab13e4ce22c355b62a"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2566,12 +2566,12 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/anomalyco/rune?rev=53c7f60f51ce12bd5da53145d9d86ce1552324e4#53c7f60f51ce12bd5da53145d9d86ce1552324e4"
+source = "git+https://github.com/anomalyco/rune?rev=d12581bc66f51068890304ab13e4ce22c355b62a#d12581bc66f51068890304ab13e4ce22c355b62a"
 
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=53c7f60f51ce12bd5da53145d9d86ce1552324e4#53c7f60f51ce12bd5da53145d9d86ce1552324e4"
+source = "git+https://github.com/anomalyco/rune?rev=d12581bc66f51068890304ab13e4ce22c355b62a#d12581bc66f51068890304ab13e4ce22c355b62a"
 dependencies = [
  "wgpu",
 ]
@@ -2579,7 +2579,7 @@ dependencies = [
 [[package]]
 name = "rune-taffy"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=53c7f60f51ce12bd5da53145d9d86ce1552324e4#53c7f60f51ce12bd5da53145d9d86ce1552324e4"
+source = "git+https://github.com/anomalyco/rune?rev=d12581bc66f51068890304ab13e4ce22c355b62a#d12581bc66f51068890304ab13e4ce22c355b62a"
 dependencies = [
  "taffy",
 ]
