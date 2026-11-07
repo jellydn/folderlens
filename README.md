@@ -121,6 +121,13 @@ A headless picture of the panel:
 cargo run -- --theme dark --snap shots/tray.png
 ```
 
+## Architecture and decisions
+
+Start with the [architecture map](.planning/codebase/ARCHITECTURE.md). The same directory covers the stack, integrations, structure, conventions, testing and known concerns. [Agent guidance](AGENTS.md) remains the operating reference.
+
+- [Scoped agent sessions and per-agent model configuration](docs/adr/0001-scoped-agent-sessions.md)
+- [Publisher-verified updates, channels and install approval](docs/adr/0002-publisher-verified-updates.md)
+
 ## Author
 
 👤 **Huynh Duc Dung**

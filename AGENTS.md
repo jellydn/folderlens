@@ -4,6 +4,8 @@ macOS menu-bar app that reviews what a cleanup level would tick. Rust + Rune (GP
 
 **Confirm never deletes.** It records the choice in memory. There is no delete path, and tests assert the catalog is unchanged. Do not add one.
 
+The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md) and [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md). Keep these aligned when changing their contracts; this file remains the command/safety reference.
+
 ## Commands
 
 - `cargo run --release` — live app (menu-bar archivebox icon).
