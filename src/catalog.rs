@@ -196,6 +196,10 @@ pub fn load_live() -> Catalog {
     catalog
 }
 
+pub fn pending() -> Catalog {
+    missing("Scanning this Mac…")
+}
+
 fn missing(checked: &str) -> Catalog {
     Catalog {
         groups: Vec::new(),
@@ -767,19 +771,7 @@ pub fn remeasure(leaf: &mut Leaf) {
 }
 
 fn gpu_percent() -> u32 {
-    let text = run("ioreg", &["-r", "-c", "IOAccelerator", "-l"]).unwrap_or_default();
-    let key = "Device Utilization %\"=";
-    let mut best = 0_u32;
-    let mut rest = text.as_str();
-    while let Some(at) = rest.find(key) {
-        let after = &rest[at + key.len()..];
-        let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if let Ok(value) = num.parse::<u32>() {
-            best = best.max(value.min(100));
-        }
-        rest = &after[num.len()..];
-    }
-    best
+    crate::gpu::percent().unwrap_or(0)
 }
 
 fn index_age(updated: f64) -> String {

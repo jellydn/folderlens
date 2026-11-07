@@ -40,6 +40,13 @@ pub fn spec() -> AppSpec<Settings> {
             ("access", |state| state.page = Page::Access),
             ("protected", |state| state.page = Page::Protected),
         ],
+        on_key: Some(|_, event, tx| {
+            if event.is_command('q') {
+                tx.quit();
+                return true;
+            }
+            false
+        }),
         ..AppSpec::new("Settings", (760.0, 560.0), state, view)
     }
 }

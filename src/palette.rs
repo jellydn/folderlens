@@ -72,7 +72,7 @@ pub fn fit(s: &mut State, tx: &mut Tx) {
 
 /// The full action list, before a search filter or the Select submenu.
 pub fn open_height() -> f32 {
-    let n = 9.0;
+    let n = 10.0;
     let rules = 2.0;
     let gaps = (n + rules - 1.0) * 2.0;
     let list = 12.0 + n * 32.0 + rules * 9.0 + gaps;
@@ -80,6 +80,10 @@ pub fn open_height() -> f32 {
 }
 
 pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
+    if ev.is_command('q') {
+        _tx.quit();
+        return true;
+    }
     if !s.palette {
         if ev.is_command(',') {
             settings::open(Page::General);
@@ -111,16 +115,16 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
         None
     };
     if let Some(id) = command {
-        act(s, id);
+        act(s, id, _tx);
         fit(s, _tx);
         return true;
     }
     match &ev.key {
         Key::Escape => close(s),
         Key::Enter if ev.mods.cmd => {
-            act(s, "finder");
+            act(s, "finder", _tx);
         }
-        Key::Enter => activate(s),
+        Key::Enter => activate(s, _tx),
         Key::Up => move_highlight(s, -1),
         Key::Down => move_highlight(s, 1),
         Key::Backspace => {
@@ -208,7 +212,7 @@ fn action_row(s: &State, action: &Row, index: usize) -> El {
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             tx.instant();
             state.highlight = index;
-            run(state, id);
+            act(state, id, tx);
             fit(state, tx);
         })
         .child(
@@ -254,15 +258,11 @@ fn action_rows(s: &State) -> Vec<Row> {
         item("unlock", "Unlock", "⌘U", path),
         item("select", "Select", "›", s.target.is_some()),
         item("analyse", "Analyse now", "⌘R", path),
-        Row {
-            id: "ask",
-            title: ask_title(s),
-            shortcut: "⌘J",
-            enabled: true,
-        },
+        item("ask", "Ask Agent", "⌘J", true),
         item("pause", "Pause alerts for 1 hour", "⌘P", true),
         item("settings", "Settings…", "⌘,", true),
         item("close", "Close", "esc", true),
+        item("quit", "Quit Shelf", "⌘Q", true),
     ]
 }
 
@@ -290,28 +290,22 @@ fn item(id: &'static str, title: &str, shortcut: &'static str, enabled: bool) ->
     }
 }
 
-fn ask_title(s: &State) -> String {
-    if s.prefs.agent_bin.is_empty() {
-        return "Ask your agent".to_string();
+fn act(s: &mut State, id: &str, tx: &mut Tx) -> bool {
+    if id == "quit" {
+        tx.quit();
+    } else {
+        run(s, id);
     }
-    match prefs::agent_name(&s.prefs.agent_id) {
-        Some(name) if s.prefs.agent_id != "custom" => format!("Ask {name}"),
-        _ => "Ask your agent".to_string(),
-    }
-}
-
-fn act(s: &mut State, id: &str) -> bool {
-    run(s, id);
     true
 }
 
-fn activate(s: &mut State) {
+fn activate(s: &mut State, tx: &mut Tx) {
     let shown = rows(s);
     if shown.is_empty() {
         return;
     }
     let index = s.highlight.min(shown.len() - 1);
-    run(s, shown[index].id);
+    act(s, shown[index].id, tx);
 }
 
 fn move_highlight(s: &mut State, delta: isize) {
@@ -424,35 +418,80 @@ fn analyse(s: &mut State) {
     close(s);
 }
 
-fn ask(s: &mut State) {
-    let name = target_name(s);
-    let path = first_path(s).unwrap_or_default();
-    let detail = match s.target {
-        Some(Target::Leaf(index)) if index < s.catalog.leaves.len() => leaf_view(s, index).detail,
-        Some(Target::Group(index)) => s
-            .catalog
-            .groups
-            .get(index)
-            .map(|group| group.detail.clone())
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-    match prefs::prepare_ask(&s.prefs, &name, &path, &detail) {
-        Ok(prompt) => match prefs::launch(&s.prefs.agent_bin, &prompt) {
-            Ok(()) => {
-                let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
-                s.note = format!("Asked {who}.");
+pub fn ask_prompt(s: &State) -> Result<String, &'static str> {
+    let selected: Vec<_> = (0..s.catalog.leaves.len())
+        .filter(|&index| super::is_ticked(s, index))
+        .map(|index| leaf_view(s, index))
+        .collect();
+    let detail = format!(
+        "Selected items: {}, {} total.\n{}",
+        selected.len(),
+        catalog::format_bytes(super::ticked_bytes(s)),
+        selected
+            .iter()
+            .map(|leaf| format!("- {} | {} | {}", leaf.name, leaf.size_label, leaf.detail))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    let paths = selected
+        .iter()
+        .map(|leaf| leaf.path.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = prefs::prepare_ask(&s.prefs, super::level_label(s), &paths, &detail)?;
+    if selected.is_empty() {
+        return Err("Select items to clean up first.");
+    }
+    Ok(prompt)
+}
+
+pub fn ask_access(s: &State) -> crate::agent::Access {
+    let mut access = crate::agent::Access::default();
+    if !s.prefs.allow_start || !s.prefs.send_paths {
+        return access;
+    }
+    access.blocked = prefs::ALWAYS
+        .iter()
+        .map(|(_, path)| prefs::expand_home(path).into())
+        .collect();
+    access.blocked.extend(s.prefs.kept.iter().map(Into::into));
+    for (index, leaf) in s.catalog.leaves.iter().enumerate() {
+        if super::is_ticked(s, index) {
+            access.selected.push((&leaf.path).into());
+        } else {
+            access.blocked.push((&leaf.path).into());
+        }
+    }
+    access
+}
+
+pub fn ask(s: &mut State) {
+    if s.agent.as_ref().is_some_and(|job| job.result.is_none()) {
+        s.note = "An agent review is already running.".into();
+        close(s);
+        return;
+    }
+    match ask_prompt(s) {
+        Ok(prompt) => {
+            let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
+            match crate::agent::Job::start(&s.prefs.agent_bin, who, &prompt, ask_access(s)) {
+                Ok(job) => {
+                    s.agent = Some(job);
+                }
+                Err(err) => {
+                    s.agent = Some(crate::agent::Job::failed(who, &s.prefs.agent_bin, &err))
+                }
             }
-            Err(err) => s.note = err,
-        },
+            s.note.clear();
+            s.agent_details = false;
+        }
         Err(message) => {
             s.note = message.to_string();
-            let page = if message.starts_with("Choose") {
-                Page::Agent
-            } else {
-                Page::Access
-            };
-            settings::open(page);
+            if message.starts_with("Choose") {
+                settings::open(Page::Agent);
+            } else if message.starts_with("Grant") {
+                settings::open(Page::Access);
+            }
         }
     }
     close(s);

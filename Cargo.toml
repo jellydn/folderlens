@@ -7,3 +7,7 @@ description = "Review what a cleanup level would tick. Confirm does not delete."
 
 [dependencies]
 rune = { git = "https://github.com/anomalyco/rune", rev = "01fc82d24ef17954f0e0d4f1955e6622f6395bcc" }
+serde_json = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"

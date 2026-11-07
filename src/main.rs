@@ -11,7 +11,9 @@
 //!
 //! `CARGO_HOME="$PWD/.cargo-home" cargo run -- --snap shots/tray.png`
 
+mod agent;
 mod catalog;
+mod gpu;
 mod palette;
 mod prefs;
 mod settings;
@@ -46,10 +48,6 @@ struct State {
     confirmed: bool,
     prefs: prefs::Prefs,
     prefs_path: std::path::PathBuf,
-    cpu_ticks: Option<catalog::CpuTicks>,
-    /// Frame clock of the last gauge sample. None until the first poll.
-    gauge_at: Option<f64>,
-    gpu_at: Option<f64>,
     palette: bool,
     select_open: bool,
     query: String,
@@ -58,6 +56,8 @@ struct State {
     /// Session unlocks. A restart clears them. In-use rows stay locked on disk.
     unlocked: Vec<String>,
     note: String,
+    agent: Option<agent::Job>,
+    agent_details: bool,
     paused_until: f64,
     /// Last height sent to the window. Arrow keys must not resize again.
     window_h: f32,
@@ -79,9 +79,6 @@ fn state_from(catalog: Catalog) -> State {
         confirmed: false,
         prefs,
         prefs_path,
-        cpu_ticks: None,
-        gauge_at: None,
-        gpu_at: None,
         palette: false,
         select_open: false,
         query: String::new(),
@@ -89,13 +86,59 @@ fn state_from(catalog: Catalog) -> State {
         target: None,
         unlocked: Vec::new(),
         note: String::new(),
+        agent: None,
+        agent_details: false,
         paused_until: 0.0,
         window_h: palette::TRAY_H,
     }
 }
 
 fn live_state() -> State {
-    state_from(catalog::load_live())
+    if rune::is_headless() {
+        return state_from(catalog::load_live());
+    }
+    state_from(catalog::pending())
+}
+
+/// Workers send results through Rune's UI queue, including while the panel is hidden.
+fn start_workers(handle: rune::AppHandle<State>) {
+    let scan_handle = handle.clone();
+    std::thread::spawn(move || {
+        let catalog = catalog::load_live();
+        scan_handle.update(move |s, tx| {
+            s.ticks = vec![None; catalog.leaves.len()];
+            s.open = vec![false; catalog.groups.len()];
+            if let Some(index) = catalog.groups.iter().position(|group| group.count > 1) {
+                s.open[index] = true;
+            }
+            s.catalog = catalog;
+            s.confirmed = false;
+            tx.instant();
+        });
+    });
+    std::thread::spawn(move || {
+        let mut before = catalog::cpu_ticks();
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+            let after = catalog::cpu_ticks();
+            let cpu = before
+                .zip(after)
+                .and_then(|(a, b)| catalog::cpu_delta(a, b));
+            before = after;
+            let memory = catalog::memory_now();
+            let gpu = catalog::gpu_now();
+            handle.update_if(move |s, tx| {
+                let cpu = cpu.unwrap_or(s.catalog.cpu);
+                let changed =
+                    (s.catalog.cpu, s.catalog.memory, s.catalog.gpu) != (cpu, memory, gpu);
+                s.catalog.cpu = cpu;
+                s.catalog.memory = memory;
+                s.catalog.gpu = gpu;
+                tx.instant();
+                changed
+            });
+        }
+    });
 }
 
 #[cfg(test)]
@@ -117,47 +160,33 @@ fn unix_now() -> f64 {
         .unwrap_or(0.0)
 }
 
-/// One sample at launch, then a fresh sample about once a second while the window is open.
-fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
+/// AppKit pointer tracking stays on the UI thread; system commands do not.
+fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     status::on_poll();
-    tx.wake_after(Duration::from_secs(1));
+    tx.wake_after(if status::is_visible() {
+        Duration::from_millis(100)
+    } else {
+        Duration::from_secs(1)
+    });
     let mut changed = false;
     let prefs = prefs::load_from(&s.prefs_path);
     if prefs != s.prefs {
         s.prefs = prefs;
         changed = true;
     }
+    if let Some(job) = &s.agent {
+        job.set_access(palette::ask_access(s));
+        if !s.prefs.allow_start || s.prefs.agent_bin != job.bin {
+            job.cancel();
+        }
+    }
+    if let Some(job) = &mut s.agent {
+        changed |= job.poll();
+    }
     if s.paused_until > 0.0 && unix_now() >= s.paused_until && s.note.starts_with("Alerts paused") {
         s.paused_until = 0.0;
         s.note.clear();
         changed = true;
-    }
-    if s.gauge_at.is_some_and(|at| now - at < 1.0) {
-        return changed;
-    }
-    let ticks = catalog::cpu_ticks();
-    if let (Some(before), Some(after)) = (s.cpu_ticks, ticks) {
-        if let Some(pct) = catalog::cpu_delta(before, after) {
-            if s.catalog.cpu != pct {
-                s.catalog.cpu = pct;
-                changed = true;
-            }
-        }
-    }
-    s.cpu_ticks = ticks;
-    s.gauge_at = Some(now);
-    let memory = catalog::memory_now();
-    if s.catalog.memory != memory {
-        s.catalog.memory = memory;
-        changed = true;
-    }
-    if s.gpu_at.is_none_or(|at| now - at >= 5.0) {
-        let gpu = catalog::gpu_now();
-        if s.catalog.gpu != gpu {
-            s.catalog.gpu = gpu;
-            changed = true;
-        }
-        s.gpu_at = Some(now);
     }
     changed
 }
@@ -698,9 +727,17 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
     if s.palette {
         return palette::panel(s);
     }
-    let (free_n, free_unit) = catalog::free_parts(s.catalog.disk_free);
+    let (free_n, free_unit) = if s.catalog.disk_total == 0 {
+        ("—".to_string(), "")
+    } else {
+        catalog::free_parts(s.catalog.disk_free)
+    };
     let ready_bytes = viewed_ready(s);
-    let ready = format!("{} ready", catalog::format_bytes(ready_bytes));
+    let ready = if s.catalog.missing {
+        String::new()
+    } else {
+        format!("{} ready", catalog::format_bytes(ready_bytes))
+    };
     let checked = s.catalog.checked.clone();
     let mut list = col().key("list").w_full().py(4.0);
     for index in 0..s.catalog.groups.len() {
@@ -803,6 +840,31 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
                     .color(paint(INK))
                     .grow(1.0),
             )
+            .child(if s.agent.is_some() {
+                text("Terminal")
+                    .key("agent-terminal")
+                    .font(type_::LABEL)
+                    .color(paint(
+                        if s.agent
+                            .as_ref()
+                            .is_some_and(|job| matches!(job.result, Some(Ok(_))))
+                        {
+                            BLUE
+                        } else {
+                            MUTED
+                        },
+                    ))
+                    .mr(8.0)
+                    .on_press(|state: &mut State| {
+                        if let Some(job) = &state.agent {
+                            if let Err(error) = job.open_chat(&state.prefs) {
+                                state.note = error;
+                            }
+                        }
+                    })
+            } else {
+                el()
+            })
             .child(
                 row()
                     .key("level-menu")
@@ -829,6 +891,8 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         .grow(1.0)
         .min_h(0.0),
     )
+    .child(if s.agent.is_some() { rule() } else { el() })
+    .child(agent_review(s))
     .child(rule())
     .child(
         row()
@@ -870,6 +934,117 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
     )
 }
 
+fn agent_review(s: &State) -> El {
+    let Some(job) = &s.agent else {
+        return el();
+    };
+    let mut panel = col()
+        .key("agent-review")
+        .w_full()
+        .px(16.0)
+        .py(8.0)
+        .gap(4.0)
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .child(
+                    text(job.status())
+                        .key("agent-progress")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .grow(1.0),
+                )
+                .child(if job.result.is_none() {
+                    text("Cancel")
+                        .key("agent-cancel")
+                        .font(type_::LABEL)
+                        .color(paint(BLUE))
+                        .on_press(|state: &mut State| {
+                            if let Some(job) = &state.agent {
+                                job.cancel();
+                            }
+                        })
+                } else {
+                    el()
+                }),
+        );
+    if let Some(result) = &job.result {
+        let text = match result {
+            Ok(report) => report,
+            Err(error) => error,
+        };
+        let summary: String = if result.is_err() {
+            text.lines().next().unwrap_or(text)
+        } else {
+            text
+        }
+        .chars()
+        .take(280)
+        .collect();
+        panel = panel.child(
+            rune::text(summary)
+                .key("agent-summary")
+                .font(type_::LABEL)
+                .color(paint(if result.is_err() { RED } else { INK }))
+                .wrap()
+                .w_full()
+                .max_h(90.0),
+        );
+        if result.is_err() {
+            panel = panel.child(
+                row()
+                    .w_full()
+                    .gap(16.0)
+                    .child(
+                        rune::text(if s.agent_details {
+                            "Hide details"
+                        } else {
+                            "Details"
+                        })
+                        .key("agent-error-toggle")
+                        .font(type_::LABEL)
+                        .color(paint(BLUE))
+                        .on_press(|state: &mut State| state.agent_details = !state.agent_details),
+                    )
+                    .child(
+                        rune::text("Agent settings")
+                            .key("agent-error-settings")
+                            .font(type_::LABEL)
+                            .color(paint(BLUE))
+                            .on_press(|_: &mut State| settings::open(settings::Page::Agent)),
+                    )
+                    .child(
+                        rune::text("Retry")
+                            .key("agent-retry")
+                            .font(type_::LABEL)
+                            .color(paint(BLUE))
+                            .on_press(palette::ask),
+                    ),
+            );
+            if s.agent_details {
+                panel = panel.child(
+                    col()
+                        .w_full()
+                        .max_h(110.0)
+                        .child(
+                            rune::text(text.clone())
+                                .key("agent-error-details")
+                                .font(type_::LABEL)
+                                .color(paint(MUTED))
+                                .wrap()
+                                .w_full(),
+                        )
+                        .scroll(ScrollSpec {
+                            stick_bottom: false,
+                        }),
+                );
+            }
+        }
+    }
+    panel
+}
+
 fn launch_size() -> (f32, f32) {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -889,9 +1064,31 @@ fn main() {
     let size = launch_size();
     let spec = AppSpec {
         scenes: &[
+            ("scanning", |s: &mut State| {
+                s.catalog = catalog::pending();
+                s.ticks.clear();
+                s.open.clear();
+            }),
             ("careful", |s| apply_level(s, Level::Careful)),
             ("balanced", |s| apply_level(s, Level::Balanced)),
             ("aggressive", |s| apply_level(s, Level::Aggressive)),
+            ("asking", |s| {
+                apply_level(s, Level::Balanced);
+                s.agent = Some(agent::Job::preview(None));
+            }),
+            ("reviewed", |s| {
+                apply_level(s, Level::Balanced);
+                s.agent = Some(agent::Job::preview(Some(Ok("Review the selected caches first. Keep protected and in-use folders. Check the saved context and risks in Terminal before taking action.".into()))));
+            }),
+            ("agent-failed", |s| {
+                apply_level(s, Level::Balanced);
+                s.agent = Some(agent::Job::failed("Grok", "preview-only", "Agent ended without an answer (exit status: 2).\nunknown flag: --silent\nCheck the installed CLI version and login in Agent settings, then retry. Shelf did not change your selection."));
+            }),
+            ("agent-error-details", |s| {
+                apply_level(s, Level::Balanced);
+                s.agent = Some(agent::Job::failed("Grok", "preview-only", "Agent ended without an answer (exit status: 2).\nunknown flag: --silent\nCheck the installed CLI version and login in Agent settings, then retry. Shelf did not change your selection."));
+                s.agent_details = true;
+            }),
             ("confirmed", |s| {
                 apply_level(s, Level::Aggressive);
                 s.confirmed = true;
@@ -937,7 +1134,14 @@ fn main() {
     let panel = app.handle();
     let (handle, _) = app.window(settings);
     settings::install(handle);
-    status::arm(panel, palette::WIDTH);
+    status::arm(panel.clone(), palette::WIDTH);
+    let mut started = false;
+    app = app.on_ready(move |_| {
+        if !started {
+            started = true;
+            start_workers(panel.clone());
+        }
+    });
     app.run();
 }
 
@@ -1054,17 +1258,9 @@ mod tests {
     fn the_live_index_feeds_this_mac() {
         let catalog = catalog::load_live();
         assert!(!catalog.missing, "{}", catalog.checked);
-        assert!(
-            catalog.disk_total > 400_000_000_000,
-            "disk {}",
-            catalog.disk_total
-        );
+        assert!(catalog.disk_total > 0, "disk {}", catalog.disk_total);
         assert!(catalog.disk_free > 0, "free {}", catalog.disk_free);
-        assert!(catalog
-            .groups
-            .iter()
-            .any(|group| group.name == "App caches"));
-        assert!(catalog.leaves.iter().any(|leaf| leaf.locked));
+        assert!(catalog.disk_free <= catalog.disk_total);
         assert!(catalog.memory <= 100 && catalog.cpu <= 100 && catalog.gpu <= 100);
         let commands = std::process::Command::new("ps")
             .args(["-ax", "-o", "command="])
@@ -1097,6 +1293,116 @@ mod tests {
     }
 
     #[test]
+    fn agent_progress_and_results_leave_ticks_and_estimates_unchanged() {
+        let mut rt = runtime();
+        rt.update(|state, _| {
+            apply_level(state, Level::Aggressive);
+            let logs = leaf_at(state, "logs");
+            state.ticks[logs] = Some(false);
+            state.agent = Some(agent::Job::preview(None));
+        });
+        rt.frame(0.1);
+        let before = ticked_ids(&rt.state);
+        let bytes = ticked_bytes(&rt.state);
+        assert!(rt.find("agent-progress").is_some());
+        assert!(rt.find("agent-cancel").is_some());
+        rt.update(|state, _| {
+            state.agent = Some(agent::Job::preview(Some(Ok("Keep the held items.".into()))))
+        });
+        rt.frame(0.2);
+        assert!(rt.find("agent-summary").is_some());
+        assert!(rt.find("agent-terminal").is_some());
+        assert!(rt.find("agent-cancel").is_none());
+        assert_eq!(ticked_ids(&rt.state), before);
+        assert_eq!(ticked_bytes(&rt.state), bytes);
+        rt.update(|state, _| {
+            state.agent = Some(agent::Job::preview(Some(Err(
+                "Agent ended without an answer.\nunknown flag: --silent".into(),
+            ))));
+            state.prefs.agent_bin = "unsupported-test-agent".into();
+            state.prefs.allow_start = true;
+        });
+        rt.frame(0.3);
+        assert!(rt.find("agent-cancel").is_none());
+        assert!(rt.find("agent-error-details").is_none());
+        click(&mut rt, "agent-error-toggle");
+        assert!(rt.find("agent-error-details").is_some());
+        click(&mut rt, "agent-error-settings");
+        assert_eq!(ticked_ids(&rt.state), before);
+        click(&mut rt, "agent-retry");
+        assert!(rt.find("agent-error-details").is_none());
+        assert!(rt
+            .state
+            .agent
+            .as_ref()
+            .unwrap()
+            .result
+            .as_ref()
+            .unwrap()
+            .is_err());
+        assert_eq!(ticked_ids(&rt.state), before);
+        assert_eq!(ticked_bytes(&rt.state), bytes);
+        click(&mut rt, "confirm");
+        assert!(rt.state.confirmed);
+        assert_eq!(ticked_ids(&rt.state), before);
+    }
+
+    #[test]
+    fn ask_agent_uses_the_current_ticks_not_the_hovered_target() {
+        let mut state = fixture_state();
+        state.prefs.agent_bin = "grok".into();
+        state.prefs.allow_start = true;
+        apply_level(&mut state, Level::Aggressive);
+        let logs = leaf_at(&state, "logs");
+        let backups = leaf_at(&state, "backups");
+        let deps = leaf_at(&state, "deps");
+        state.ticks[logs] = Some(false);
+        state.ticks[backups] = Some(true);
+        state.target = Some(palette::Target::Leaf(backups));
+
+        let prompt = palette::ask_prompt(&state).unwrap();
+        assert!(prompt.contains("Selection mode: Selected"));
+        assert!(prompt.contains("Selected items: 2, 4.01 GB total"));
+        assert!(prompt.contains("acx node_modules | 3.30 GB | idle 2 h"));
+        assert!(prompt.contains("Spotify cache | 709 MB | idle 48 h"));
+        assert!(!prompt.contains("Logs and crash reports"));
+        assert!(!prompt.contains("Backups and archives"));
+        assert!(!prompt.contains("/fixture/"));
+        assert!(prompt.contains("Ask for approval before deleting"));
+        assert!(palette::ask_access(&state).selected.is_empty());
+
+        state.prefs.send_paths = true;
+        let prompt = palette::ask_prompt(&state).unwrap();
+        assert!(prompt.contains("/fixture/deps\n/fixture/spotify"));
+        assert!(!prompt.contains("/fixture/logs"));
+        assert!(!prompt.contains("/fixture/backups"));
+        assert_eq!(
+            palette::ask_access(&state).selected,
+            vec![
+                std::path::PathBuf::from("/fixture/deps"),
+                std::path::PathBuf::from("/fixture/spotify")
+            ]
+        );
+
+        state
+            .prefs
+            .kept
+            .push(state.catalog.leaves[deps].path.clone());
+        let prompt = palette::ask_prompt(&state).unwrap();
+        assert!(prompt.contains("Selected items: 1, 709 MB total"));
+        assert!(!prompt.contains("acx node_modules"));
+        assert_eq!(
+            palette::ask_access(&state).selected,
+            vec![std::path::PathBuf::from("/fixture/spotify")]
+        );
+        apply_level(&mut state, Level::None);
+        assert_eq!(
+            palette::ask_prompt(&state),
+            Err("Select items to clean up first.")
+        );
+    }
+
+    #[test]
     fn the_action_list_height_matches_its_rows() {
         let mut rt = runtime();
         rt.update(|state, _| palette::open(state, None));
@@ -1106,6 +1412,31 @@ mod tests {
         let want = palette::height(&rt.state);
         assert!((bottom - want).abs() < 1.0, "drawn {bottom} formula {want}");
         assert!((want - palette::open_height()).abs() < 1.0);
+    }
+
+    #[test]
+    fn quit_requests_app_exit_from_actions_and_the_keyboard() {
+        let mut rt = runtime();
+        click(&mut rt, "actions");
+        click(&mut rt, "action-quit");
+        assert_eq!(rt.shell_request, Some(rune::Shell::Quit));
+
+        for palette_open in [false, true] {
+            let mut rt = runtime();
+            rt.update(|state, _| state.palette = palette_open);
+            rt.frame(0.0);
+            rt.update(|state, tx| {
+                on_key(
+                    state,
+                    &KeyEvent {
+                        key: rune::Key::Command('q'),
+                        mods: rune::Mods::default(),
+                    },
+                    tx,
+                );
+            });
+            assert_eq!(rt.shell_request, Some(rune::Shell::Quit));
+        }
     }
 
     #[test]

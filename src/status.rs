@@ -11,8 +11,7 @@ pub struct Rect {
     pub x: f64,
     pub y: f64,
     pub w: f64,
-    /// The button's height. The panel uses `y`, the bottom edge, as its top.
-    #[allow(dead_code)]
+    /// Height in AppKit points.
     pub h: f64,
 }
 
@@ -23,6 +22,19 @@ pub struct Screen {
     pub w: f64,
     pub h: f64,
     pub scale: f64,
+}
+
+/// Keep the short path from the menu-bar button to the panel open.
+fn pointer_inside(panel: Rect, button: Rect, x: f64, y: f64) -> bool {
+    let bridge = Rect {
+        x: button.x,
+        y: panel.y + panel.h,
+        w: button.w,
+        h: (button.y - panel.y - panel.h).max(0.0),
+    };
+    [panel, button, bridge]
+        .iter()
+        .any(|rect| x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h)
 }
 
 /// Button frame is points, origin at the bottom left, y up.
@@ -65,6 +77,17 @@ pub fn on_poll() {
             start();
         }
     });
+    #[cfg(target_os = "macos")]
+    if !rune::is_headless() {
+        macos::dismiss_outside();
+    }
+}
+
+pub fn is_visible() -> bool {
+    #[cfg(target_os = "macos")]
+    return macos::is_visible();
+    #[cfg(not(target_os = "macos"))]
+    false
 }
 
 static START: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
@@ -79,13 +102,17 @@ pub fn conceal() {
 #[cfg(target_os = "macos")]
 mod macos {
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-    use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
+    use std::sync::{Mutex, OnceLock};
 
-    use super::{popover_origin, Rect, Screen};
+    use super::{pointer_inside, popover_origin, Rect, Screen};
 
     static ITEM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
     static VISIBLE: AtomicBool = AtomicBool::new(true);
+    static PANEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+    static EXPANDED: AtomicBool = AtomicBool::new(false);
+    static SESSION_STARTED: AtomicU64 = AtomicU64::new(0);
+    static POINTER_REGION: Mutex<Option<Rect>> = Mutex::new(None);
     static APPLY: OnceLock<Box<dyn Fn(bool) + Send + Sync>> = OnceLock::new();
 
     pub fn install<S: 'static>(handle: rune::AppHandle<S>, window_w: f32) {
@@ -97,12 +124,14 @@ mod macos {
         let _ = APPLY.set(Box::new(move |show| {
             VISIBLE.store(show, Ordering::SeqCst);
             if show {
+                *POINTER_REGION.lock().unwrap() = None;
                 crate::settings::hide();
                 set_highlight(true);
                 if let Some(origin) = current_origin(window_w) {
                     handle_for_click.set_position(origin);
                 }
-                handle_for_click.show();
+                // Focus too, so the first action click and shortcuts reach Rune.
+                handle_for_click.open();
             } else {
                 set_highlight(false);
                 handle_for_click.hide();
@@ -113,7 +142,51 @@ mod macos {
     }
 
     pub(super) fn conceal() {
+        let item = ITEM.load(Ordering::Acquire);
+        if EXPANDED.load(Ordering::Relaxed) {
+            let session = msg0(item, sel(c"expandedInterfaceSession"));
+            if !session.is_null() {
+                msg_void(session, sel(c"cancel"));
+            }
+        }
         apply(false);
+    }
+
+    pub(super) fn is_visible() -> bool {
+        VISIBLE.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn dismiss_outside() {
+        if !is_visible() {
+            return;
+        }
+        let panel = PANEL.load(Ordering::Acquire);
+        if panel.is_null() {
+            return;
+        }
+        let item = ITEM.load(Ordering::Acquire);
+        let button = msg0(msg0(item, sel(c"button")), sel(c"window"));
+        let pointer = msg_point(class(c"NSEvent"), sel(c"mouseLocation"));
+        let panel = msg_rect(panel, sel(c"frame"));
+        let button = msg_rect(button, sel(c"frame"));
+        let rect = |r: NsRect| Rect {
+            x: r.origin.x,
+            y: r.origin.y,
+            w: r.size.w,
+            h: r.size.h,
+        };
+        let outside = {
+            let mut region = POINTER_REGION.lock().unwrap();
+            // Actions shrinks the window under the pointer. Keep the old path
+            // until the pointer enters the new panel, rather than closing it.
+            if region.is_none() || pointer_inside(rect(panel), rect(button), pointer.x, pointer.y) {
+                *region = Some(rect(panel));
+            }
+            !pointer_inside(region.unwrap(), rect(button), pointer.x, pointer.y)
+        };
+        if outside {
+            conceal();
+        }
     }
 
     fn apply(show: bool) {
@@ -127,7 +200,7 @@ mod macos {
     /// The item stays retained for the process. A local autorelease pool here
     /// frees it before the status bar keeps it.
     unsafe fn install_item() -> bool {
-        let _app = msg0(class(c"NSApplication"), sel(c"sharedApplication"));
+        let app = msg0(class(c"NSApplication"), sel(c"sharedApplication"));
         let bar = msg0(class(c"NSStatusBar"), sel(c"systemStatusBar"));
         if bar.is_null() {
             return false;
@@ -150,10 +223,70 @@ mod macos {
             msg_void_ptr(bar, sel(c"removeStatusItem:"), item);
             return false;
         }
-        msg_void_ptr(button, sel(c"setTarget:"), target);
-        msg_void_ptr(button, sel(c"setAction:"), sel(c"click:"));
+        let supports_expanded = msg_ptr_bool(
+            item,
+            sel(c"respondsToSelector:"),
+            sel(c"setExpandedInterfaceDelegate:"),
+        );
+        EXPANDED.store(supports_expanded, Ordering::Relaxed);
+        if supports_expanded {
+            msg_void_ptr(item, sel(c"setExpandedInterfaceDelegate:"), target);
+            monitor_button();
+        } else {
+            msg_void_ptr(button, sel(c"setTarget:"), target);
+            msg_void_ptr(button, sel(c"setAction:"), sel(c"click:"));
+        }
+        let windows = msg0(app, sel(c"windows"));
+        for index in 0..msg_usize(windows, sel(c"count")) {
+            let window = msg_index(windows, sel(c"objectAtIndex:"), index);
+            if msg_ptr_bool(
+                msg0(window, sel(c"title")),
+                sel(c"isEqualToString:"),
+                ns_string("Shelf"),
+            ) {
+                PANEL.store(window, Ordering::Release);
+                break;
+            }
+        }
         ITEM.store(item, Ordering::Release);
         true
+    }
+
+    // macOS 27 suppresses button actions with an expanded-interface delegate,
+    // but does not end the session on a second click. Observe only that click.
+    unsafe fn monitor_button() {
+        let handler = block2::RcBlock::new(|event: *mut c_void| {
+            if !is_visible()
+                || msg_f64_ret(event, sel(c"timestamp"))
+                    <= f64::from_bits(SESSION_STARTED.load(Ordering::Relaxed))
+            {
+                return;
+            }
+            let item = ITEM.load(Ordering::Acquire);
+            let window = msg0(msg0(item, sel(c"button")), sel(c"window"));
+            let rect = msg_rect(window, sel(c"frame"));
+            let point = msg_point(class(c"NSEvent"), sel(c"mouseLocation"));
+            if point.x >= rect.origin.x
+                && point.x <= rect.origin.x + rect.size.w
+                && point.y >= rect.origin.y
+                && point.y <= rect.origin.y + rect.size.h
+            {
+                conceal();
+            }
+        });
+        let add: unsafe extern "C" fn(
+            *mut c_void,
+            *mut c_void,
+            usize,
+            *const c_void,
+        ) -> *mut c_void = std::mem::transmute(objc_msgSend as *const ());
+        // AppKit copies the block and owns the monitor for the process lifetime.
+        add(
+            class(c"NSEvent"),
+            sel(c"addGlobalMonitorForEventsMatchingMask:handler:"),
+            1 << 1, // leftMouseDown; mouse monitoring needs no key-event permission.
+            (&*handler as *const block2::Block<dyn Fn(*mut c_void)>).cast(),
+        );
     }
 
     fn set_icon(button: *mut c_void) {
@@ -181,7 +314,23 @@ mod macos {
             if cls.is_null() {
                 return objc_getClass(c"ShelfStatusTarget".as_ptr()) as usize;
             }
+            let protocol = objc_getProtocol(c"NSStatusItemExpandedInterfaceDelegate".as_ptr());
+            if !protocol.is_null() {
+                class_addProtocol(cls, protocol);
+            }
             add_method(cls, c"click:", click as *const (), c"v@:@");
+            add_method(
+                cls,
+                c"statusItem:didBeginExpandedInterfaceSession:",
+                begin as *const (),
+                c"v@:@@",
+            );
+            add_method(
+                cls,
+                c"statusItemDidEndExpandedInterfaceSession:animated:",
+                end as *const (),
+                c"v@:@c",
+            );
             objc_registerClassPair(cls);
             cls as usize
         });
@@ -193,7 +342,34 @@ mod macos {
     }
 
     unsafe extern "C" fn click(_this: *mut c_void, _cmd: *mut c_void, _sender: *mut c_void) {
-        apply(!VISIBLE.load(Ordering::SeqCst));
+        if is_visible() {
+            conceal();
+        } else {
+            apply(true);
+        }
+    }
+
+    unsafe extern "C" fn begin(
+        _this: *mut c_void,
+        _cmd: *mut c_void,
+        _item: *mut c_void,
+        _session: *mut c_void,
+    ) {
+        let process = msg0(class(c"NSProcessInfo"), sel(c"processInfo"));
+        SESSION_STARTED.store(
+            msg_f64_ret(process, sel(c"systemUptime")).to_bits(),
+            Ordering::Relaxed,
+        );
+        apply(true);
+    }
+
+    unsafe extern "C" fn end(
+        _this: *mut c_void,
+        _cmd: *mut c_void,
+        _item: *mut c_void,
+        _animated: i8,
+    ) {
+        apply(false);
     }
 
     fn current_origin(window_w: f32) -> Option<(i32, i32)> {
@@ -281,6 +457,14 @@ mod macos {
                 unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void,
             >(objc_msgSend as *const () as usize);
             f(obj, sel)
+        }
+    }
+
+    fn msg_void(obj: *mut c_void, selector: *mut c_void) {
+        unsafe {
+            let f: unsafe extern "C" fn(*mut c_void, *mut c_void) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(obj, selector);
         }
     }
 
@@ -392,6 +576,38 @@ mod macos {
         }
     }
 
+    fn msg_point(obj: *mut c_void, selector: *mut c_void) -> NsPoint {
+        unsafe {
+            let f: unsafe extern "C" fn(*mut c_void, *mut c_void) -> NsPoint =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(obj, selector)
+        }
+    }
+
+    fn msg_ptr_bool(obj: *mut c_void, selector: *mut c_void, arg: *mut c_void) -> bool {
+        unsafe {
+            let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i8 =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(obj, selector, arg) != 0
+        }
+    }
+
+    fn msg_usize(obj: *mut c_void, selector: *mut c_void) -> usize {
+        unsafe {
+            let f: unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(obj, selector)
+        }
+    }
+
+    fn msg_index(obj: *mut c_void, selector: *mut c_void, index: usize) -> *mut c_void {
+        unsafe {
+            let f: unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(obj, selector, index)
+        }
+    }
+
     #[repr(C)]
     #[derive(Clone, Copy, Default)]
     struct NsPoint {
@@ -417,6 +633,8 @@ mod macos {
     #[link(name = "AppKit", kind = "framework")]
     unsafe extern "C" {
         fn objc_getClass(name: *const i8) -> *mut c_void;
+        fn objc_getProtocol(name: *const i8) -> *mut c_void;
+        fn class_addProtocol(cls: *mut c_void, protocol: *mut c_void) -> u8;
         fn sel_registerName(name: *const i8) -> *mut c_void;
         fn objc_msgSend();
         #[cfg(target_arch = "x86_64")]
@@ -439,6 +657,34 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pointer_can_cross_from_button_but_leaving_any_panel_edge_dismisses() {
+        let panel = Rect {
+            x: -500.0,
+            y: 200.0,
+            w: 360.0,
+            h: 400.0,
+        };
+        let button = Rect {
+            x: -220.0,
+            y: 605.0,
+            w: 24.0,
+            h: 22.0,
+        };
+        assert!(pointer_inside(panel, button, -300.0, 350.0));
+        assert!(pointer_inside(panel, button, -210.0, 615.0));
+        assert!(pointer_inside(panel, button, -210.0, 602.0));
+        for (x, y) in [
+            (-501.0, 350.0),
+            (-139.0, 350.0),
+            (-300.0, 199.0),
+            (-300.0, 601.0),
+            (-195.0, 602.0),
+        ] {
+            assert!(!pointer_inside(panel, button, x, y), "{x}, {y}");
+        }
+    }
 
     #[test]
     fn the_panel_sits_under_the_status_button() {

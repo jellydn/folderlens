@@ -266,8 +266,8 @@ pub fn choose_folder() -> Option<String> {
 /// The question Ask would send, or why it cannot start.
 pub fn prepare_ask(
     prefs: &Prefs,
-    name: &str,
-    path: &str,
+    selection: &str,
+    paths: &str,
     detail: &str,
 ) -> Result<String, &'static str> {
     if prefs.agent_bin.is_empty() {
@@ -276,50 +276,63 @@ pub fn prepare_ask(
     if !prefs.allow_start {
         return Err("Grant access in Settings before Shelf starts an agent.");
     }
-    let mut prompt = format!("Shelf item: {name}. {detail}. Confirm does not delete files.");
-    if prefs.send_paths && !path.is_empty() {
-        prompt.push_str(" Path: ");
-        prompt.push_str(path);
-        prompt.push('.');
+    let mut prompt = format!(
+        "# Shelf cleanup context\n\nHelp me clean up the items currently selected in Shelf.\nSelection mode: {selection}.\n{detail}\n\nInspect the selected items and propose a safe cleanup. Ask for approval before deleting files or running destructive commands. Leave unselected, protected, held, and in-use items unchanged. Shelf Confirm only records a choice and does not delete files."
+    );
+    if prefs.send_paths && !paths.is_empty() {
+        prompt.push_str("\nSelected paths (in the same order as the items):\n");
+        prompt.push_str(paths);
+    } else {
+        prompt.push_str(
+            "\nFull paths are withheld. Ask me for the paths before acting; do not guess them.",
+        );
     }
     Ok(prompt)
 }
 
-pub fn launch(bin: &str, prompt: &str) -> Result<(), String> {
-    let dir = user_path()
-        .parent()
-        .ok_or_else(|| "Shelf has no settings folder.".to_string())?
-        .to_path_buf();
-    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    let ask = dir.join("ask.txt");
-    std::fs::write(&ask, prompt).map_err(|err| err.to_string())?;
-    let mut command = Command::new("open");
-    if bin.ends_with(".app") {
-        command.arg("-a").arg(bin);
-        return spawn(command);
+/// Save a snapshot; its launcher cannot open an unrelated chat while analysis runs.
+pub fn prepare_run(runs: &Path, context: &str) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|err| err.to_string())?
+        .as_nanos();
+    std::fs::create_dir_all(runs).map_err(|err| err.to_string())?;
+    let dir = runs.join(format!("chat-{stamp}-{}", std::process::id()));
+    // Exclusive creation prevents a second request from overwriting an earlier snapshot.
+    std::fs::create_dir(&dir).map_err(|err| err.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+            .map_err(|err| err.to_string())?;
     }
-    let script_path = dir.join("ask.command");
-    let script = format!(
-        "#!/bin/bash\nexec {} \"$(cat {})\"\n",
-        shell_quote(bin),
-        shell_quote(&ask.to_string_lossy())
-    );
+    std::fs::write(dir.join("context.md"), context).map_err(|err| err.to_string())?;
+    let script_path = dir.join("Ask.command");
+    let script = "#!/bin/zsh\nprint -u2 -- 'Shelf analysis is not complete. Open this launcher after a successful review.'\nexit 1\n";
     std::fs::write(&script_path, script).map_err(|err| err.to_string())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755));
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o700))
+            .map_err(|err| err.to_string())?;
     }
-    command.arg(&script_path);
-    spawn(command)
+    Ok(script_path)
 }
 
-fn spawn(mut command: Command) -> Result<(), String> {
-    command
-        .stdin(std::process::Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|err| err.to_string())
+pub fn resume_run(script: &Path, bin: &str, args: &[&str], session: &str) -> Result<(), String> {
+    let dir = script.parent().ok_or("Missing run folder")?;
+    let args = args
+        .iter()
+        .map(|arg| shell_quote(arg))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let text = format!(
+        "#!/bin/zsh\ncd -- {} || exit 1\nexport GROK_FOLDER_TRUST='0'\nexec {} {args} {}\n",
+        shell_quote(&dir.to_string_lossy()),
+        shell_quote(bin),
+        shell_quote(session)
+    );
+    std::fs::write(script, text).map_err(|err| err.to_string())
 }
 
 fn shell_quote(text: &str) -> String {
@@ -371,6 +384,66 @@ mod tests {
         prefs.send_paths = true;
         let prompt = prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use").unwrap();
         assert!(prompt.contains("/tmp/smolvm"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn ask_runs_keep_private_snapshots_and_start_the_configured_agent() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = path_for_state().with_extension("run test's $folder");
+        std::fs::create_dir(&root).unwrap();
+        let bin = root.join("grok");
+        std::fs::write(
+            &bin,
+            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$#\" \"$GROK_FOLDER_TRUST\" \"$1\" \"$2\"\ncat context.md\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let prefs = Prefs {
+            agent_bin: bin.to_string_lossy().into_owned(),
+            allow_start: true,
+            ..Prefs::default()
+        };
+        let context = prepare_ask(
+            &prefs,
+            "Selected",
+            "/private/cache",
+            "Selected items: 1 (42 KB)\n- cache's $(echo unsafe): 42 KB",
+        )
+        .unwrap();
+        let runs = root.join("Runs");
+        let first = prepare_run(&runs, &context).unwrap();
+        let second = prepare_run(&runs, "A different selection").unwrap();
+        assert_ne!(first, second);
+        let dir = first.parent().unwrap();
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 2);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("context.md")).unwrap(),
+            context
+        );
+        assert_eq!(
+            std::fs::metadata(dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert!(!Command::new(&first).output().unwrap().status.success());
+        resume_run(&first, &prefs.agent_bin, &["--resume"], "session's $23").unwrap();
+        let output = Command::new(&first).output().unwrap();
+        assert!(output.status.success(), "{:?}", output);
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let parts: Vec<_> = stdout.splitn(6, '\n').collect();
+        assert_eq!(Path::new(parts[0]), dir);
+        assert_eq!(parts[1], "2");
+        assert_eq!(parts[2], "0");
+        assert_eq!(parts[3], "--resume");
+        assert_eq!(parts[4], "session's $23");
+        assert_eq!(parts[5], context);
+        assert!(!stdout.contains("/private/cache"));
+        assert_eq!(
+            std::fs::read_to_string(second.parent().unwrap().join("context.md")).unwrap(),
+            "A different selection"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

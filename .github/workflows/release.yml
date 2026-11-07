@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install pinned Rust
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component rustfmt --component clippy
+      - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets
+      - run: cargo test --locked
+      - name: Build signed bundle, DMG, ZIP, and checksums
+        run: sh scripts/release.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: shelf-${{ github.ref_name }}-macos-arm64
+          path: target/release/assets/*
+          if-no-files-found: error
+          compression-level: 0
+      - name: Publish release
+        uses: softprops/action-gh-release@40c2ca6ddd77ba2a30bbea8f67409c0f76868d67 # v3
+        with:
+          body_path: RELEASE_NOTES.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            target/release/assets/*.dmg
+            target/release/assets/*.zip
+            target/release/assets/SHA256SUMS
