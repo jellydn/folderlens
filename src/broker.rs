@@ -191,6 +191,11 @@ impl Broker {
             while !stop.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        // BSD accepts inherit O_NONBLOCK. Wait for a complete bounded
+                        // request instead of racing the client's first write.
+                        if stream.set_nonblocking(false).is_err() {
+                            continue;
+                        }
                         let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
                         let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
                         let response =
@@ -352,10 +357,17 @@ mod tests {
         let reader = Reader::new(initial, current.clone(), dir.join("context.md"));
         let broker = Broker::start(reader).unwrap();
         let request = |path: &str| json!({"path":dir.join(path), "line":2, "limit":1});
-        assert_eq!(
-            forward(&broker.socket, &request("selected/text"))["text"],
-            "second\n"
-        );
+        // Accept can precede the client's first write. A listener's nonblocking flag
+        // must not turn this harmless delay into an incomplete read on BSD/macOS.
+        let mut delayed = UnixStream::connect(&broker.socket).unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        writeln!(delayed, "{}", request("selected/text")).unwrap();
+        let mut response = String::new();
+        BufReader::new(delayed).read_line(&mut response).unwrap();
+        let response: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["text"], "second\n", "{response}");
+        let response = forward(&broker.socket, &request("selected/text"));
+        assert_eq!(response["text"], "second\n", "{response}");
         for path in ["outside", "selected/escape", "selected/kept/secret"] {
             assert!(forward(&broker.socket, &request(path))["error"].is_string());
         }

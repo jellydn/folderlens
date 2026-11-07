@@ -335,12 +335,14 @@ pub fn prepare_ask(
 
 /// Save a snapshot; its launcher cannot open an unrelated chat while analysis runs.
 pub fn prepare_run(runs: &Path, context: &str) -> Result<PathBuf, String> {
+    static NEXT_RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let sequence = NEXT_RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|err| err.to_string())?
         .as_nanos();
     std::fs::create_dir_all(runs).map_err(|err| err.to_string())?;
-    let dir = runs.join(format!("chat-{stamp}-{}", std::process::id()));
+    let dir = runs.join(format!("chat-{stamp}-{}-{sequence}", std::process::id()));
     // Exclusive creation prevents a second request from overwriting an earlier snapshot.
     std::fs::create_dir(&dir).map_err(|err| err.to_string())?;
     #[cfg(unix)]
