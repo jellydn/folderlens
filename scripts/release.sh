@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 metadata=$(cargo metadata --locked --no-deps --format-version 1)
 target=$(printf '%s' "$metadata" | plutil -extract target_directory raw -o - -)
 version=$(printf '%s' "$metadata" | plutil -extract packages.0.version raw -o - -)
-if [ -n "${GITHUB_REF_NAME:-}" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+if [ "${GITHUB_REF_TYPE:-}" = tag ] && [ "${GITHUB_REF_NAME:-}" != "v$version" ]; then
   echo "Release tag must match Cargo.toml: v$version" >&2
   exit 1
 fi
