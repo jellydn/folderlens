@@ -1,0 +1,9 @@
+[package]
+name = "shelf"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Review what a cleanup level would tick. Confirm does not delete."
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "01fc82d24ef17954f0e0d4f1955e6622f6395bcc" }
