@@ -16,6 +16,8 @@ Download the DMG, open it, and drag Shelf.app to Applications. The ZIP contains 
 
 Homebrew: `brew install --cask jellydn/tap/shelf`.
 
+If Homebrew requires third-party cask trust, review the tap and run `brew trust --cask jellydn/tap/shelf` before retrying. This trusts only Shelf, not the whole tap.
+
 These builds are ad-hoc signed, not Developer ID signed or notarized. macOS may require **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. Intel builds are not included.
 
 ### Ask Agent limits
