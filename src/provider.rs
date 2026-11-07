@@ -1,8 +1,11 @@
 //! Provider-specific CLI arguments and private run configuration, shared by analysis and resume.
 
 use std::io::Read;
+use std::os::fd::AsRawFd;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -60,7 +63,13 @@ pub(super) struct Launch {
 }
 
 impl Launch {
-    pub fn prepare(bin: &str, model: &str, dir: &Path, socket: &Path) -> Result<Self, String> {
+    pub fn prepare(
+        bin: &str,
+        model: &str,
+        dir: &Path,
+        socket: &Path,
+        cancel: &AtomicU8,
+    ) -> Result<Self, String> {
         let provider = Provider::for_bin(bin)?;
         provider.validate_model(model)?;
         let exe = std::env::current_exe().map_err(|_| "Cannot locate Shelf reader executable")?;
@@ -109,6 +118,7 @@ impl Launch {
                 env.extend([
                     ("SHELF_READER_EXECUTABLE", exe.clone()),
                     ("SHELF_READER_SOCKET", socket.into()),
+                    ("SHELF_EXPECTED_MODEL", model.into()),
                 ]);
                 common.extend(
                     [
@@ -133,40 +143,7 @@ impl Launch {
             }
             Provider::OpenCode => {
                 // These schemas are verified against 2.0.23, not current 2.2+ web examples.
-                let mut version = Command::new(bin)
-                    .arg("--version")
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|_| "Cannot check OpenCode version")?;
-                let deadline = Instant::now() + Duration::from_secs(3);
-                let status = loop {
-                    if let Ok(Some(status)) = version.try_wait() {
-                        break status;
-                    }
-                    if Instant::now() >= deadline {
-                        let _ = version.kill();
-                        let _ = version.wait();
-                        return Err("OpenCode version check timed out. Check the CLI in Agent settings; no review was sent.".into());
-                    }
-                    std::thread::sleep(Duration::from_millis(20));
-                };
-                let mut output = String::new();
-                version
-                    .stdout
-                    .take()
-                    .unwrap()
-                    .take(256)
-                    .read_to_string(&mut output)
-                    .map_err(|_| "Cannot read OpenCode version")?;
-                let version = output
-                    .trim()
-                    .strip_prefix("opencode v")
-                    .unwrap_or(output.trim());
-                if !status.success() || version != "2.0.23" {
-                    return Err("Shelf's private OpenCode adapter requires 2.0.23. This version's policy and configuration schema is not verified. No review was sent; choose another agent in Settings.".into());
-                }
+                verify_opencode(std::ffi::OsStr::new(bin), cancel)?;
                 let permissions = json!([{"action":"*","resource":"*","effect":"deny"},{"action":"shelf_read_selected","resource":"*","effect":"allow"}]);
                 let config = json!({
                     "model":model,"default_agent":"shelf-readonly","update":"disable","share":"disabled","snapshots":false,"warming":false,
@@ -216,13 +193,119 @@ impl Launch {
             }
             command
         };
+        let mut resume_command = make(resume);
+        if provider == Provider::OpenCode {
+            // A saved launcher must recheck after CLI upgrades, even while Shelf is closed.
+            let mut checked = Command::new(&exe);
+            checked
+                .arg("--shelf-opencode-resume")
+                .arg(bin)
+                .args(resume_command.get_args())
+                .current_dir(dir);
+            for (key, value) in resume_command.get_envs() {
+                if let Some(value) = value {
+                    checked.env(key, value);
+                } else {
+                    checked.env_remove(key);
+                }
+            }
+            resume_command = checked;
+        }
         Ok(Self {
             provider,
             command: make(analysis),
-            resume: make(resume),
+            resume: resume_command,
             model: model.into(),
         })
     }
+}
+
+fn verify_opencode(bin: &std::ffi::OsStr, cancel: &AtomicU8) -> Result<(), String> {
+    if cancel.load(Ordering::Relaxed) == super::CANCELLED {
+        return Err("Agent review cancelled.".into());
+    }
+    let mut child = Command::new(bin)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map_err(|_| "Cannot check OpenCode version")?;
+    let result = (|| {
+        let mut stdout = child.stdout.take().ok_or("Cannot read OpenCode version")?;
+        let fd = stdout.as_raw_fd();
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return Err("Cannot bound OpenCode version check".into());
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut output = Vec::new();
+        let mut eof = false;
+        loop {
+            if cancel.load(Ordering::Relaxed) == super::CANCELLED {
+                return Err("Agent review cancelled.".into());
+            }
+            if Instant::now() >= deadline {
+                return Err("OpenCode version check timed out. Check the CLI in Agent settings; no review was sent.".into());
+            }
+            let mut bytes = [0; 257];
+            match stdout.read(&mut bytes) {
+                Ok(0) => eof = true,
+                Ok(n) => output.extend_from_slice(&bytes[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(_) => return Err("Cannot read OpenCode version".into()),
+            }
+            if output.len() > 256 {
+                return Err("OpenCode version output exceeds its limit.".into());
+            }
+            if let Some(status) = child
+                .try_wait()
+                .map_err(|_| "Cannot check OpenCode version")?
+            {
+                if eof {
+                    let output =
+                        String::from_utf8(output).map_err(|_| "Invalid OpenCode version output")?;
+                    let version = output
+                        .trim()
+                        .strip_prefix("opencode v")
+                        .unwrap_or(output.trim());
+                    return if status.success() && version == "2.0.23" {
+                        Ok(())
+                    } else {
+                        Err("Shelf's private OpenCode adapter requires 2.0.23. This version's policy and configuration schema is not verified. No review was sent; choose another agent in Settings.".into())
+                    };
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    })();
+    // Descendants can retain stdout after the direct process exits. Never leave a drainer behind.
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    let _ = child.wait();
+    result
+}
+
+pub(super) fn resume_helper() -> Option<i32> {
+    let args = std::env::args_os().collect::<Vec<_>>();
+    if args
+        .get(1)
+        .is_none_or(|arg| arg != "--shelf-opencode-resume")
+    {
+        return None;
+    }
+    if args.len() < 4 {
+        return Some(2);
+    }
+    if let Err(error) = verify_opencode(&args[2], &AtomicU8::new(super::RUNNING)) {
+        eprintln!("{error}");
+        return Some(1);
+    }
+    let _error = Command::new(&args[2]).args(&args[3..]).exec();
+    eprintln!("Cannot resume OpenCode. Check the CLI in Agent settings.");
+    Some(1)
 }
 
 impl super::Session {

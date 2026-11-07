@@ -15,6 +15,8 @@ Save context immediately, but save the successful report/session and exact resum
 
 Persist model choice per agent/custom executable. Use supported `--model` arguments, or OpenCode's private per-run configuration plus ACP selection, never shared configuration. Gate OpenCode to its verified 2.0.23 schema; await private-mode readiness. Reject unavailable explicit models rather than choosing a paid fallback. Agent requests remain manual. Confirm still only records a choice and never deletes.
 
+Apply the OpenCode version gate again in its headless saved launcher, not only during the original review. Validate the post-mode model options. Pi's continuation input guard rejects a restored model that differs from an explicit saved choice. Bounded nonblocking input/version reads honor cancellation; an atomic lifecycle transition orders cancellation before successful run finalization. Broker shutdown interrupts active socket packet reads, and directory entries are resolved relative to the opened descriptor before current-scope revalidation.
+
 ## Considered Options
 - Saved context only avoids folder tooling but does not meet the approved inspection requirement.
 - Direct provider filesystem/shell tools give providers ambient authority and cannot enforce live selection revocation.

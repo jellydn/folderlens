@@ -9,7 +9,7 @@
 Bundling executes `ShelfUpdater --self-test`; `--verify-release <assets> <public-key-file>` verifies real signed release output without installation.
 
 ## Test File Organization
-**Location:** `#[cfg(test)] mod tests` in source files; Swift tests in `native/Updater.swift`.
+**Location:** `#[cfg(test)] mod tests` in source files; headless executable continuation in `tests/opencode_continuation.rs`; Swift tests in `native/Updater.swift`.
 **Naming:** Behavior names such as `model_apply_preserves_agent_choices_and_rejects_flags_without_saving` (`src/settings.rs`).
 **Structure:** Tests exercise observable state and saved output, not private call order.
 
@@ -28,7 +28,7 @@ Bundling executes `ShelfUpdater --self-test`; `--verify-release <assets> <public
 **Location:** `src/catalog.rs`, `src/main.rs`, `src/prefs.rs` and co-located tests.
 
 ## Coverage
-**Requirements:** No percentage threshold configured. Last local full run: 44 Rust tests passed; native verification tests passed.
+**Requirements:** No percentage threshold configured. Last local full run: 47 Rust unit tests plus one executable continuation integration test passed; native verification tests passed, including quarantine attributes and atomic-swap rollback fixtures. Pi 1.5.0 SDK typecheck, Biome lint/format and a harmless extension-hook probe passed.
 **View Coverage:** No coverage-report command configured; do not invent coverage percentages.
 
 ## Test Types
@@ -39,5 +39,7 @@ Bundling executes `ShelfUpdater --self-test`; `--verify-release <assets> <public
 ## Common Patterns
 **Async Testing:** Poll jobs with finite deadlines; production cancellation/deadline errors stay recoverable (`src/agent.rs`).
 **Error Testing:** Assert selection/results remain intact and authority does not widen; use disposable signature keys and rollback fixtures, never the owner's installed app.
+
+**Recent regressions:** Pointer exit stays open while outside-click policy dismisses (`src/status.rs`); native event routing remains unverified. Cancellation interrupts a pipe-full prompt and a descendant-held version stdout; closed brokers interrupt partial tool packets. The native archive delegate rejected known-length and chunked oversized responses; signed published-archive download is a separate disposable probe, not an installation test.
 
 *Testing analysis: 2026-11-07*

@@ -135,6 +135,12 @@ pub fn install(handle: AppHandle<Settings>) {
     let _ = HANDLE.set(handle);
 }
 
+pub fn update_status(message: &'static str) {
+    if let Some(handle) = HANDLE.get() {
+        handle.update(move |state, _tx: &mut Tx| state.update_note = message.into());
+    }
+}
+
 pub fn open(page: Page) {
     let Some(handle) = HANDLE.get() else {
         return;
@@ -835,7 +841,7 @@ mod tests {
         let mut state = state();
         let path = state.path.clone();
         preview_agent(&mut state, "copilot", "auto");
-        preview_agent(&mut state, "pi", "openrouter/openrouter/free");
+        preview_agent(&mut state, "pi", "");
         let mut rt = Runtime::new(
             state,
             view,
@@ -849,6 +855,7 @@ mod tests {
         let (rect, _) = rt.presented("agent-model").unwrap();
         assert!(rect[1] >= 0.0 && rect[1] + rect[3] <= 560.0);
         let (x, y) = rt.find("apply-model").unwrap();
+        rt.state.model.text = "openrouter/openrouter/free".into();
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);

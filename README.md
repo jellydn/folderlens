@@ -1,5 +1,7 @@
 # Welcome to Shelf 👋
 
+<img src="assets/shelf-icon.png" width="128" height="128" alt="Shelf: a folder in an archive tray on a shelf">
+
 ![Version](https://img.shields.io/badge/version-0.1.0-blue.svg?cacheSeconds=2592000)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/jellydn/shelf/blob/main/LICENSE)
 [![Twitter: jellydn](https://img.shields.io/twitter/follow/jellydn.svg?style=social)](https://twitter.com/jellydn)
@@ -8,7 +10,7 @@
 
 ## Screenshot
 
-The panel opens from the menu bar.
+The panel opens from the menu bar. Moving the pointer outside does not close it. Click outside, press Escape, or click the menu-bar button again to dismiss it. Escape closes an open action list before closing the panel.
 
 ![Shelf panel](shots/tray.png)
 
@@ -19,6 +21,10 @@ Protected folders, the hour hold, and the locked system paths.
 Agents that are on `PATH`.
 
 ![Agent settings](shots/settings-agent.png)
+
+## Brand assets
+
+The bundled app uses [Shelf.icns](assets/Shelf.icns), generated from the Painter-designed [app icon](assets/shelf-icon.png). The matching small-size [favicon](assets/favicon.svg) uses the same teal, amber and cream shapes. [ICO](assets/favicon.ico), [PNG](assets/favicon.png), Apple touch/PWA icons and [web manifest](assets/site.webmanifest) are in `assets/` for documentation sites; GitHub controls its own browser favicon. Regenerate with `uv run --with pillow scripts/icons.py` on macOS. Normal builds copy the committed ICNS and need no image-generation tools.
 
 ## Features
 
@@ -55,6 +61,8 @@ Copilot and OpenCode use Shelf's private MCP reader; Pi loads only the explicit 
 
 After a successful review, Shelf saves `analysis.md` and `session.txt`. Terminal opens `Ask.command` to resume that exact provider session in the same run folder, with the same model and tool restrictions. Pi must finish its settled event and save its exact chat under the run's private `sessions/` directory. Before success, the launcher refuses to open an unrelated fresh chat. Shelf rechecks the agent, model and start permission before opening Terminal. The saved context is a snapshot, not a live selection.
 
+OpenCode continuations recheck the verified CLI version even when Shelf is closed. Pi blocks continuation prompts if the restored model differs from an explicit saved choice. Cancellation and successful review finalization have one ordering point: cancellation that wins prevents a successful report/session launcher from being saved.
+
 Agent-start permission still applies. Requests remain manual; there are no automatic paid calls. Destructive work requires separate approval, and Shelf itself never deletes files. Run files can contain shared paths and remain on disk until you remove them. On this Mac, the installed Grok read-only sandbox currently refuses startup because of a socket-symlink deny-list error; Shelf reports it rather than disabling the sandbox. Harmless native metadata checks verified Copilot's plan/Auto selection, Pi's model state, and OpenCode's private-mode loading and exact model selection without sending a model prompt. Live model analysis, native tool routing during a model turn, and native Terminal continuation have not been verified; protocol stubs cover the handoff and failures.
 
 ## Updates
@@ -63,7 +71,11 @@ Settings → Updates checks GitHub releases daily while the bundled app runs. St
 
 Shelf verifies signed `update.json` metadata against its pinned, dedicated Ed25519 public key, then verifies the ZIP's signed size and SHA-256 before extraction. Expired metadata, missing/wrong signatures, wrong channel/version, corrupted downloads and unverified bundles fail closed. Every **Install and Restart** action requires a separate native confirmation; a download or quitting Shelf never authorizes installation. Finish agent reviews first. A previous app copy is kept next to the installation for rollback. App settings and chats are not removed.
 
-Homebrew installations are never self-replaced: use `brew upgrade --cask jellydn/tap/shelf`. The stable tap does not follow prereleases. Source/debug binaries do not run an updater; use the bundled app.
+Detected Homebrew installations are not self-replaced: use `brew upgrade --cask jellydn/tap/shelf`. The stable tap does not follow prereleases. Source/debug binaries do not run an updater; use the bundled app.
+
+Current preview limits: Homebrew detection checks the standard prefixes and `HOMEBREW_PREFIX`; a custom prefix absent from the GUI environment is not reliably detected. For such installations, use Homebrew and do not approve self-installation. Discovery currently examines the first 100 releases. After an automatic download, use **Check for Updates…** to open the separate installation confirmation. Old rollback copies are retained rather than automatically deleted. These review findings remain open in PR #10.
+
+**Published beta.1 limitation:** its native archive transfer timed out during post-release verification. Use the release's DMG or ZIP for manual installation if an update download fails. PR #10 replaces the per-byte archive loop with a native file transfer; this fix is not in the published beta.1 assets. Signed-asset verification passed, but real app replacement/restart remains unverified.
 
 Signing follows [Oak's](https://github.com/jellydn/oak) per-app public-key/Actions-secret pattern and pinned Sparkle signing tools. Shelf uses its **own** `SPARKLE_PRIVATE_KEY` secret, not Oak's key. Unlike Sparkle's silent install-on-quit mode, Shelf separates downloads from an explicitly approved native installation. Release publication requires valid publisher signatures on metadata, ZIP and DMG. No Apple Developer account is required for these signatures, but they are **not Developer ID signing or notarization**. First installation or a later restart may need macOS **Privacy & Security → Open Anyway**; Shelf never clears quarantine or disables Gatekeeper. Translocated or non-writable installations cannot self-update; move the app to a writable Applications location or install manually.
 

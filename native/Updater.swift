@@ -68,6 +68,56 @@ enum UpdateError: Error, LocalizedError {
   }
 }
 
+// Native file transfer avoids a main-actor suspension for every archive byte.
+final class ArchiveDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+  let maximum: Int64
+  let destination: URL
+  // Initialized before resume; subsequent access is on URLSession's serial delegate queue.
+  private var continuation: CheckedContinuation<URLResponse, Error>?
+  private var result: Result<URLResponse, Error> = .failure(UpdateError.download)
+  init(maximum: Int, destination: URL) {
+    self.maximum = Int64(maximum)
+    self.destination = destination
+  }
+  func fetch(_ url: URL, configuration: URLSessionConfiguration) async throws -> URLResponse {
+    let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    defer { session.invalidateAndCancel() }
+    return try await withCheckedThrowingContinuation { continuation in
+      self.continuation = continuation
+      // The async download convenience API suppresses download progress callbacks.
+      session.downloadTask(with: url).resume()
+    }
+  }
+  func urlSession(
+    _ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64
+  ) {
+    if totalBytesWritten > maximum || totalBytesExpectedToWrite > maximum {
+      downloadTask.cancel()
+    }
+  }
+  func urlSession(
+    _ session: URLSession, downloadTask: URLSessionDownloadTask,
+    didFinishDownloadingTo location: URL
+  ) {
+    result = Result {
+      guard let response = downloadTask.response else { throw UpdateError.download }
+      // URLSession removes its temporary file after this callback returns.
+      try FileManager.default.moveItem(at: location, to: destination)
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0o600], ofItemAtPath: destination.path)
+      return response
+    }
+  }
+  func urlSession(
+    _ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?
+  ) {
+    if let error { result = .failure(error) }
+    continuation?.resume(with: result)
+    continuation = nil
+  }
+}
+
 struct Manifest: Codable {
   let schema: Int
   let version: String
@@ -146,17 +196,28 @@ func replaceBundle(staged: URL, target: URL, launch: (URL) throws -> Void) throw
   let fm = FileManager.default
   let backup = target.deletingLastPathComponent().appendingPathComponent(
     ".Shelf-previous-\(UUID().uuidString).app")
-  try fm.moveItem(at: target, to: backup)
+  // Atomically exchange: interruption must never leave the installed path absent.
+  guard renamex_np(staged.path, target.path, UInt32(RENAME_SWAP)) == 0 else {
+    throw UpdateError.process
+  }
   do {
-    try fm.moveItem(at: staged, to: target)
+    try fm.moveItem(at: staged, to: backup)
     try launch(target)
   } catch {
-    if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
-    try fm.moveItem(at: backup, to: target)
+    let previous = fm.fileExists(atPath: staged.path) ? staged : backup
+    guard renamex_np(previous.path, target.path, UInt32(RENAME_SWAP)) == 0 else {
+      throw UpdateError.process
+    }
     try? launch(target)
     throw UpdateError.process
   }
   // Keep the previous app for rollback. Settings and chats are never moved or removed.
+}
+
+func quarantineDownload(_ file: URL) throws {
+  let timestamp = String(Int(Date().timeIntervalSince1970), radix: 16)
+  // Publisher verification does not replace Gatekeeper's download assessment.
+  try run("/usr/bin/xattr", ["-w", "com.apple.quarantine", "0083;\(timestamp);Shelf;\(UUID().uuidString)", file.path])
 }
 
 func settings(_ path: URL) -> [String: String] {
@@ -311,28 +372,12 @@ struct Updater {
       }
       let temporary = root.appendingPathComponent(UUID().uuidString)
       defer { try? fm.removeItem(at: temporary) }
-      let (stream, response) = try await session.bytes(
-        from: base.appendingPathComponent(manifest.asset))
+      let response = try await ArchiveDownload(maximum: manifest.size, destination: temporary)
+        .fetch(
+          base.appendingPathComponent(manifest.asset), configuration: session.configuration)
       guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError.download }
-      guard
-        fm.createFile(atPath: temporary.path, contents: nil, attributes: [.posixPermissions: 0o600])
-      else { throw UpdateError.download }
-      let output = try FileHandle(forWritingTo: temporary)
-      defer { try? output.close() }
-      var chunk = Data()
-      var received = 0
-      for try await byte in stream {
-        received += 1
-        guard received <= manifest.size else { throw UpdateError.untrustedDownload }
-        chunk.append(byte)
-        if chunk.count == 65_536 {
-          try output.write(contentsOf: chunk)
-          chunk.removeAll(keepingCapacity: true)
-        }
-      }
-      try output.write(contentsOf: chunk)
-      try output.synchronize()
       try verifyArchive(temporary, manifest: manifest)
+      try quarantineDownload(temporary)
       if fm.fileExists(atPath: archive.path) { try fm.removeItem(at: archive) }
       try fm.moveItem(at: temporary, to: archive)
     }
@@ -375,6 +420,7 @@ struct Updater {
       ".Shelf-update-\(UUID().uuidString).app")
     try fm.copyItem(at: candidate, to: staged)
     defer { try? fm.removeItem(at: staged) }
+    try quarantineDownload(staged)
     try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", staged.path])
     guard application.terminate() else { throw UpdateError.process }
     for _ in 0..<150 {
@@ -506,6 +552,8 @@ func selfTest() throws {
   defer { try? FileManager.default.removeItem(at: temporary) }
   try bytes.write(to: temporary)
   try verifyArchive(temporary, manifest: manifest)
+  try quarantineDownload(temporary)
+  try run("/usr/bin/xattr", ["-p", "com.apple.quarantine", temporary.path])
   try (bytes + Data("tampered".utf8)).write(to: temporary)
   reject { try verifyArchive(temporary, manifest: manifest) }
   require(isHomebrew(URL(fileURLWithPath: "/opt/homebrew/Caskroom/shelf/0.1.0/Shelf.app")))
@@ -530,6 +578,8 @@ func selfTest() throws {
   reject { try replaceBundle(staged: staged, target: target) { _ in throw UpdateError.process } }
   require(try Data(contentsOf: target) == Data("old".utf8))
   try Data("new".utf8).write(to: staged)
+  try quarantineDownload(staged)
   try replaceBundle(staged: staged, target: target) { _ in }
   require(try Data(contentsOf: target) == Data("new".utf8))
+  try run("/usr/bin/xattr", ["-p", "com.apple.quarantine", target.path])
 }

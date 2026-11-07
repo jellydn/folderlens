@@ -3,8 +3,8 @@
 use std::ffi::{CStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::fd::AsRawFd;
-use std::os::unix::ffi::OsStringExt;
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -46,7 +46,7 @@ impl Reader {
         if self.context == path {
             return true;
         }
-        let current = self.current.lock().unwrap();
+        let current = self.current.lock().unwrap().clone();
         let under = |roots: &[PathBuf]| roots.iter().any(|root| path.starts_with(root));
         under(&self.initial.selected) && !under(&self.initial.blocked) && current.allows(path)
     }
@@ -73,18 +73,28 @@ impl Reader {
             .map_err(|_| "Cannot inspect selected path")?
             .file_type();
         if kind.is_dir() {
+            let access = self.current.lock().unwrap().clone();
             let mut names = Vec::new();
             for name in directory_names(&file)? {
-                if path
-                    .join(&name)
-                    .canonicalize()
-                    .is_ok_and(|p| self.allows(&p))
-                {
+                let name_c = std::ffi::CString::new(name.as_bytes())
+                    .map_err(|_| "Invalid directory entry")?;
+                let fd = unsafe {
+                    libc::openat(
+                        file.as_raw_fd(),
+                        name_c.as_ptr(),
+                        libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+                    )
+                };
+                if fd < 0 {
+                    continue;
+                }
+                let child = unsafe { File::from_raw_fd(fd) };
+                if opened_path(&child).is_ok_and(|p| self.allows(&p)) {
                     names.push(name.to_string_lossy().into_owned());
                 }
             }
             names.sort();
-            if !self.allows(&opened_path(&file)?) {
+            if !self.allows(&opened_path(&file)?) || *self.current.lock().unwrap() != access {
                 return Err("Shelf read access was revoked.".into());
             }
             return Ok(format!(
@@ -168,17 +178,23 @@ fn directory_names(file: &File) -> Result<Vec<OsString>, String> {
 pub(super) struct Broker {
     pub socket: PathBuf,
     stopped: Arc<AtomicBool>,
+    active: Arc<Mutex<Option<UnixStream>>>,
     worker: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Broker {
     pub fn start(reader: Reader) -> Result<Self, String> {
+        static NEXT_BROKER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let sequence = NEXT_BROKER.fetch_add(1, Ordering::Relaxed);
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| e.to_string())?
             .as_nanos();
         // macOS limits Unix socket paths to 104 bytes. Run-folder paths can exceed that.
-        let dir = PathBuf::from(format!("/tmp/shelf-read-{}-{stamp}", std::process::id()));
+        let dir = PathBuf::from(format!(
+            "/tmp/shelf-read-{}-{stamp}-{sequence}",
+            std::process::id()
+        ));
         std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
             .map_err(|e| e.to_string())?;
@@ -187,6 +203,8 @@ impl Broker {
         listener.set_nonblocking(true).map_err(|e| e.to_string())?;
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = stopped.clone();
+        let active = Arc::new(Mutex::new(None));
+        let connection = active.clone();
         let worker = std::thread::spawn(move || {
             while !stop.load(Ordering::Relaxed) {
                 match listener.accept() {
@@ -198,6 +216,16 @@ impl Broker {
                         }
                         let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
                         let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
+                        {
+                            let mut active = connection.lock().unwrap();
+                            if stop.load(Ordering::Relaxed) {
+                                continue;
+                            }
+                            *active = stream.try_clone().ok();
+                            if active.is_none() {
+                                continue;
+                            }
+                        }
                         let response =
                             packet(&mut BufReader::new(&mut stream)).and_then(|p| reader.read(&p));
                         // Revocation/closing never grants access through another provider's tools.
@@ -214,6 +242,7 @@ impl Broker {
                                 Err(error) => json!({"error": error}),
                             }
                         );
+                        *connection.lock().unwrap() = None;
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(20))
@@ -225,12 +254,16 @@ impl Broker {
         Ok(Self {
             socket,
             stopped,
+            active,
             worker: Some(worker),
         })
     }
 
     pub fn stop(&self) {
         self.stopped.store(true, Ordering::Relaxed);
+        if let Some(stream) = self.active.lock().unwrap().as_ref() {
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+        }
     }
 }
 
@@ -339,6 +372,40 @@ fn mcp_response(message: &Value, read: impl FnOnce(&Value) -> Value) -> Option<V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closing_the_reader_interrupts_a_partial_tool_packet() {
+        let access = Access::default();
+        let reader = Reader::new(
+            access.clone(),
+            Arc::new(Mutex::new(access)),
+            "/unused/context".into(),
+        );
+        let broker = Broker::start(reader).unwrap();
+        let mut stream = UnixStream::connect(&broker.socket).unwrap();
+        let (sent, done) = std::sync::mpsc::channel();
+        let client = std::thread::spawn(move || {
+            // A slow sender can otherwise extend the per-read timeout indefinitely.
+            for _ in 0..200 {
+                if stream.write_all(b" ").is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while broker.active.lock().unwrap().is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(broker.active.lock().unwrap().is_some());
+        std::thread::spawn(move || {
+            drop(broker);
+            sent.send(()).unwrap();
+        });
+        done.recv_timeout(Duration::from_millis(500))
+            .expect("closing a reader must interrupt its packet read");
+        client.join().unwrap();
+    }
 
     #[test]
     fn reads_require_original_and_current_selection_and_exclude_blocked_paths() {

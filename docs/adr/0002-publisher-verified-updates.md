@@ -15,6 +15,8 @@ Use `native/Updater.swift` as a separate native helper launched by `src/update.r
 
 Construct fixed GitHub release URLs, verify pinned signed metadata (tag/channel/version/expiry), and verify ZIP size/hash before use. Validate bundle identity/full version/key continuity and strict ad-hoc code signatures; stage on the destination filesystem and keep a rollback copy. Reject missing/invalid publisher proof and unsafe/nonwritable/translocated locations. Do not clear quarantine or bypass Gatekeeper. Publish `v0.2.0-beta.1` from the PR commit as prerelease and not latest; this does not authorize merging the PR.
 
+Use native file download callbacks with a signed-size cancellation bound, then exact size/hash verification. Explicitly quarantine the downloaded archive and staged app. Exchange staged/installed bundles atomically so interruption cannot leave the installed path absent; retain the previous app and roll back a reported launch failure. This does not prove recovery from an app that crashes after `open` returns. Custom-prefix Homebrew detection without a GUI environment remains an open implementation gap; see `.planning/codebase/CONCERNS.md` before approving self-installation support.
+
 ## Considered Options
 - Sparkle automatic installation is mature but its install-on-quit path violates the required consent boundary.
 - TLS and unsigned checksums do not establish the pinned publisher identity.

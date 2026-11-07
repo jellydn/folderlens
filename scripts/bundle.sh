@@ -14,6 +14,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 xcrun swiftc -parse-as-library -O -target arm64-apple-macosx14.0 native/Updater.swift -o "$app/Contents/MacOS/ShelfUpdater"
 "$app/Contents/MacOS/ShelfUpdater" --self-test
 cp native/update-public-key.txt "$app/Contents/Resources/update-public-key.txt"
+cp assets/Shelf.icns "$app/Contents/Resources/Shelf.icns"
 codesign --force --sign - "$app/Contents/MacOS/ShelfUpdater"
 cp "$target/release/shelf" "$app/Contents/MacOS/Shelf.new"
 mv -f "$app/Contents/MacOS/Shelf.new" "$app/Contents/MacOS/Shelf"
@@ -25,6 +26,7 @@ cat > "$app/Contents/Info.plist" <<EOF
   <key>CFBundleName</key><string>Shelf</string>
   <key>CFBundleDisplayName</key><string>Shelf</string>
   <key>CFBundleExecutable</key><string>Shelf</string>
+  <key>CFBundleIconFile</key><string>Shelf.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleShortVersionString</key><string>$short_version</string>

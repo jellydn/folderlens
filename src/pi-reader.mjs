@@ -7,6 +7,22 @@ export default function shelfReader(pi) {
 	if (!executable || !socket)
 		throw new Error("Launch this reader from its Shelf run.");
 
+	// Pi can fuzzy-match a removed model when restoring a saved interactive chat.
+	pi.on("input", async (_event, ctx) => {
+		const expected = process.env.SHELF_EXPECTED_MODEL;
+		if (
+			expected &&
+			(!ctx.model || `${ctx.model.provider}/${ctx.model.id}` !== expected)
+		) {
+			ctx.ui.notify(
+				"Shelf blocked this prompt: Pi did not restore the exact saved model. Choose that model or start a new Shelf review; no paid fallback is allowed.",
+				"error",
+			);
+			return { action: "handled" };
+		}
+		return { action: "continue" };
+	});
+
 	pi.registerTool({
 		name: "shelf_read_selected",
 		label: "Shelf selected-folder reader",

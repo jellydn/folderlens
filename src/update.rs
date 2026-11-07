@@ -39,7 +39,9 @@ fn command(manual: bool) -> Result<Command, &'static str> {
 pub fn check() -> Result<(), &'static str> {
     let mut command = command(true)?;
     std::thread::spawn(move || {
-        let _ = command.status();
+        if !command.status().is_ok_and(|status| status.success()) {
+            crate::settings::update_status("The update helper could not start or stopped unexpectedly. Check the installed app before retrying, or download a verified release manually.");
+        }
     });
     Ok(())
 }

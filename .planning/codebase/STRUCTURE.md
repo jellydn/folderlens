@@ -10,6 +10,7 @@ Guidance lives in `AGENTS.md`, the codebase map in `.planning/codebase/`, and de
 **src:** Rust views, catalog, settings, worker protocols and reader helpers.
 **native:** Swift update helper and pinned public key.
 **scripts:** Bundle/package/signing scripts; no provider credentials.
+**assets:** Painter-designed app PNG/ICNS and simplified matching favicon sizes/manifest; `scripts/icons.py` regenerates them on macOS.
 **.github/workflows:** CI and release publication.
 **shots:** Committed README screenshots.
 
@@ -17,7 +18,7 @@ Guidance lives in `AGENTS.md`, the codebase map in `.planning/codebase/`, and de
 **Entry Points:** `src/main.rs`; `native/Updater.swift`.
 **Configuration:** `Cargo.toml`, `rust-toolchain.toml`, `src/prefs.rs`.
 **Core Logic:** `src/catalog.rs` privately includes `src/scan.rs`; `src/agent.rs` privately includes broker/provider; `src/settings.rs` privately includes updates page.
-**Testing:** Co-located Rust test modules; Swift self-tests in `native/Updater.swift`.
+**Testing:** Co-located Rust test modules; `tests/opencode_continuation.rs` drives the production headless entry point; Swift self-tests in `native/Updater.swift`.
 
 ## Naming Conventions
 **Files:** Rust snake_case; Swift helper named for its native responsibility.

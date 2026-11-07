@@ -1,6 +1,16 @@
+## Unreleased — PR #10 follow-ups
+
+- Painter-designed app icon in the bundle/README, with a matching favicon package for documentation sites.
+- Pointer exit no longer dismisses the panel. Outside-click policy, second-click toggle, Escape and macOS 27 delegate callbacks are retained. Policy tests pass; native tray interaction remains unverified.
+- Bounded native archive download, explicit quarantine, atomic bundle exchange and disposable rollback checks. No real app replacement/restart or Gatekeeper approval was exercised.
+- Cancellation-aware prompt/version writes/reads, exact OpenCode continuation version check, post-mode model validation, Pi continuation model guard and stronger broker revocation/shutdown.
+- Open review limits: custom-prefix Homebrew ownership without a GUI environment; downloaded-ready indication; first-100 release discovery; old backup retention. Do not approve self-installation for an undetected Homebrew installation. Existing beta.1 assets are unchanged and do not contain these fixes.
+
 ## Shelf 0.2.0-beta.1 — prerelease
 
 Preview of provider/model support and publisher-verified updates for Apple Silicon Macs, macOS 14 or later. This release is **not latest stable** and is not installed by the stable Homebrew cask.
+
+**Post-release download limitation:** the native updater's per-byte archive transfer timed out during verification. Download the DMG or ZIP from this release manually if the in-app download fails. PR #10 contains a native file-transfer fix, tested against these signed assets, but the published beta.1 tag/assets have not been replaced. Full app replacement/restart remains unverified.
 
 - Ask Agent adapters for GitHub Copilot CLI, Pi and OpenCode, alongside Grok/Antigravity. OpenCode requires verified version 2.0.23.
 - Per-agent model choices in Settings, exact saved-session launchers, current-selection read broker, inline error recovery and privacy/account/cost notes. Free-model access can require an account/key and has limits; blank defaults can be paid. There are no automatic agent requests.

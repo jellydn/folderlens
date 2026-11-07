@@ -85,6 +85,10 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
         return true;
     }
     if !s.palette {
+        if matches!(ev.key, Key::Escape) {
+            crate::status::conceal();
+            return true;
+        }
         if ev.is_command(',') {
             settings::open(Page::General);
             return true;

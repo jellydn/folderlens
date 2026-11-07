@@ -7,6 +7,7 @@
 
 ## Known Bugs
 **Grok sandbox startup:** Installed CLI reports a socket-symlink deny-list failure (`src/agent.rs` diagnostics). Shelf surfaces the failure; there is no approved sandbox bypass.
+**Published beta.1 download:** Its native per-byte archive transfer timed out during post-release verification. PR #10 switches archives to a bounded native file transfer; disposable checks downloaded and verified the published ZIP without installation. The published beta.1 assets do not contain this fix; manual installation remains available.
 
 ## Security Considerations
 **Reader boundary:** `src/broker.rs` freezes original grants, intersects current eligible state and checks opened descriptors. Keep revocation/symlink/special-file tests; prompt instructions alone are insufficient.
@@ -20,6 +21,8 @@
 ## Fragile Areas
 **Native lifecycle:** `src/status.rs` uses raw AppKit callbacks and macOS 27 expanded interfaces; geometry tests are not complete native event coverage.
 **Installer transaction:** `native/Updater.swift` validates then stages/replaces/restarts. Harmless rollback fixtures pass; a full native install/restart has not been exercised.
+**Homebrew prefix:** Standard Caskroom layouts and `HOMEBREW_PREFIX` are detected. A custom prefix missing from the GUI environment can escape detection; do not claim the approved no-Homebrew-replacement policy is fully enforced for that layout. This remains an open review blocker.
+**Download readiness/backups:** Automatic downloads need a later manual check for the install dialog; no persistent ready indicator exists. Rollback copies are retained, not automatically pruned. Do not remove real backups merely to satisfy a review comment.
 
 ## Scaling Limits
 **Reads:** 512 KiB UTF-8, 2,000 lines or 1,024 directory entries (`src/broker.rs`). Increasing limits requires deliberate resource/privacy review.

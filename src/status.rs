@@ -24,17 +24,15 @@ pub struct Screen {
     pub scale: f64,
 }
 
-/// Keep the short path from the menu-bar button to the panel open.
+/// Only clicks dismiss. Moving to menus or beyond a resized panel must not close it.
 fn pointer_inside(panel: Rect, button: Rect, x: f64, y: f64) -> bool {
-    let bridge = Rect {
-        x: button.x,
-        y: panel.y + panel.h,
-        w: button.w,
-        h: (button.y - panel.y - panel.h).max(0.0),
-    };
-    [panel, button, bridge]
+    [panel, button]
         .iter()
         .any(|rect| x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h)
+}
+
+fn dismiss_for_pointer(panel: Rect, button: Rect, x: f64, y: f64, mouse_down: bool) -> bool {
+    mouse_down && !pointer_inside(panel, button, x, y)
 }
 
 /// Button frame is points, origin at the bottom left, y up.
@@ -77,10 +75,6 @@ pub fn on_poll() {
             start();
         }
     });
-    #[cfg(target_os = "macos")]
-    if !rune::is_headless() {
-        macos::dismiss_outside();
-    }
 }
 
 pub fn is_visible() -> bool {
@@ -103,16 +97,15 @@ pub fn conceal() {
 mod macos {
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::OnceLock;
 
-    use super::{pointer_inside, popover_origin, Rect, Screen};
+    use super::{dismiss_for_pointer, popover_origin, Rect, Screen};
 
     static ITEM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
     static VISIBLE: AtomicBool = AtomicBool::new(true);
     static PANEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
     static EXPANDED: AtomicBool = AtomicBool::new(false);
     static SESSION_STARTED: AtomicU64 = AtomicU64::new(0);
-    static POINTER_REGION: Mutex<Option<Rect>> = Mutex::new(None);
     static APPLY: OnceLock<Box<dyn Fn(bool) + Send + Sync>> = OnceLock::new();
 
     pub fn install<S: 'static>(handle: rune::AppHandle<S>, window_w: f32) {
@@ -124,7 +117,6 @@ mod macos {
         let _ = APPLY.set(Box::new(move |show| {
             VISIBLE.store(show, Ordering::SeqCst);
             if show {
-                *POINTER_REGION.lock().unwrap() = None;
                 crate::settings::hide();
                 set_highlight(true);
                 if let Some(origin) = current_origin(window_w) {
@@ -154,39 +146,6 @@ mod macos {
 
     pub(super) fn is_visible() -> bool {
         VISIBLE.load(Ordering::Relaxed)
-    }
-
-    pub(super) fn dismiss_outside() {
-        if !is_visible() {
-            return;
-        }
-        let panel = PANEL.load(Ordering::Acquire);
-        if panel.is_null() {
-            return;
-        }
-        let item = ITEM.load(Ordering::Acquire);
-        let button = msg0(msg0(item, sel(c"button")), sel(c"window"));
-        let pointer = msg_point(class(c"NSEvent"), sel(c"mouseLocation"));
-        let panel = msg_rect(panel, sel(c"frame"));
-        let button = msg_rect(button, sel(c"frame"));
-        let rect = |r: NsRect| Rect {
-            x: r.origin.x,
-            y: r.origin.y,
-            w: r.size.w,
-            h: r.size.h,
-        };
-        let outside = {
-            let mut region = POINTER_REGION.lock().unwrap();
-            // Actions shrinks the window under the pointer. Keep the old path
-            // until the pointer enters the new panel, rather than closing it.
-            if region.is_none() || pointer_inside(rect(panel), rect(button), pointer.x, pointer.y) {
-                *region = Some(rect(panel));
-            }
-            !pointer_inside(region.unwrap(), rect(button), pointer.x, pointer.y)
-        };
-        if outside {
-            conceal();
-        }
     }
 
     fn apply(show: bool) {
@@ -231,11 +190,11 @@ mod macos {
         EXPANDED.store(supports_expanded, Ordering::Relaxed);
         if supports_expanded {
             msg_void_ptr(item, sel(c"setExpandedInterfaceDelegate:"), target);
-            monitor_button();
         } else {
             msg_void_ptr(button, sel(c"setTarget:"), target);
             msg_void_ptr(button, sel(c"setAction:"), sel(c"click:"));
         }
+        monitor_clicks();
         let windows = msg0(app, sel(c"windows"));
         for index in 0..msg_usize(windows, sel(c"count")) {
             let window = msg_index(windows, sel(c"objectAtIndex:"), index);
@@ -252,9 +211,9 @@ mod macos {
         true
     }
 
-    // macOS 27 suppresses button actions with an expanded-interface delegate,
-    // but does not end the session on a second click. Observe only that click.
-    unsafe fn monitor_button() {
+    // Global clicks dismiss other-app interaction without intercepting Shelf's menus/popovers.
+    // macOS 27 also needs an explicit second-button-click toggle.
+    unsafe fn monitor_clicks() {
         let handler = block2::RcBlock::new(|event: *mut c_void| {
             if !is_visible()
                 || msg_f64_ret(event, sel(c"timestamp"))
@@ -266,10 +225,20 @@ mod macos {
             let window = msg0(msg0(item, sel(c"button")), sel(c"window"));
             let rect = msg_rect(window, sel(c"frame"));
             let point = msg_point(class(c"NSEvent"), sel(c"mouseLocation"));
-            if point.x >= rect.origin.x
+            let button_click = point.x >= rect.origin.x
                 && point.x <= rect.origin.x + rect.size.w
                 && point.y >= rect.origin.y
-                && point.y <= rect.origin.y + rect.size.h
+                && point.y <= rect.origin.y + rect.size.h;
+            let panel = msg_rect(PANEL.load(Ordering::Acquire), sel(c"frame"));
+            let as_rect = |r: NsRect| Rect {
+                x: r.origin.x,
+                y: r.origin.y,
+                w: r.size.w,
+                h: r.size.h,
+            };
+            let mouse_down = matches!(msg_usize(event, sel(c"type")), 1 | 3 | 25);
+            if (button_click && EXPANDED.load(Ordering::Relaxed))
+                || dismiss_for_pointer(as_rect(panel), as_rect(rect), point.x, point.y, mouse_down)
             {
                 conceal();
             }
@@ -284,7 +253,7 @@ mod macos {
         add(
             class(c"NSEvent"),
             sel(c"addGlobalMonitorForEventsMatchingMask:handler:"),
-            1 << 1, // leftMouseDown; mouse monitoring needs no key-event permission.
+            (1 << 1) | (1 << 3) | (1 << 25), // Mouse-down only; no key-event permission.
             (&*handler as *const block2::Block<dyn Fn(*mut c_void)>).cast(),
         );
     }
@@ -659,7 +628,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pointer_can_cross_from_button_but_leaving_any_panel_edge_dismisses() {
+    fn pointer_exit_stays_open_but_outside_click_dismisses() {
         let panel = Rect {
             x: -500.0,
             y: 200.0,
@@ -674,7 +643,8 @@ mod tests {
         };
         assert!(pointer_inside(panel, button, -300.0, 350.0));
         assert!(pointer_inside(panel, button, -210.0, 615.0));
-        assert!(pointer_inside(panel, button, -210.0, 602.0));
+        assert!(!dismiss_for_pointer(panel, button, -300.0, 350.0, true));
+        assert!(!dismiss_for_pointer(panel, button, -210.0, 615.0, true));
         for (x, y) in [
             (-501.0, 350.0),
             (-139.0, 350.0),
@@ -683,6 +653,14 @@ mod tests {
             (-195.0, 602.0),
         ] {
             assert!(!pointer_inside(panel, button, x, y), "{x}, {y}");
+            assert!(
+                !dismiss_for_pointer(panel, button, x, y, false),
+                "Hover must not dismiss: {x}, {y}"
+            );
+            assert!(
+                dismiss_for_pointer(panel, button, x, y, true),
+                "Outside click must dismiss: {x}, {y}"
+            );
         }
     }
 
