@@ -120,8 +120,25 @@ func verifyArchive(_ file: URL, manifest: Manifest) throws {
   }
 }
 
-func isHomebrew(_ bundle: URL) -> Bool {
-  bundle.resolvingSymlinksInPath().pathComponents.contains("Caskroom")
+func isHomebrew(
+  _ bundle: URL,
+  caskrooms: [URL] = ["/opt/homebrew/Caskroom", "/usr/local/Caskroom"].map {
+    URL(fileURLWithPath: $0)
+  }
+    + (ProcessInfo.processInfo.environment["HOMEBREW_PREFIX"].map {
+      [URL(fileURLWithPath: $0).appendingPathComponent("Caskroom")]
+    } ?? [])
+) -> Bool {
+  let target = bundle.resolvingSymlinksInPath()
+  if target.pathComponents.contains("Caskroom") { return true }
+  // Casks move the real app into Applications, then link Caskroom back to it.
+  return caskrooms.contains { root in
+    let versions = try? FileManager.default.contentsOfDirectory(
+      at: root.appendingPathComponent("shelf"), includingPropertiesForKeys: nil)
+    return versions?.contains {
+      $0.appendingPathComponent("Shelf.app").resolvingSymlinksInPath() == target
+    } ?? false
+  }
 }
 
 // The verified app is staged on the destination filesystem before the running app closes.
@@ -492,10 +509,20 @@ func selfTest() throws {
   try (bytes + Data("tampered".utf8)).write(to: temporary)
   reject { try verifyArchive(temporary, manifest: manifest) }
   require(isHomebrew(URL(fileURLWithPath: "/opt/homebrew/Caskroom/shelf/0.1.0/Shelf.app")))
-  require(!isHomebrew(URL(fileURLWithPath: "/Applications/Shelf.app")))
+  require(!isHomebrew(URL(fileURLWithPath: "/Applications/Shelf.app"), caskrooms: []))
   let transaction = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at: transaction, withIntermediateDirectories: false)
   defer { try? FileManager.default.removeItem(at: transaction) }
+  let apps = transaction.appendingPathComponent("Applications/Shelf.app")
+  let caskroom = transaction.appendingPathComponent("Caskroom")
+  let receipt = caskroom.appendingPathComponent("shelf/0.1.0/Shelf.app")
+  try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
+  try FileManager.default.createDirectory(
+    at: receipt.deletingLastPathComponent(), withIntermediateDirectories: true)
+  require(!isHomebrew(apps, caskrooms: [caskroom]))
+  try FileManager.default.createSymbolicLink(at: receipt, withDestinationURL: apps)
+  require(isHomebrew(apps, caskrooms: [caskroom]))
+  require(!isHomebrew(transaction.appendingPathComponent("Other.app"), caskrooms: [caskroom]))
   let target = transaction.appendingPathComponent("Shelf.app")
   let staged = transaction.appendingPathComponent("staged.app")
   try Data("old".utf8).write(to: target)
