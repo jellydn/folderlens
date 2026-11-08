@@ -114,7 +114,9 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later:
+For Apple Silicon Macs running macOS 14 or later, download the DMG or ZIP from [beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) for the earlier Review ledger preview. Quick review above is not included in beta.3; build the PR from source to try that unreleased follow-up.
+
+For the older stable version (not the beta):
 
 ```sh
 brew install --cask jellydn/tap/shelf
@@ -122,7 +124,7 @@ brew install --cask jellydn/tap/shelf
 
 If Homebrew refuses to load an untrusted third-party cask, review `jellydn/homebrew-tap` and run `brew trust --cask jellydn/tap/shelf`, then retry installation. This trusts only Shelf, not every entry in the tap. Older Homebrew versions may not require this step.
 
-Or download the DMG or ZIP from [Releases](https://github.com/jellydn/shelf/releases/latest). The app is ad-hoc signed, not notarised. If macOS blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**. Intel builds are not provided yet.
+The app is ad-hoc signed, not notarised. If macOS blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**. Intel builds are not provided yet.
 
 To build from source:
 

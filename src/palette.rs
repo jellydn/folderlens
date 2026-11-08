@@ -159,13 +159,7 @@ pub fn panel(s: &State) -> El {
             .catalog
             .groups
             .get(index)
-            .map(|group| {
-                if group.count == 1 {
-                    super::selection_reason(s, group.first)
-                } else {
-                    group.detail.clone()
-                }
-            })
+            .map(|_| super::group_reason(s, index))
             .unwrap_or_else(|| "Folder no longer in scan".into()),
         _ => "No folder target".into(),
     };

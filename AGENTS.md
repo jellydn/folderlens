@@ -41,7 +41,7 @@ Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-advance
 - `catalog::load_live()` scans `$HOME` and caches sizes at `~/Library/Application Support/Shelf/sizes.tsv`. Delete that file to force a remeasure. First `cargo run`/`--snap` is slow.
 - `prefs::path_for_state()` returns a unique temp file under `cfg(test)`. Tests must not read or write the real `~/Library/Application Support/Shelf/settings.txt`.
 - Settings and the panel are never visible together: opening Settings calls `status::conceal()`, and a status-item click hides Settings.
-- Quick review starts at 720×718 points and resizes from 360 to 960 points wide. Below 620 points, Agent help precedes the folders in one scroll body. The header, Record choice and system readings stay fixed. Settings supports 360×420 points with a scrolling body and fixed Apply model action; advanced commands start collapsed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
+- Quick review starts at 720×718 points, resizes from 360 to 960 points wide, and has a 280-point minimum height so recording/readings remain visible. Below 620 points, Agent help precedes the folders in one scroll body. The header, Record choice and system readings stay fixed. Settings supports 360×420 points with a scrolling body and fixed Apply model action; advanced commands start collapsed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
 
 ## Invariants
 
