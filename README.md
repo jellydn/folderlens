@@ -6,13 +6,13 @@ A macOS menu-bar prototype for reviewing folder selections, reasons and exclusio
 
 **Experimental WIP. Record choice (formerly Confirm) records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space. [PR #13](https://github.com/jellydn/shelf/pull/13)'s Review ledger is a first independent presentation, still under review.
 
-Quick review below is an unreleased preview, not included in beta.3.
+Quick review below is the beta.4 preview; beta.3 has the earlier layout.
 
-![Unreleased Quick review with synthetic example data](shots/review-ledger.png)
+![Quick review preview with synthetic example data](shots/review-ledger.png)
 
 ## Install
 
-Apple Silicon, macOS 14+. Download the [beta.3 DMG or ZIP](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Download the [beta.4 DMG or ZIP](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 For the older stable version, not this beta:
 

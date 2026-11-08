@@ -16,9 +16,9 @@ The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual
 
 **Beta.3 previews the owner's chosen Review ledger direction**, with reasons and exclusions beside a non-deleting selection receipt and separate agent access. This first implementation is still under design review; beta.2 does not contain it. This one beta release does not authorize a merge, promotion or later releases. Attribution alone does not resolve the concern about the copied presentation. Earlier screenshots, releases and history are retained as provenance, not evidence of completed design or safety review.
 
-## Quick review (unreleased follow-up)
+## Quick review (beta.4 preview)
 
-The owner selected Quick review after comparing three independent prototypes. This local follow-up is not in the published beta.3 assets. It keeps folder reasons, protection rules and Agent capabilities while making daily actions easier to find.
+The owner selected Quick review after comparing three independent prototypes. This follow-up is the beta.4 preview, not the earlier beta.3 layout. It keeps folder reasons, protection rules and Agent capabilities while making daily actions easier to find.
 
 The panel opens from the menu bar. Moving the pointer outside does not close it. Click outside, press Escape, or click the menu-bar button again to dismiss it. Escape closes an open action list before closing the panel.
 
@@ -114,7 +114,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, download the DMG or ZIP from [beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) for the earlier Review ledger preview. Quick review above is not included in beta.3; build the PR from source to try that unreleased follow-up.
+For Apple Silicon Macs running macOS 14 or later, download the DMG or ZIP from [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) for Quick review. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout.
 
 For the older stable version (not the beta):
 
