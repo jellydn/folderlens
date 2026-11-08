@@ -6,13 +6,13 @@ A macOS menu-bar prototype for reviewing folder selections, reasons and exclusio
 
 **Experimental WIP. Record choice (formerly Confirm) records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space. [PR #13](https://github.com/jellydn/shelf/pull/13)'s Review ledger is a first independent presentation, still under review.
 
-Quick review below is the beta.4 preview; beta.3 has the earlier layout.
+Quick review below is the beta.5 preview.
 
 ![Quick review preview with synthetic example data](shots/review-ledger.png)
 
 ## Install
 
-Apple Silicon, macOS 14+. Download the [beta.4 DMG or ZIP](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Download the [beta.5 DMG or ZIP](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.5) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 For the older stable version, not this beta:
 
@@ -28,13 +28,22 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install).
 2. **Record choice** records without deleting. Selection changes clear the record.
 3. For **Ask Agent**, configure **Settings → Agent / Access**. Requests are manual; provider costs and data policies apply.
 
-**Actions** opens folder controls and Settings. Outside click, Escape or a second menu-bar click closes the panel; pointer exit does not.
+**Actions** opens folder controls and Settings. The panel stays open across outside clicks and update dialogs. Use **Close**, Escape or the menu-bar button to hide it; Escape closes Actions first.
+
+## Feature gallery
+
+These current Rune renders use example Agent states, not real model turns or native popup verification. [Full gallery](docs/guide.md#feature-gallery-beta5) covers review/recording, folder actions, General, provider/model Apply, selected-path access, protection, Agent progress/Cancel, errors/Retry, saved chat and Updates.
+
+| Agent setup and model | Updates and manual-install policy |
+| --- | --- |
+| ![Provider, model and explicit permissions](shots/quick-agent-settings.png) | ![Update controls and signing limits](shots/quick-updates.png) |
 
 ## Limits
 
 - Folder sharing is opt-in and selected-only. Context may leave your Mac and persists locally. Provider controls are not an OS sandbox.
 - All current installs are **manual-update-only**; verified checks/downloads remain available. Homebrew users update through Homebrew.
 - Tests/headless renders are not native end-to-end proof. Tray routing, model/tool turns, Terminal continuation and real install/restart/Gatekeeper behavior remain unverified. Cleanup safety is not established.
+- Settings→tray reopening remains a separate known issue; the popup changes do not establish a fix for it.
 
 ## Credit and details
 

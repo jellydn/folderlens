@@ -24,15 +24,13 @@ pub struct Screen {
     pub scale: f64,
 }
 
-/// Only clicks dismiss. Moving to menus or beyond a resized panel must not close it.
-fn pointer_inside(panel: Rect, button: Rect, x: f64, y: f64) -> bool {
-    [panel, button]
-        .iter()
-        .any(|rect| x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h)
-}
-
-fn dismiss_for_pointer(panel: Rect, button: Rect, x: f64, y: f64, mouse_down: bool) -> bool {
-    mouse_down && !pointer_inside(panel, button, x, y)
+/// Only an explicit status-button press toggles the persistent panel.
+fn button_pressed(button: Rect, x: f64, y: f64, mouse_down: bool) -> bool {
+    mouse_down
+        && x >= button.x
+        && x <= button.x + button.w
+        && y >= button.y
+        && y <= button.y + button.h
 }
 
 /// Button frame is points, origin at the bottom left, y up.
@@ -99,7 +97,7 @@ mod macos {
     use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
     use std::sync::OnceLock;
 
-    use super::{dismiss_for_pointer, popover_origin, Rect, Screen};
+    use super::{button_pressed, popover_origin, Rect, Screen};
 
     static ITEM: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
     static VISIBLE: AtomicBool = AtomicBool::new(true);
@@ -211,8 +209,8 @@ mod macos {
         true
     }
 
-    // Global clicks dismiss other-app interaction without intercepting Shelf's menus/popovers.
-    // macOS 27 also needs an explicit second-button-click toggle.
+    // macOS 27 needs a second-button-click toggle while a session is active.
+    // Other apps, including ShelfUpdater's dialog, must not dismiss Shelf.
     unsafe fn monitor_clicks() {
         let handler = block2::RcBlock::new(|event: *mut c_void| {
             if !is_visible()
@@ -225,20 +223,15 @@ mod macos {
             let window = msg0(msg0(item, sel(c"button")), sel(c"window"));
             let rect = msg_rect(window, sel(c"frame"));
             let point = msg_point(class(c"NSEvent"), sel(c"mouseLocation"));
-            let button_click = point.x >= rect.origin.x
-                && point.x <= rect.origin.x + rect.size.w
-                && point.y >= rect.origin.y
-                && point.y <= rect.origin.y + rect.size.h;
-            let panel = msg_rect(PANEL.load(Ordering::Acquire), sel(c"frame"));
-            let as_rect = |r: NsRect| Rect {
-                x: r.origin.x,
-                y: r.origin.y,
-                w: r.size.w,
-                h: r.size.h,
+            let button = Rect {
+                x: rect.origin.x,
+                y: rect.origin.y,
+                w: rect.size.w,
+                h: rect.size.h,
             };
             let mouse_down = matches!(msg_usize(event, sel(c"type")), 1 | 3 | 25);
-            if (button_click && EXPANDED.load(Ordering::Relaxed))
-                || dismiss_for_pointer(as_rect(panel), as_rect(rect), point.x, point.y, mouse_down)
+            if EXPANDED.load(Ordering::Relaxed)
+                && button_pressed(button, point.x, point.y, mouse_down)
             {
                 conceal();
             }
@@ -338,7 +331,9 @@ mod macos {
         _item: *mut c_void,
         _animated: i8,
     ) {
-        apply(false);
+        // A helper dialog or another app can end AppKit's transient session.
+        // Shelf stays visible until Close, Escape, or an explicit tray toggle.
+        set_highlight(is_visible());
     }
 
     fn current_origin(window_w: f32) -> Option<(i32, i32)> {
@@ -604,6 +599,76 @@ mod macos {
         size: NsSize,
     }
 
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn ending_an_update_popup_session_preserves_the_panel_until_explicit_close() {
+            // The status item owns process-wide callbacks; isolate from headless UI tests.
+            if std::env::var_os("SHELF_STATUS_TEST_CHILD").is_none() {
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", std::thread::current().name().unwrap()])
+                    .env("SHELF_STATUS_TEST_CHILD", "1")
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&result.stdout)
+                );
+                return;
+            }
+            APPLY
+                .set(Box::new(|show| VISIBLE.store(show, Ordering::SeqCst)))
+                .ok()
+                .unwrap();
+            VISIBLE.store(true, Ordering::SeqCst);
+            unsafe {
+                end(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    0,
+                );
+            }
+            assert!(
+                is_visible(),
+                "Ending a transient session must not hide Shelf"
+            );
+            conceal();
+            assert!(!is_visible(), "Explicit dismissal must still hide Shelf");
+            unsafe {
+                end(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    0,
+                );
+            }
+            assert!(!is_visible(), "A late popup callback must not reopen Shelf");
+            unsafe {
+                click(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+            }
+            assert!(is_visible(), "The explicit tray callback still opens Shelf");
+            unsafe {
+                click(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+            }
+            assert!(
+                !is_visible(),
+                "The explicit tray callback still closes Shelf"
+            );
+        }
+    }
+
     #[link(name = "objc", kind = "dylib")]
     #[link(name = "AppKit", kind = "framework")]
     unsafe extern "C" {
@@ -634,23 +699,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pointer_exit_stays_open_but_outside_click_dismisses() {
-        let panel = Rect {
-            x: -500.0,
-            y: 200.0,
-            w: 360.0,
-            h: 400.0,
-        };
+    fn only_status_button_presses_dismiss_not_update_popup_clicks() {
         let button = Rect {
             x: -220.0,
             y: 605.0,
             w: 24.0,
             h: 22.0,
         };
-        assert!(pointer_inside(panel, button, -300.0, 350.0));
-        assert!(pointer_inside(panel, button, -210.0, 615.0));
-        assert!(!dismiss_for_pointer(panel, button, -300.0, 350.0, true));
-        assert!(!dismiss_for_pointer(panel, button, -210.0, 615.0, true));
+        assert!(button_pressed(button, -210.0, 615.0, true));
+        assert!(!button_pressed(button, -210.0, 615.0, false));
+        assert!(!button_pressed(button, -300.0, 350.0, true));
         for (x, y) in [
             (-501.0, 350.0),
             (-139.0, 350.0),
@@ -658,14 +716,13 @@ mod tests {
             (-300.0, 601.0),
             (-195.0, 602.0),
         ] {
-            assert!(!pointer_inside(panel, button, x, y), "{x}, {y}");
             assert!(
-                !dismiss_for_pointer(panel, button, x, y, false),
+                !button_pressed(button, x, y, false),
                 "Hover must not dismiss: {x}, {y}"
             );
             assert!(
-                dismiss_for_pointer(panel, button, x, y, true),
-                "Outside click must dismiss: {x}, {y}"
+                !button_pressed(button, x, y, true),
+                "Closing a separate update popup must leave Shelf visible: {x}, {y}"
             );
         }
     }

@@ -78,6 +78,10 @@ pub fn spec() -> AppSpec<Settings> {
                 tx.quit();
                 return true;
             }
+            if matches!(event.key, rune::Key::Escape) {
+                hide();
+                return true;
+            }
             false
         }),
         ..AppSpec::new("Settings", (760.0, 560.0), state, view)
@@ -196,9 +200,13 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                         .grow(1.0),
                 )
                 .child(
-                    text("No file deletion")
+                    text("Close")
+                        .key("close-settings")
                         .font(type_::LABEL)
-                        .color(paint(MUTED)),
+                        .color(paint(MUTED))
+                        .h(32.0)
+                        .center_y()
+                        .on_press(|_: &mut Settings| hide()),
                 ),
         )
         .child(navigation(state))
@@ -222,12 +230,16 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                 .px(24.0)
                 .py(10.0)
                 .child(
-                    text("Scroll for details. Switches save immediately; model edits need Apply.")
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .wrap()
-                        .grow(1.0)
-                        .min_w(0.0),
+                    text(if state.page == Page::Agent {
+                        "Switches save now. Model edits need Apply."
+                    } else {
+                        "Changes save automatically."
+                    })
+                    .font(type_::LABEL)
+                    .color(paint(MUTED))
+                    .wrap()
+                    .grow(1.0)
+                    .min_w(0.0),
                 )
                 .child(if state.page == Page::Agent {
                     text("Apply model")
@@ -414,17 +426,60 @@ fn agent(state: &Settings) -> El {
         .gap(14.0)
         .child(heading("Set up your agent"))
         .child(
-            text("Choose an agent and model. Nothing starts until you ask.")
+            text("Manual requests only. Provider costs and data policies apply.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()
                 .w_full(),
         )
-        .child(card(col().w_full().padding(8.0).gap(6.0)
-            .child(text(prefs::agent_name(&state.prefs.agent_id).unwrap_or("Custom / unconfigured agent")).font(type_::BODY).color(paint(INK)))
-            .child(text(format!("Selected command: {}", if state.prefs.agent_bin.is_empty() { "not set" } else { &state.prefs.agent_bin })).key("selected-command").font(type_::BODY).color(paint(INK)).wrap().w_full())
-            .child(text(if state.commands_open { "Hide commands and saved-file details" } else { "Change agent / advanced setup" }).key("agent-commands-toggle").font(type_::LABEL).color(paint(BLUE)).wrap().w_full()
-                .on_press_tx(|s: &mut Settings, tx: &mut Tx| { tx.instant(); s.commands_open = !s.commands_open; if s.commands_open { tx.scroll_into_view("agent-commands"); } }))))
+        .child(card(
+            col()
+                .w_full()
+                .padding(8.0)
+                .gap(6.0)
+                .child(
+                    text(
+                        prefs::agent_name(&state.prefs.agent_id)
+                            .unwrap_or("Custom / unconfigured agent"),
+                    )
+                    .font(type_::BODY)
+                    .color(paint(INK)),
+                )
+                .child(
+                    text(format!(
+                        "Selected command: {}",
+                        if state.prefs.agent_bin.is_empty() {
+                            "not set"
+                        } else {
+                            &state.prefs.agent_bin
+                        }
+                    ))
+                    .key("selected-command")
+                    .font(type_::BODY)
+                    .color(paint(INK))
+                    .wrap()
+                    .w_full(),
+                )
+                .child(
+                    text(if state.commands_open {
+                        "Hide commands and saved-file details"
+                    } else {
+                        "Change agent / advanced setup"
+                    })
+                    .key("agent-commands-toggle")
+                    .font(type_::LABEL)
+                    .color(paint(BLUE))
+                    .wrap()
+                    .w_full()
+                    .on_press_tx(|s: &mut Settings, tx: &mut Tx| {
+                        tx.instant();
+                        s.commands_open = !s.commands_open;
+                        if s.commands_open {
+                            tx.scroll_into_view("agent-commands");
+                        }
+                    }),
+                ),
+        ))
         .child(section(&format!(
             "Model for {}",
             prefs::agent_name(&state.prefs.agent_id).unwrap_or("the selected command")
@@ -435,33 +490,21 @@ fn agent(state: &Settings) -> El {
                 .gap(8.0)
                 .padding(8.0)
                 .child(
-                    row()
-                        .w_full()
-                        .gap(8.0)
-                        .center_y()
-                        .child(
-                            text_input(&state.model, TextStyle::new(13.0, 400.0))
-                                .key("agent-model")
-                                .grow(1.0)
-                                .min_w(0.0)
-                                .h(32.0)
-                                .px(8.0)
-                                .radius(4.0)
-                                .border(1.0, paint(TRACK))
-                                .fill(paint(PANEL))
-                                .single_line()
-                                .placeholder("Model ID (or CLI default)", paint(MUTED))
-                                .color(paint(INK))
-                                .on_edit(|state: &mut Settings| &mut state.model),
-                        )
-                        ,
-                )
-                .child(
-                    text(crate::agent::model_note(&state.prefs.agent_bin))
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .wrap()
-                        .w_full(),
+                    row().w_full().gap(8.0).center_y().child(
+                        text_input(&state.model, TextStyle::new(13.0, 400.0))
+                            .key("agent-model")
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .h(32.0)
+                            .px(8.0)
+                            .radius(4.0)
+                            .border(1.0, paint(TRACK))
+                            .fill(paint(PANEL))
+                            .single_line()
+                            .placeholder("Model ID (or CLI default)", paint(MUTED))
+                            .color(paint(INK))
+                            .on_edit(|state: &mut Settings| &mut state.model),
+                    ),
                 )
                 .child(if state.model_error.is_empty() {
                     el()
@@ -475,9 +518,21 @@ fn agent(state: &Settings) -> El {
                 }),
         ))
         .child(agent_permissions(state))
-        .child(text("Provider costs and data policies apply. No automatic requests. Login, model access and native analysis are not verified here.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("More access settings").key("agent-access").font(type_::LABEL).color(paint(BLUE)).on_press_tx(|s: &mut Settings, tx: &mut Tx| { tx.instant(); s.page = Page::Access; }))
-        .child(if state.commands_open { agent_commands(state) } else { el() })
+        .child(
+            text("More access settings")
+                .key("agent-access")
+                .font(type_::LABEL)
+                .color(paint(BLUE))
+                .on_press_tx(|s: &mut Settings, tx: &mut Tx| {
+                    tx.instant();
+                    s.page = Page::Access;
+                }),
+        )
+        .child(if state.commands_open {
+            agent_commands(state)
+        } else {
+            el()
+        })
 }
 
 fn agent_commands(state: &Settings) -> El {
@@ -496,8 +551,10 @@ fn agent_commands(state: &Settings) -> El {
         list = list.child(agent_row(state, agent));
     }
     col().key("agent-commands").w_full().gap(12.0)
+        .child(section("Model access and cost"))
+        .child(text(crate::agent::model_note(&state.prefs.agent_bin)).font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Commands detected on this Mac"))
-        .child(text("Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a Shelf review; detection does not verify login, runtime dependencies or model access.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a Shelf review; detection does not verify login, runtime dependencies, model access or native analysis.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(list.max_h(160.0).scroll(ScrollSpec {
             stick_bottom: false,
         })))
