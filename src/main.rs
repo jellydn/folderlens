@@ -36,6 +36,7 @@ const LINE: &str = "#ffffff";
 const BLUE: &str = "#79d8cb";
 const RED: &str = "#ff453a";
 const TRACK: &str = "#2b4049";
+const MIN_PANEL_HEIGHT: f32 = 280.0;
 
 struct State {
     catalog: Catalog,
@@ -487,14 +488,7 @@ fn group_row(s: &State, index: usize) -> El {
     let group = &s.catalog.groups[index];
     let id = group.id.clone();
     let name = group.name.clone();
-    let excluded = leaf_range(s, index)
-        .filter(|&leaf| !catalog::can_tick(&leaf_view(s, leaf)))
-        .count();
-    let detail = if group.count == 1 {
-        selection_reason(s, group.first)
-    } else {
-        format!("{} folders · {excluded} excluded", group.count)
-    };
+    let detail = group_reason(s, index);
     let opens = group.count > 1;
     let open = s.open.get(index).copied().unwrap_or(false);
     let size = catalog::format_bytes(group_bytes(s, index));
@@ -598,6 +592,17 @@ fn child_row(s: &State, index: usize) -> El {
         palette::open(state, Some(palette::Target::Leaf(index)));
         palette::fit(state, tx);
     })
+}
+
+fn group_reason(s: &State, index: usize) -> String {
+    let group = &s.catalog.groups[index];
+    if group.count == 1 {
+        return selection_reason(s, group.first);
+    }
+    let excluded = leaf_range(s, index)
+        .filter(|&leaf| !catalog::can_tick(&leaf_view(s, leaf)))
+        .count();
+    format!("{} folders · {excluded} excluded", group.count)
 }
 
 fn selection_reason(s: &State, index: usize) -> String {
@@ -1096,7 +1101,7 @@ fn main() {
             borderless: true,
             always_on_top: true,
             resizable: true,
-            min_size: Some((360.0, 120.0)),
+            min_size: Some((360.0, MIN_PANEL_HEIGHT)),
             max_size: Some((960.0, 1000.0)),
             ..WindowOptions::default()
         }
@@ -1236,6 +1241,22 @@ mod tests {
                 "expanded errors must not hide recording"
             );
             assert_eq!(ticked_bytes(&rt.state), 709_000_000);
+        }
+    }
+
+    #[test]
+    fn minimum_panel_height_keeps_recording_and_readings_visible() {
+        for width in [360.0, 960.0] {
+            let mut rt = runtime();
+            rt.set_viewport((width, MIN_PANEL_HEIGHT), 2.0);
+            rt.frame(0.0);
+            for key in ["confirm", "system-readings"] {
+                let rect = rt.presented(key).unwrap().0;
+                assert!(
+                    rect[1] >= 56.0 && rect[1] + rect[3] <= MIN_PANEL_HEIGHT,
+                    "{width}: {key}: {rect:?}"
+                );
+            }
         }
     }
 
@@ -1553,6 +1574,24 @@ mod tests {
             .elements()
             .iter()
             .any(|element| element.text.as_deref() == Some("Excluded by you")));
+        for (keep_spotify, reason) in [
+            (false, "2 folders · 1 excluded"),
+            (true, "2 folders · 2 excluded"),
+        ] {
+            rt.update(|state, _| {
+                if keep_spotify {
+                    state.prefs.kept.push("/fixture/spotify".into());
+                }
+                palette::open(state, Some(palette::Target::Group(5)));
+            });
+            rt.frame(0.0);
+            assert!(
+                rt.elements()
+                    .iter()
+                    .any(|element| element.text.as_deref() == Some(reason)),
+                "{reason}"
+            );
+        }
     }
 
     #[test]

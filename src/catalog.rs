@@ -45,7 +45,6 @@ pub struct Leaf {
 pub struct Group {
     pub id: String,
     pub name: String,
-    pub detail: String,
     /// The scan's label. The tray sums the leaves, so Analyse can change the total.
     #[allow(dead_code)]
     pub size_label: String,
@@ -300,7 +299,6 @@ fn group(id: &str, name: &str, first: usize, count: usize) -> Group {
     Group {
         id: id.to_string(),
         name: name.to_string(),
-        detail: format!("{count} items"),
         size_label: String::new(),
         first,
         count,
@@ -371,17 +369,6 @@ fn assemble(rows: &[Row], hints: &HashMap<String, Hint>, updated: f64, commands:
         }
         let first = leaves.len();
         let count = items.len();
-        let n = if count == 1 {
-            "1 item".to_string()
-        } else {
-            format!("{count} items")
-        };
-        let locked_n = items.iter().filter(|leaf| leaf.locked).count();
-        let detail = if locked_n == count {
-            format!("{n} · Shelf leaves these")
-        } else {
-            n
-        };
         for leaf in &mut items {
             leaf.id = format!("u{}", leaves.len());
             leaves.push(leaf.clone());
@@ -390,7 +377,6 @@ fn assemble(rows: &[Row], hints: &HashMap<String, Hint>, updated: f64, commands:
         groups.push(Group {
             id,
             name: name.clone(),
-            detail,
             size_label: format_bytes(bytes),
             first,
             count,

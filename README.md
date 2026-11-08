@@ -6,7 +6,9 @@ A macOS menu-bar prototype for reviewing folder selections, reasons and exclusio
 
 **Experimental WIP. Record choice (formerly Confirm) records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space. [PR #13](https://github.com/jellydn/shelf/pull/13)'s Review ledger is a first independent presentation, still under review.
 
-![Review ledger with synthetic example data](shots/review-ledger.png)
+Quick review below is an unreleased preview, not included in beta.3.
+
+![Unreleased Quick review with synthetic example data](shots/review-ledger.png)
 
 ## Install
 
