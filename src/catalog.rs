@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const SEGMENTS: usize = 42;
 const MIN_GROUP_BYTES: u64 = 50_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,8 +39,6 @@ pub struct Leaf {
     pub balanced: Option<u32>,
     pub aggressive: Option<u32>,
     pub locked: bool,
-    pub mark: String,
-    pub tint: String,
 }
 
 #[derive(Clone, Debug)]
@@ -52,8 +49,6 @@ pub struct Group {
     /// The scan's label. The tray sums the leaves, so Analyse can change the total.
     #[allow(dead_code)]
     pub size_label: String,
-    pub mark: String,
-    pub tint: String,
     pub first: usize,
     pub count: usize,
 }
@@ -124,43 +119,6 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
-/// Whole-number gigabytes for the large free figure, and the unit.
-pub fn free_parts(bytes: u64) -> (String, &'static str) {
-    let gb = bytes as f64 / 1_000_000_000.0;
-    if gb >= 100.0 {
-        (format!("{gb:.0}"), "GB")
-    } else if gb >= 10.0 {
-        (format!("{gb:.1}"), "GB")
-    } else if bytes >= 1_000_000 {
-        (format!("{:.0}", bytes as f64 / 1_000_000.0), "MB")
-    } else {
-        (bytes.to_string(), "B")
-    }
-}
-
-/// Red, yellow, green, gray. Ready splits into yellow then green.
-pub fn bar_counts(total_gb: f64, free_gb: f64, ready_gb: f64) -> (usize, usize, usize, usize) {
-    if total_gb <= 0.0 {
-        return (0, 0, 0, SEGMENTS);
-    }
-    let n = SEGMENTS as f64;
-    let used = (total_gb - free_gb).max(0.0);
-    let ready = ready_gb.clamp(0.0, used);
-    let mut red = ((used - ready) / total_gb * n).round() as usize;
-    let mut ready_n = (ready / total_gb * n).round() as usize;
-    if red + ready_n > SEGMENTS {
-        ready_n = SEGMENTS.saturating_sub(red);
-    }
-    let yellow = ready_n / 2;
-    let green = ready_n - yellow;
-    let gray = SEGMENTS - red - yellow - green;
-    if gray > SEGMENTS {
-        red = SEGMENTS;
-        return (red, 0, 0, 0);
-    }
-    (red, yellow, green, gray)
-}
-
 #[allow(dead_code)]
 pub fn ready_bytes(leaves: &[Leaf]) -> u64 {
     leaves
@@ -214,8 +172,7 @@ fn missing(checked: &str) -> Catalog {
     }
 }
 
-/// The small set the window tests click. Gates and idle hours are fixed.
-#[cfg(test)]
+/// Synthetic data for window tests and explicitly labelled headless examples.
 pub fn fixture() -> Catalog {
     let leaves = vec![
         leaf(
@@ -310,7 +267,6 @@ pub fn fixture() -> Catalog {
     }
 }
 
-#[cfg(test)]
 fn leaf(
     id: &str,
     name: &str,
@@ -337,30 +293,15 @@ fn leaf(
         balanced: if locked { None } else { balanced },
         aggressive: if locked { None } else { aggressive },
         locked,
-        mark: name
-            .chars()
-            .next()
-            .unwrap_or('?')
-            .to_uppercase()
-            .to_string(),
-        tint: "#8e8e93".to_string(),
     }
 }
 
-#[cfg(test)]
 fn group(id: &str, name: &str, first: usize, count: usize) -> Group {
     Group {
         id: id.to_string(),
         name: name.to_string(),
         detail: format!("{count} items"),
         size_label: String::new(),
-        mark: name
-            .chars()
-            .next()
-            .unwrap_or('?')
-            .to_uppercase()
-            .to_string(),
-        tint: tint_for(name).to_string(),
         first,
         count,
     }
@@ -410,8 +351,6 @@ fn assemble(rows: &[Row], hints: &HashMap<String, Hint>, updated: f64, commands:
             balanced: if locked { None } else { balanced },
             aggressive: if locked { None } else { aggressive },
             locked,
-            mark: mark_for(&hint.label),
-            tint: tint_for(&hint.group).to_string(),
         });
     }
 
@@ -453,8 +392,6 @@ fn assemble(rows: &[Row], hints: &HashMap<String, Hint>, updated: f64, commands:
             name: name.clone(),
             detail,
             size_label: format_bytes(bytes),
-            mark: mark_for(&name),
-            tint: tint_for(&name).to_string(),
             first,
             count,
         });
@@ -598,25 +535,6 @@ fn leaf_name(label: &str, path: &str) -> String {
         base.to_string()
     } else {
         label.to_string()
-    }
-}
-
-fn mark_for(label: &str) -> String {
-    label
-        .chars()
-        .find(|c| c.is_ascii_alphabetic())
-        .map(|c| c.to_uppercase().to_string())
-        .unwrap_or_else(|| "?".to_string())
-}
-
-fn tint_for(group: &str) -> &'static str {
-    match group {
-        "App caches" | "Project dependencies" => "#ff9f0a",
-        "Build output" | "Toolchains and SDKs" | "Package caches" => "#64d2ff",
-        "Virtual machines and containers" | "AI models" => "#bf5af2",
-        "Logs and crash reports" | "Trash" => "#8e8e93",
-        "Developer tool caches" | "Editor extensions" => "#0a84ff",
-        _ => "#8e8e93",
     }
 }
 
@@ -983,13 +901,5 @@ mod tests {
             .unwrap();
         assert!(toolchain.locked);
         assert!(!auto_tick(toolchain, Level::Aggressive));
-    }
-
-    #[test]
-    fn the_measured_disk_bar_stays_mostly_in_use() {
-        let (red, yellow, green, gray) = bar_counts(494.35, 89.0, 70.0);
-        assert_eq!(red + yellow + green + gray, SEGMENTS);
-        assert!(red > yellow + green + gray);
-        assert_eq!((red, yellow, green, gray), (28, 3, 3, 8));
     }
 }

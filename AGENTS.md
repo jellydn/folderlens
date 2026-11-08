@@ -2,7 +2,7 @@
 
 macOS menu-bar app that reviews what a cleanup level would tick. Rust + Rune (GPU UI); macOS only.
 
-**Confirm never deletes.** It records the choice in memory. There is no delete path, and tests assert the catalog is unchanged. Do not add one.
+**Record choice (formerly Confirm) never deletes.** It records a nonempty eligible selection in memory. Selection, exclusion or measurement changes clear the record. There is no delete path, and tests assert the catalog is unchanged. Do not add one.
 
 The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md) and [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md). Keep these aligned when changing their contracts; this file remains the command/safety reference.
 
@@ -15,11 +15,12 @@ The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codeba
 - `sh scripts/bundle.sh` — build `target/release/Shelf.app` with stable ID `io.github.jellydn.shelf` and `LSUIElement`.
 - `sh scripts/release.sh` — sign/verify and package Apple Silicon release assets; no upload.
 - `cargo run -- --theme dark --scene balanced --snap shots/balanced.png` — headless panel shot.
+- `cargo run -- --theme dark --scene ledger-example --snap shots/review-ledger.png` — synthetic Review ledger shot, without a disk scan.
 - `cargo run -- --window settings --theme dark --scene agent --snap shots/settings-agent.png` — headless Settings shot.
 
-Panel scenes: `scanning`, `careful`, `balanced`, `aggressive`, `asking`, `reviewed`, `agent-failed`, `agent-error-details`, `confirmed`, `menu`, `selected`.
-Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-opencode`, `agent-model-error`, `access`, `protected`.
-`--list-windows` shows `main` and `settings`; `--list-scenes` prints the selected window's scenes. Snapshots run `live_state()`, so they scan the real Mac.
+Panel scenes: `ledger-example`, `recorded-example`, `menu-example`, `scanning`, `careful`, `balanced`, `aggressive`, `asking`, `reviewed`, `agent-failed`, `agent-error-details`, `confirmed`, `menu`, `selected`.
+Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-opencode`, `agent-model-error`, `access`, `protected`, `protected-example`, `updates`, `updates-preview`.
+`--list-windows` shows `main` and `settings`; `--list-scenes` prints the selected window's scenes. Headless `*-example` and `agent-error-details` scenes use synthetic catalog data; other panel snapshots scan the real Mac. Scene choices do not persist settings.
 
 ## Layout and quirks
 
@@ -40,6 +41,7 @@ Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-opencod
 - `catalog::load_live()` scans `$HOME` and caches sizes at `~/Library/Application Support/Shelf/sizes.tsv`. Delete that file to force a remeasure. First `cargo run`/`--snap` is slow.
 - `prefs::path_for_state()` returns a unique temp file under `cfg(test)`. Tests must not read or write the real `~/Library/Application Support/Shelf/settings.txt`.
 - Settings and the panel are never visible together: opening Settings calls `status::conceal()`, and a status-item click hides Settings.
+- Review ledger starts at 720×718 points, resizes from 360 to 960 points wide, and stacks candidates above the receipt below 620 points. The body scrolls; the header and system readings remain fixed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
 
 ## Invariants
 
@@ -64,7 +66,7 @@ Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-opencod
 ## Tests and releases
 
 - `the_live_index_feeds_this_mac` is the only live test: it checks real disk/gauge readings without assuming a particular disk capacity or home-folder contents. It requires macOS. Keep new tests on `fixture_state()`.
-- `shots/*.png` are the README screenshots; regenerate them after panel changes with `--theme dark`.
+- `shots/review-*.png` and `shots/exclusion-rules.png` are the unreleased Review ledger screenshots; regenerate them after panel changes with `--theme dark`. Preserve the original screenshots linked in README as provenance.
 - `Cargo.lock` is committed and Rune is pinned by `rev` in `Cargo.toml`; let Renovate update it.
 
 ## Release

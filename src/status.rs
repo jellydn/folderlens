@@ -369,6 +369,12 @@ mod macos {
         }
         let bounds = msg_rect(screen, sel(c"frame"));
         let scale = msg_f64_ret(screen, sel(c"backingScaleFactor"));
+        let panel = PANEL.load(Ordering::Acquire);
+        let width = if panel.is_null() {
+            f64::from(window_w)
+        } else {
+            msg_rect(panel, sel(c"frame")).size.w
+        };
         Some(popover_origin(
             Rect {
                 x: frame.origin.x,
@@ -383,7 +389,7 @@ mod macos {
                 h: bounds.size.h,
                 scale,
             },
-            f64::from(window_w),
+            width,
         ))
     }
 

@@ -9,16 +9,13 @@ use rune::{
 };
 
 use crate::prefs::{self, Agent, Prefs};
+use crate::{BLUE, INK, MUTED, PANEL};
 
 #[path = "settings_updates.rs"]
 mod updates;
 
-const PANEL: &str = "#1c1c1e";
-const CARD: &str = "#2c2c2e";
-const INK: &str = "#f5f5f7";
-const MUTED: &str = "#98989d";
-const BLUE: &str = "#0a84ff";
-const GREEN: &str = "#30d158";
+const CARD: &str = "#243740";
+const GREEN: &str = BLUE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
@@ -59,6 +56,11 @@ pub fn spec() -> AppSpec<Settings> {
             }),
             ("access", |state| state.page = Page::Access),
             ("protected", |state| state.page = Page::Protected),
+            ("protected-example", |state| {
+                state.page = Page::Protected;
+                state.prefs.kept = vec!["~/Projects/retained-work".into()];
+                state.prefs.keep_hours = 24;
+            }),
             ("updates", |state| state.page = Page::Updates),
             ("updates-preview", |state| {
                 state.page = Page::Updates;
@@ -181,7 +183,7 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                 .shrink()
                 .h_full()
                 .min_w(0.0)
-                .fill(paint("#232325"))
+                .fill(paint(PANEL))
                 .child(
                     page(state)
                         .scroll(ScrollSpec {
@@ -246,7 +248,7 @@ fn side_row(
         .child(
             text(label)
                 .font(type_::BODY)
-                .color(paint(if on { "#ffffff" } else { INK })),
+                .color(paint(if on { PANEL } else { INK })),
         )
 }
 
@@ -259,7 +261,7 @@ fn letter(mark: &str, tint: &str) -> El {
             text(mark)
                 .font(TextStyle::new(11.0, 700.0))
                 .color(if tint == "#ffffff" {
-                    paint(BLUE)
+                    paint(PANEL)
                 } else {
                     Color::WHITE
                 }),
@@ -317,7 +319,7 @@ fn toggle(key: &'static str, on: bool, press: impl Fn(&mut Settings) + 'static) 
         .child(
             el().size(18.0, 18.0)
                 .radius(9.0)
-                .fill(Color::WHITE)
+                .fill(if on { paint(PANEL) } else { Color::WHITE })
                 .absolute(knob, 2.0),
         )
 }
@@ -361,7 +363,7 @@ fn general(state: &Settings) -> El {
                 )),
         ))
         .child(
-            text("Confirm records the choice and deletes nothing. The tray stays dark.")
+            text("Record choice keeps the selection in memory and deletes nothing. Readings appear in the ledger footer.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()
@@ -542,7 +544,7 @@ fn protected(state: &Settings) -> El {
             .px(12.0)
             .center_y()
             .child(
-                text("Protected folders")
+                text("Your exclusions")
                     .font(type_::BODY)
                     .color(paint(INK))
                     .grow(1.0),
@@ -580,7 +582,7 @@ fn protected(state: &Settings) -> El {
                         .truncate_middle(),
                 )
                 .child(
-                    text("Remove")
+                    text("Stop keeping")
                         .key(format!("unkeep-{path}"))
                         .font(type_::LABEL)
                         .color(paint(BLUE))
@@ -604,7 +606,7 @@ fn protected(state: &Settings) -> El {
 
     let hours = state.prefs.keep_hours;
     let mut always = col().w_full().child(
-        text("Always protected")
+        text("Built-in exclusions / cannot be unlocked")
             .font(TextStyle::new(13.0, 600.0))
             .color(paint(INK))
             .px(12.0)
@@ -641,19 +643,13 @@ fn protected(state: &Settings) -> El {
     col()
         .w_full()
         .gap(14.0)
-        .child(
-            col()
-                .w_full()
-                .gap(10.0)
-                .items_center()
-                .child(shield())
-                .child(
-                    text("Protected")
-                        .font(TextStyle::new(28.0, 650.0))
-                        .color(paint(INK)),
-                ),
-        )
+        .child(heading("Exclusion rules"))
+        .child(text("Why a folder stays outside the review").font(type_::BODY).color(paint(INK)))
+        .child(text("These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule does not select or delete a folder.")
+            .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(folders))
+        .child(text("Keep a folder out of future selections. Session allowance in folder actions can override this rule, but never a built-in or in-use exclusion.")
+            .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(
             row()
                 .w_full()
@@ -662,11 +658,10 @@ fn protected(state: &Settings) -> El {
                 .gap(8.0)
                 .center_y()
                 .child(
-                    text("Keep what changed within")
+                    text("Exclude changes within")
                         .font(type_::BODY)
                         .color(paint(INK)),
                 )
-                .child(info_mark())
                 .child(el().grow(1.0))
                 .child(
                     text(format!("{hours} h"))
@@ -680,6 +675,8 @@ fn protected(state: &Settings) -> El {
                     -1,
                 ))),
         ))
+        .child(text("0 h disables the recent-change hold. In-use folders remain unavailable. Nothing on this page authorizes cleanup.")
+            .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(always))
 }
 
@@ -720,14 +717,6 @@ fn always_key(name: &str) -> String {
         .collect()
 }
 
-fn shield() -> El {
-    el().size(64.0, 64.0)
-        .radius(16.0)
-        .fill(paint(GREEN))
-        .center()
-        .child(lock_mark_on(Color::WHITE, paint(GREEN), 26.0))
-}
-
 fn lock_mark() -> El {
     lock_mark_on(paint(MUTED), paint(CARD), 14.0)
 }
@@ -756,25 +745,13 @@ fn lock_mark_on(ink: Color, cover: Color, size: f32) -> El {
         )
 }
 
-fn info_mark() -> El {
-    el().size(14.0, 14.0)
-        .radius(7.0)
-        .border(1.0, paint(MUTED))
-        .center()
-        .child(
-            text("i")
-                .font(TextStyle::new(9.0, 700.0))
-                .color(paint(MUTED)),
-        )
-}
-
 fn access(state: &Settings) -> El {
     col()
         .w_full()
         .gap(14.0)
-        .child(heading("Access"))
+        .child(heading("Selected-folder access"))
         .child(
-            text("Shelf asks before it starts an agent or sends a folder path.")
+            text("Saved permissions apply to manual requests. Each request freezes its eligible selection; later changes can reduce, never expand, its live read scope.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()
@@ -785,14 +762,14 @@ fn access(state: &Settings) -> El {
             col()
                 .w_full()
                 .child(setting_row(
-                    "Shelf may start the agent",
+                    "Allow manual agent requests",
                     toggle("allow-start", state.prefs.allow_start, |state| {
                         state.prefs.allow_start = !state.prefs.allow_start;
                         persist(state);
                     }),
                 ))
                 .child(setting_row(
-                    "Send the folder path",
+                    "Share eligible selected paths",
                     toggle("send-paths", state.prefs.send_paths, |state| {
                         state.prefs.send_paths = !state.prefs.send_paths;
                         persist(state);
