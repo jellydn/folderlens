@@ -18,6 +18,7 @@ mod palette;
 mod prefs;
 mod settings;
 mod status;
+mod update;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -176,7 +177,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     }
     if let Some(job) = &s.agent {
         job.set_access(palette::ask_access(s));
-        if !s.prefs.allow_start || s.prefs.agent_bin != job.bin {
+        if !s.prefs.allow_start || s.prefs.agent_bin != job.bin || s.prefs.model() != job.model {
             job.cancel();
         }
     }
@@ -724,6 +725,10 @@ fn gauge_band(s: &State) -> Option<El> {
 }
 
 fn view(s: &State, _: &mut Cx<State>) -> El {
+    // Publish each rendered selection change without waiting for the next polling interval.
+    if let Some(job) = &s.agent {
+        job.set_access(palette::ask_access(s));
+    }
     if s.palette {
         return palette::panel(s);
     }
@@ -1061,6 +1066,9 @@ fn launch_size() -> (f32, f32) {
 }
 
 fn main() {
+    if let Some(code) = agent::reader_helper() {
+        std::process::exit(code);
+    }
     let size = launch_size();
     let spec = AppSpec {
         scenes: &[
@@ -1140,6 +1148,7 @@ fn main() {
         if !started {
             started = true;
             start_workers(panel.clone());
+            update::start();
         }
     });
     app.run();

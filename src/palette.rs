@@ -85,6 +85,10 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
         return true;
     }
     if !s.palette {
+        if matches!(ev.key, Key::Escape) {
+            crate::status::conceal();
+            return true;
+        }
         if ev.is_command(',') {
             settings::open(Page::General);
             return true;
@@ -474,7 +478,13 @@ pub fn ask(s: &mut State) {
     match ask_prompt(s) {
         Ok(prompt) => {
             let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
-            match crate::agent::Job::start(&s.prefs.agent_bin, who, &prompt, ask_access(s)) {
+            match crate::agent::Job::start(
+                &s.prefs.agent_bin,
+                who,
+                s.prefs.model(),
+                &prompt,
+                ask_access(s),
+            ) {
                 Ok(job) => {
                     s.agent = Some(job);
                 }

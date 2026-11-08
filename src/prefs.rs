@@ -1,6 +1,7 @@
 //! Shelf's own settings file. The tray and the settings window share the path
 //! under Application Support. Tests each get a fresh file.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -25,12 +26,16 @@ pub const ALWAYS: &[(&str, &str)] = &[
 pub struct Prefs {
     pub agent_id: String,
     pub agent_bin: String,
+    pub models: BTreeMap<String, String>,
     pub allow_start: bool,
     pub send_paths: bool,
     pub gauge_memory: bool,
     pub gauge_cpu: bool,
     pub gauge_gpu: bool,
     pub shortcut_hints: bool,
+    pub update_checks: bool,
+    pub update_downloads: bool,
+    pub update_prereleases: bool,
     /// Extra hold, in hours. A leaf used more recently than this stays unticked. Zero is off.
     pub keep_hours: u32,
     pub kept: Vec<String>,
@@ -41,15 +46,36 @@ impl Default for Prefs {
         Self {
             agent_id: String::new(),
             agent_bin: String::new(),
+            models: BTreeMap::new(),
             allow_start: false,
             send_paths: false,
             gauge_memory: true,
             gauge_cpu: true,
             gauge_gpu: true,
             shortcut_hints: true,
+            update_checks: true,
+            update_downloads: false,
+            update_prereleases: false,
             keep_hours: 0,
             kept: Vec::new(),
         }
+    }
+}
+
+impl Prefs {
+    pub fn model_key(&self) -> String {
+        if self.agent_id == "custom" {
+            format!("custom:{}", self.agent_bin)
+        } else {
+            self.agent_id.clone()
+        }
+    }
+
+    pub fn model(&self) -> &str {
+        self.models
+            .get(&self.model_key())
+            .map(String::as_str)
+            .unwrap_or("")
     }
 }
 
@@ -92,12 +118,16 @@ pub fn load_from(path: &Path) -> Prefs {
         match key {
             "agent_id" => prefs.agent_id = value.to_string(),
             "agent_bin" => prefs.agent_bin = value.to_string(),
+            "agent_models" => prefs.models = serde_json::from_str(value).unwrap_or_default(),
             "allow_start" => prefs.allow_start = value == "1",
             "send_paths" => prefs.send_paths = value == "1",
             "gauge_memory" => prefs.gauge_memory = value == "1",
             "gauge_cpu" => prefs.gauge_cpu = value == "1",
             "gauge_gpu" => prefs.gauge_gpu = value == "1",
             "shortcut_hints" => prefs.shortcut_hints = value == "1",
+            "update_checks" => prefs.update_checks = value == "1",
+            "update_downloads" => prefs.update_downloads = value == "1",
+            "update_prereleases" => prefs.update_prereleases = value == "1",
             "keep_hours" => {
                 prefs.keep_hours = value.parse::<u32>().unwrap_or(0).min(MAX_KEEP_HOURS)
             }
@@ -116,12 +146,25 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
     let flag = |on: bool| if on { "1" } else { "0" };
     text.push_str(&format!("agent_id={}\n", prefs.agent_id));
     text.push_str(&format!("agent_bin={}\n", prefs.agent_bin));
+    text.push_str(&format!(
+        "agent_models={}\n",
+        serde_json::to_string(&prefs.models).unwrap()
+    ));
     text.push_str(&format!("allow_start={}\n", flag(prefs.allow_start)));
     text.push_str(&format!("send_paths={}\n", flag(prefs.send_paths)));
     text.push_str(&format!("gauge_memory={}\n", flag(prefs.gauge_memory)));
     text.push_str(&format!("gauge_cpu={}\n", flag(prefs.gauge_cpu)));
     text.push_str(&format!("gauge_gpu={}\n", flag(prefs.gauge_gpu)));
     text.push_str(&format!("shortcut_hints={}\n", flag(prefs.shortcut_hints)));
+    text.push_str(&format!("update_checks={}\n", flag(prefs.update_checks)));
+    text.push_str(&format!(
+        "update_downloads={}\n",
+        flag(prefs.update_downloads)
+    ));
+    text.push_str(&format!(
+        "update_prereleases={}\n",
+        flag(prefs.update_prereleases)
+    ));
     text.push_str(&format!("keep_hours={}\n", prefs.keep_hours));
     for path in &prefs.kept {
         text.push_str("kept=");
@@ -292,12 +335,14 @@ pub fn prepare_ask(
 
 /// Save a snapshot; its launcher cannot open an unrelated chat while analysis runs.
 pub fn prepare_run(runs: &Path, context: &str) -> Result<PathBuf, String> {
+    static NEXT_RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let sequence = NEXT_RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|err| err.to_string())?
         .as_nanos();
     std::fs::create_dir_all(runs).map_err(|err| err.to_string())?;
-    let dir = runs.join(format!("chat-{stamp}-{}", std::process::id()));
+    let dir = runs.join(format!("chat-{stamp}-{}-{sequence}", std::process::id()));
     // Exclusive creation prevents a second request from overwriting an earlier snapshot.
     std::fs::create_dir(&dir).map_err(|err| err.to_string())?;
     #[cfg(unix)]
@@ -319,17 +364,28 @@ pub fn prepare_run(runs: &Path, context: &str) -> Result<PathBuf, String> {
     Ok(script_path)
 }
 
-pub fn resume_run(script: &Path, bin: &str, args: &[&str], session: &str) -> Result<(), String> {
+pub fn resume_run(script: &Path, command: &Command, session: &str) -> Result<(), String> {
     let dir = script.parent().ok_or("Missing run folder")?;
-    let args = args
-        .iter()
-        .map(|arg| shell_quote(arg))
+    let args = command
+        .get_args()
+        .map(|arg| shell_quote(&arg.to_string_lossy()))
         .collect::<Vec<_>>()
         .join(" ");
+    let env = command
+        .get_envs()
+        .map(|(key, value)| match value {
+            Some(value) => format!(
+                "export {}={}\n",
+                key.to_string_lossy(),
+                shell_quote(&value.to_string_lossy())
+            ),
+            None => format!("unset {}\n", key.to_string_lossy()),
+        })
+        .collect::<String>();
     let text = format!(
-        "#!/bin/zsh\ncd -- {} || exit 1\nexport GROK_FOLDER_TRUST='0'\nexec {} {args} {}\n",
+        "#!/bin/zsh\ncd -- {} || exit 1\n{env}exec {} {args} {}\n",
         shell_quote(&dir.to_string_lossy()),
-        shell_quote(bin),
+        shell_quote(&command.get_program().to_string_lossy()),
         shell_quote(session)
     );
     std::fs::write(script, text).map_err(|err| err.to_string())
@@ -355,6 +411,10 @@ mod tests {
         let prefs = Prefs {
             agent_id: "claude".into(),
             agent_bin: "/usr/local/bin/claude".into(),
+            models: BTreeMap::from([
+                ("copilot".into(), "auto".into()),
+                ("pi".into(), "openrouter/openrouter/free".into()),
+            ]),
             allow_start: true,
             send_paths: true,
             keep_hours: 36,
@@ -363,6 +423,11 @@ mod tests {
         };
         save_to(&path, &prefs);
         assert_eq!(load_from(&path), prefs);
+        let mut switched = load_from(&path);
+        switched.agent_id = "pi".into();
+        assert_eq!(switched.model(), "openrouter/openrouter/free");
+        switched.agent_id = "copilot".into();
+        assert_eq!(switched.model(), "auto");
         let _ = std::fs::remove_file(&path);
     }
 
@@ -427,7 +492,9 @@ mod tests {
             0o700
         );
         assert!(!Command::new(&first).output().unwrap().status.success());
-        resume_run(&first, &prefs.agent_bin, &["--resume"], "session's $23").unwrap();
+        let mut command = Command::new(&prefs.agent_bin);
+        command.arg("--resume").env("GROK_FOLDER_TRUST", "0");
+        resume_run(&first, &command, "session's $23").unwrap();
         let output = Command::new(&first).output().unwrap();
         assert!(output.status.success(), "{:?}", output);
         let stdout = String::from_utf8(output.stdout).unwrap();
