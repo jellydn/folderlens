@@ -452,6 +452,7 @@ fn status_line(s: &State) -> El {
             .key("status")
             .font(TextStyle::new(13.0, 600.0).lh(18.0))
             .color(ink)
+            .wrap()
             .w_full();
     }
     if s.catalog.missing {
@@ -459,6 +460,7 @@ fn status_line(s: &State) -> El {
             .key("status")
             .font(TextStyle::new(13.0, 600.0).lh(18.0))
             .color(ink)
+            .wrap()
             .w_full();
     }
     let bytes = ticked_bytes(s);
@@ -780,10 +782,11 @@ fn selection_receipt(s: &State) -> El {
 }
 
 fn system_readings(s: &State) -> String {
-    let mut readings = vec![format!(
-        "{} free",
-        catalog::format_bytes(s.catalog.disk_free)
-    )];
+    let mut readings = vec![if s.catalog.disk_total == 0 {
+        "Free space unavailable".into()
+    } else {
+        format!("{} free", catalog::format_bytes(s.catalog.disk_free))
+    }];
     for (show, name, value) in [
         (s.prefs.gauge_memory, "Memory", s.catalog.memory),
         (s.prefs.gauge_cpu, "CPU", s.catalog.cpu),
