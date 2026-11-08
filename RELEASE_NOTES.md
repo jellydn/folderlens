@@ -1,3 +1,23 @@
+## Shelf 0.2.0-beta.3 — Review ledger preview
+
+**Experimental WIP PoC. Record choice (formerly Confirm) records a selection in memory; it does not delete files or run cleanup.** Footprints are estimates, not reclaimed space or proof of cleanup safety.
+
+- First independent Review ledger implementation from PR #13: reasons/exclusions beside a non-deleting receipt, compact system readings, responsive stacking and clearer folder actions/Protected/Access settings. Design review is still in progress; this prerelease does not merge the PR or declare the presentation review complete.
+- Short README, with detailed agent/update guidance and historical screenshots retained in `docs/guide.md`.
+- Existing scoped broker, protection rules and fail-closed updater remain. All current installations are manual-update-only; signed checks and opt-in downloads remain available. Homebrew installs must use Homebrew.
+
+### Credit and scope
+
+[Levo](https://omggg.wtf/levo/) was the direct UI/layout/interaction reference for Shelf's original presentation in beta.2 and earlier. Please support or buy Levo through its official site. Shelf is not affiliated with or endorsed by Levo. Attribution neither resolves the earlier copied-presentation concern nor establishes equivalent cleanup safety; original assets/history are preserved.
+
+This is the specifically authorized beta from the latest PR's exact verified commit, **prerelease and not latest stable**, not a main merge. Existing tags/assets and the stable Homebrew tap are unchanged. Promotion and later releases remain paused.
+
+### Assets and verification limits
+
+Apple Silicon, macOS 14+. DMG and ZIP contain the same ad-hoc signed app. Check `SHA256SUMS`; signed update metadata, ZIP and DMG are verified with Shelf's pinned Ed25519 publisher key. Builds are **not Developer ID signed or notarized**. Use normal macOS approval if required; no quarantine removal or Gatekeeper bypass is provided.
+
+Rust tests, GPU-rendered headless UI, updater self-tests and package/signature checks cover the implementation. Native tray callbacks, real model/tool/Terminal turns and actual installation/restart/Gatekeeper behavior remain unverified. Agent access is manual/opt-in; provider costs/data policies apply, and provider controls are not an independent OS sandbox. No real cleanup, paid model prompt or installed-app replacement was performed for this preview.
+
 ## Shelf 0.2.0-beta.2 — current-state prerelease
 
 **Experimental WIP PoC, not a finished cleanup utility.** Cleanup levels preview selections and estimated space. **Confirm records a choice in memory and does not delete files or run cleanup.**
