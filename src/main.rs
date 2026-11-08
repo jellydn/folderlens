@@ -57,6 +57,7 @@ struct State {
     note: String,
     agent: Option<agent::Job>,
     agent_details: bool,
+    access_details: bool,
     paused_until: f64,
     /// Last height sent to the window. Arrow keys must not resize again.
     window_h: f32,
@@ -87,6 +88,7 @@ fn state_from(catalog: Catalog) -> State {
         note: String::new(),
         agent: None,
         agent_details: false,
+        access_details: false,
         paused_until: 0.0,
         window_h: palette::TRAY_H,
     }
@@ -649,7 +651,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .h(36.0)
                 .center_y()
                 .child(
-                    text("Candidates / exclusions")
+                    text("Folders to review")
                         .font(TextStyle::new(13.0, 600.0))
                         .color(paint(INK))
                         .grow(1.0),
@@ -674,9 +676,9 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 ),
         )
         .child(list);
-    let receipt = selection_receipt(s).key("receipt").min_w(0.0);
+    let receipt = agent_help(s).key("receipt").min_w(0.0);
     let workspace = if compact {
-        col().w_full().gap(20.0).child(candidates).child(receipt)
+        col().w_full().gap(20.0).child(receipt).child(candidates)
     } else {
         row()
             .w_full()
@@ -696,13 +698,36 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .w_full()
                 .h(56.0)
                 .px(18.0)
+                .gap(16.0)
                 .center_y()
                 .window_drag()
                 .child(
-                    text("Shelf / Review ledger")
-                        .font(TextStyle::new(16.0, 650.0))
+                    text("Shelf")
+                        .font(TextStyle::new(16.0, 500.0))
                         .color(paint(INK))
-                        .grow(1.0),
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .truncate(),
+                )
+                .child(
+                    text("Agent")
+                        .key("agent-reveal")
+                        .font(type_::BODY)
+                        .color(paint(BLUE))
+                        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                            tx.scroll_into_view(if state.agent.is_some() {
+                                "agent-review"
+                            } else {
+                                "ask-agent"
+                            });
+                        }),
+                )
+                .child(
+                    text("Settings")
+                        .key("open-settings")
+                        .font(type_::BODY)
+                        .color(paint(BLUE))
+                        .on_press(|_: &mut State| settings::open(settings::Page::Agent)),
                 )
                 .child(
                     text("Actions")
@@ -723,7 +748,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .padding(18.0)
                 .gap(12.0)
                 .child(
-                    text("Selection preview. Recording does not start cleanup.")
+                    text("Review your choices. Shelf never deletes files.")
                         .font(type_::LABEL)
                         .color(paint(MUTED))
                         .wrap()
@@ -738,8 +763,10 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .min_h(0.0),
         )
         .child(rule())
+        .child(record_choice(s))
         .child(
             text(system_readings(s))
+                .key("system-readings")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .px(18.0)
@@ -749,36 +776,103 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         )
 }
 
-fn selection_receipt(s: &State) -> El {
+fn agent_help(s: &State) -> El {
+    col().w_full().gap(10.0)
+        .child(text(if s.agent.is_some() { "Agent review" } else { "Want a second opinion?" }).font(TextStyle::new(14.0, 500.0)).color(paint(INK)))
+        .child(text(if !s.prefs.allow_start { "Manual requests are off. Set up your agent first." }
+            else if s.prefs.send_paths { "Eligible selected folder paths may be shared." }
+            else { "Saved context only. Folder paths are not shared." })
+            .key("access-summary").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(if s.agent.as_ref().is_some_and(|job| job.result.is_none()) { el() } else {
+            text("Ask Agent").key("ask-agent").font(type_::BODY).color(paint(BLUE))
+                .disabled(!(0..s.catalog.leaves.len()).any(|i| is_ticked(s, i))).on_press(palette::ask)
+        })
+        .child(text("Manual request. Provider costs may apply.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Agent setup").key("agent-configure").font(type_::LABEL).color(paint(BLUE))
+            .on_press(|_: &mut State| settings::open(settings::Page::Agent)))
+        .child(agent_review(s))
+        .child(if s.agent.as_ref().is_some_and(|job| matches!(job.result, Some(Ok(_)))) { text("Continue saved chat in Terminal").key("agent-terminal").font(type_::LABEL).color(paint(BLUE)).wrap().w_full()
+            .on_press(|state: &mut State| { if let Some(job) = &state.agent { if let Err(error) = job.open_chat(&state.prefs) { state.note = error; } } }) } else { el() })
+        .child(if s.agent.is_some() { text("Run files in Finder").key("agent-files").font(type_::LABEL).color(paint(BLUE))
+            .on_press(|state: &mut State| {
+                if let Some(folder) = state.agent.as_ref().and_then(|job| job.script.parent()) {
+                    state.note = match std::process::Command::new("open").arg(folder).spawn() {
+                        Ok(_) => "Requested run folder in Finder. Shared paths may be saved there.".into(),
+                        Err(_) => "Could not open the run folder in Finder.".into(),
+                    };
+                }
+            }) } else { el() })
+        .child(text(if s.access_details { "Hide access and limits" } else { "Access and limits" }).key("access-details-toggle").font(type_::LABEL).color(paint(BLUE))
+            .on_press(|state: &mut State| state.access_details = !state.access_details))
+        .child(if s.access_details { col().w_full().gap(8.0)
+            .child(text(format!("{} · {}", prefs::agent_name(&s.prefs.agent_id).unwrap_or("Custom / unconfigured agent"), if s.prefs.model().is_empty() { "CLI default model" } else { s.prefs.model() }))
+                .key("agent-configuration").font(type_::LABEL).color(paint(INK)).wrap().w_full())
+            .child(text("Manual request; provider costs and data policies apply. An answer does not prove cleanup is safe. Live reads require the original and current eligible selection. Grok/Antigravity Terminal tools use their native controls, not Shelf's live reader. Provider controls are not an OS sandbox.")
+                .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+            .child(text("Review access settings").key("review-access").font(type_::LABEL).color(paint(BLUE))
+                .on_press(|_: &mut State| settings::open(settings::Page::Access)))
+        } else { el() })
+}
+
+fn record_choice(s: &State) -> El {
     let selected = (0..s.catalog.leaves.len())
         .filter(|&i| is_ticked(s, i))
         .count();
     let excluded = (0..s.catalog.leaves.len())
         .filter(|&i| !catalog::can_tick(&leaf_view(s, i)))
         .count();
-    col().w_full().gap(12.0)
-        .child(text("Selection receipt").font(TextStyle::new(16.0, 600.0)).color(paint(INK)))
-        .child(rule())
-        .child(text(format!("{selected} selected · {excluded} protected / unavailable\n{} estimated footprint", catalog::format_bytes(ticked_bytes(s))))
-            .font(type_::BODY).color(paint(INK)).wrap().w_full().key("receipt-summary"))
-        .child(text("0 files deleted. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("Agent access / separate decision").font(TextStyle::new(13.0, 600.0)).color(paint(INK)))
-        .child(text(if !s.prefs.allow_start { "Agent start is off. Configure access before requesting analysis." }
-            else if s.prefs.send_paths { "Eligible selected paths may be shared. Live reads use original ∩ current selection; protected paths stay excluded." }
-            else { "Saved selection context only. Folder paths are not shared." })
-            .key("access-summary").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("Review access settings →").key("review-access").font(type_::LABEL).color(paint(BLUE))
-            .on_press(|_: &mut State| settings::open(settings::Page::Access)))
-        .child(text("Ask Agent").key("ask-agent").font(type_::BODY).color(paint(BLUE)).on_press(palette::ask))
-        .child(text("Manual request; provider costs may apply. An answer is not proof of cleanup safety.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(agent_review(s))
-        .child(if s.agent.is_some() { text("Open saved chat").key("agent-terminal").font(type_::LABEL).color(paint(BLUE))
-            .on_press(|state: &mut State| { if let Some(job) = &state.agent { if let Err(error) = job.open_chat(&state.prefs) { state.note = error; } } }) } else { el() })
-        .child(rule())
-        .child(text(if s.confirmed { "Choice recorded · nothing deleted" } else { "Record choice" }).key("confirm")
-            .font(TextStyle::new(14.0, 600.0)).color(paint(BLUE)).wrap().w_full()
-            .on_press(|state: &mut State| state.confirmed = (0..state.catalog.leaves.len()).any(|i| is_ticked(state, i))))
-        .child(text("In memory only. Selection changes require a new record.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+    col()
+        .key("record-choice")
+        .w_full()
+        .px(18.0)
+        .pt(10.0)
+        .gap(6.0)
+        .child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .center_y()
+                .child(
+                    text(format!(
+                        "{selected} selected · {} estimated",
+                        catalog::format_bytes(ticked_bytes(s))
+                    ))
+                    .font(type_::LABEL)
+                    .color(paint(INK))
+                    .wrap()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .key("receipt-summary"),
+                )
+                .child(
+                    text(if s.confirmed {
+                        "Choice recorded"
+                    } else {
+                        "Record choice"
+                    })
+                    .key("confirm")
+                    .font(TextStyle::new(13.0, 500.0))
+                    .color(paint(if selected > 0 { BLUE } else { MUTED }))
+                    .h(32.0)
+                    .px(10.0)
+                    .radius(6.0)
+                    .fill(paint(TRACK))
+                    .disabled(selected == 0)
+                    .on_press(|state: &mut State| {
+                        state.confirmed =
+                            (0..state.catalog.leaves.len()).any(|i| is_ticked(state, i))
+                    }),
+                ),
+        )
+        .child(
+            text(format!(
+                "Nothing deleted · in memory only · {excluded} protected / unavailable"
+            ))
+            .font(type_::LABEL)
+            .color(paint(MUTED))
+            .wrap()
+            .w_full(),
+        )
 }
 
 fn system_readings(s: &State) -> String {
@@ -818,7 +912,9 @@ fn agent_review(s: &State) -> El {
                         .key("agent-progress")
                         .font(type_::LABEL)
                         .color(paint(MUTED))
-                        .grow(1.0),
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .wrap(),
                 )
                 .child(if job.result.is_none() {
                     text("Cancel")
@@ -942,6 +1038,14 @@ fn main() {
                 s.confirmed = true;
             }),
             ("menu-example", |s| palette::open(s, None)),
+            ("asking-example", |s| {
+                apply_level(s, Level::Balanced);
+                s.agent = Some(agent::Job::preview(None));
+            }),
+            ("reviewed-example", |s| {
+                apply_level(s, Level::Balanced);
+                s.agent = Some(agent::Job::preview(Some(Ok("Example review: check rebuild costs first. Nothing was deleted. A model answer is not proof that cleanup is safe.".into()))));
+            }),
             ("scanning", |s| {
                 s.catalog = catalog::pending();
                 s.ticks.clear();
@@ -1006,7 +1110,7 @@ fn main() {
     let settings = WindowSpec::new("settings", settings::spec()).options(WindowOptions {
         visible: false,
         resizable: true,
-        min_size: Some((640.0, 420.0)),
+        min_size: Some((360.0, 420.0)),
         ..WindowOptions::default()
     });
     let panel = app.handle();
@@ -1072,7 +1176,7 @@ mod tests {
     }
 
     #[test]
-    fn ledger_reflows_and_scrolling_keeps_recording_non_destructive() {
+    fn quick_review_keeps_recording_visible_and_non_destructive() {
         for width in [360.0, 619.0, 620.0, 720.0] {
             let mut rt = runtime();
             rt.set_viewport((width, 718.0), 2.0);
@@ -1081,7 +1185,7 @@ mod tests {
             let (receipt, _) = rt.presented("receipt").unwrap();
             if width < 620.0 {
                 assert!((receipt[0] - candidates[0]).abs() < 1.0);
-                assert!(receipt[1] >= candidates[1] + candidates[3]);
+                assert!(candidates[1] >= receipt[1] + receipt[3]);
             } else {
                 assert!(receipt[0] >= candidates[0] + candidates[2]);
             }
@@ -1092,8 +1196,11 @@ mod tests {
                     "{width}: {key}: {rect:?}"
                 );
             }
+            let (record_before, _) = rt.presented("confirm").unwrap();
+            assert!(record_before[1] >= 56.0 && record_before[1] + record_before[3] <= 718.0);
             rt.wheel(width / 2.0, 350.0, -2000.0);
             rt.frame(0.0);
+            assert_eq!(rt.presented("confirm").unwrap().0, record_before);
             click(&mut rt, "confirm");
             assert!(
                 !rt.state.confirmed,
@@ -1238,6 +1345,10 @@ mod tests {
         let bytes = ticked_bytes(&rt.state);
         assert!(rt.find("agent-progress").is_some());
         assert!(rt.find("agent-cancel").is_some());
+        assert!(
+            rt.find("agent-terminal").is_none(),
+            "no saved chat before success"
+        );
         rt.update(|state, _| {
             state.agent = Some(agent::Job::preview(Some(Ok("Keep the held items.".into()))))
         });
@@ -1256,6 +1367,10 @@ mod tests {
         });
         rt.frame(0.3);
         assert!(rt.find("agent-cancel").is_none());
+        assert!(
+            rt.find("agent-terminal").is_none(),
+            "a failed review has no resumable chat"
+        );
         assert!(rt.find("agent-error-details").is_none());
         click(&mut rt, "agent-error-toggle");
         assert!(rt.find("agent-error-details").is_some());
@@ -1277,6 +1392,33 @@ mod tests {
         click(&mut rt, "confirm");
         assert!(rt.state.confirmed);
         assert_eq!(ticked_ids(&rt.state), before);
+    }
+
+    #[test]
+    fn agent_controls_can_be_reached_without_scrolling_through_candidates() {
+        for width in [360.0, 720.0] {
+            let mut rt = runtime();
+            rt.set_viewport((width, 718.0), 2.0);
+            rt.update(|s, _| {
+                s.open.fill(true);
+                s.agent = Some(agent::Job::preview(None));
+            });
+            rt.frame(0.0);
+            let (entry, _) = rt.presented("agent-reveal").expect("visible agent entry");
+            assert!(entry[1] >= 0.0 && entry[1] + entry[3] < 718.0);
+            click(&mut rt, "agent-reveal");
+            let (progress, _) = rt.presented("agent-progress").unwrap();
+            let (cancel, _) = rt.presented("agent-cancel").unwrap();
+            let (footer, _) = rt.presented("system-readings").unwrap();
+            assert!(
+                progress[1] >= 56.0 && progress[1] + progress[3] <= footer[1],
+                "{width}: {progress:?}"
+            );
+            assert!(
+                cancel[1] >= 56.0 && cancel[1] + cancel[3] <= footer[1],
+                "{width}: {cancel:?}"
+            );
+        }
     }
 
     #[test]
