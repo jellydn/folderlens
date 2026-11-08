@@ -6,7 +6,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/jellydn/shelf/blob/main/LICENSE)
 [![Twitter: jellydn](https://img.shields.io/twitter/follow/jellydn.svg?style=social)](https://twitter.com/jellydn)
 
-> A macOS menu-bar review of what a cleanup would free. Confirm records the choice and deletes nothing.
+> Experimental WIP proof of concept for previewing cleanup selections in a macOS menu-bar panel. Confirm records a choice; it does not delete files or run cleanup.
+
+## Current status and Levo credit
+
+[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's current UI, layout and interaction behavior, not just a general inspiration. If you like this idea, please support Levo and consider buying it through its official site. Shelf is not affiliated with or endorsed by Levo.
+
+Shelf is an experimental **WIP PoC**, not a finished cleanup utility or a claim of Levo-equivalent cleanup safety. Careful, Balanced and Aggressive levels preview which items are selected and their estimated space. **Confirm only records a choice in memory; Shelf does not delete the selected files.**
+
+The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual Ask Agent adapters, per-agent model settings, a bounded selected-folder reader, saved-session launchers and signed-update checks. Protocol stubs, headless UI tests and limited native metadata/download checks exercise these implementations. They do **not** establish end-to-end native model analysis, tool routing during a model turn, Terminal continuation, tray event routing, or actual update installation/restart and Gatekeeper behavior. The sections below describe this PR's code, which includes follow-ups not present in the published beta.1 assets.
+
+**Promotion and further releases are paused pending review and an independent presentation.** That presentation is not complete. Attribution alone does not resolve the concern about the copied presentation. Existing screenshots, releases and history are retained as provenance, not evidence of an independent redesign or completed safety review.
 
 ## Screenshot
 
@@ -26,7 +36,7 @@ Agents that are on `PATH`.
 
 The bundled app uses [Shelf.icns](assets/Shelf.icns), generated from the Painter-designed [app icon](assets/shelf-icon.png). The matching small-size [favicon](assets/favicon.svg) uses the same teal, amber and cream shapes. [ICO](assets/favicon.ico), [PNG](assets/favicon.png), Apple touch/PWA icons and [web manifest](assets/site.webmanifest) are in `assets/` for documentation sites; GitHub controls its own browser favicon. Regenerate with `uv run --with pillow scripts/icons.py` on macOS. Normal builds copy the committed ICNS and need no image-generation tools.
 
-## Features
+## Implemented prototype features
 
 - Menu-bar panel with Memory, CPU, and GPU
 - Free space, ready space, and a capacity bar
@@ -38,7 +48,7 @@ The bundled app uses [Shelf.icns](assets/Shelf.icns), generated from the Painter
 - Ask Agent sends the current ticked selection, sizes, and cleanup request to the tool chosen in Settings, only after you grant access. Folder paths are sent only when path sharing is enabled; destructive work needs approval.
 - Settings and the panel are never open together
 
-## Ask Agent
+## Ask Agent (experimental)
 
 Each request creates a private folder under `~/Library/Application Support/Shelf/Runs/` with `Ask.command` and `context.md`. Earlier runs are kept, not overwritten. The context records the eligible ticked items at the time of the request; later selection changes do not change that snapshot.
 
@@ -109,7 +119,7 @@ open target/release/Shelf.app
 
 Copy `target/release/Shelf.app` to Applications if you want to keep it there. The bundle uses `io.github.jellydn.shelf` as its stable identifier and `LSUIElement` to stay out of the Dock. The build script signs it ad hoc for local use; it is not a notarised release.
 
-The archivebox icon appears before the disk scan finishes. Click it to open the panel. Click it again, or move the pointer outside the panel, to close it. On macOS 27, the panel uses AppKit's expanded-interface session; older systems use the button action.
+The archivebox icon appears before the disk scan finishes. Click it to open the panel. Click it again, click outside, or press Escape to close it; moving the pointer outside no longer dismisses it in this PR. On macOS 27, the panel uses AppKit's expanded-interface session; older systems use the button action. Native event routing remains unverified.
 
 The first scan and system gauge commands run on background threads. Memory, CPU, and GPU update about once a second. GPU load comes from the driver's IOKit performance statistics, with renderer/tiler values as a fallback when device utilisation is unavailable. A driver that exposes no load still shows 0%.
 
