@@ -6,31 +6,39 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/jellydn/shelf/blob/main/LICENSE)
 [![Twitter: jellydn](https://img.shields.io/twitter/follow/jellydn.svg?style=social)](https://twitter.com/jellydn)
 
-> Experimental WIP proof of concept for previewing cleanup selections in a macOS menu-bar panel. Confirm records a choice; it does not delete files or run cleanup.
+> Experimental WIP proof of concept for reviewing cleanup selections. Record choice (formerly Confirm) records a choice; it does not delete files or run cleanup.
 
 ## Current status and Levo credit
 
-[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's current UI, layout and interaction behavior, not just a general inspiration. If you like this idea, please support Levo and consider buying it through its official site. Shelf is not affiliated with or endorsed by Levo.
+[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original UI, layout and interaction behavior, not just a general inspiration. That presentation remains in the published beta.2 and earlier releases. If you like this idea, please support Levo and consider buying it through its official site. Shelf is not affiliated with or endorsed by Levo.
 
-Shelf is an experimental **WIP PoC**, not a finished cleanup utility or a claim of Levo-equivalent cleanup safety. Careful, Balanced and Aggressive levels preview which items are selected and their estimated space. **Confirm only records a choice in memory; Shelf does not delete the selected files.**
+Shelf is an experimental **WIP PoC**, not a finished cleanup utility or a claim of Levo-equivalent cleanup safety. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory; Shelf does not delete the selected files.** Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
 
 The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual Ask Agent adapters, per-agent model settings, a bounded selected-folder reader, saved-session launchers and signed-update checks. Protocol stubs, headless UI tests and limited native metadata/download checks exercise these implementations. They do **not** establish end-to-end native model analysis, tool routing during a model turn, Terminal continuation, tray event routing, or actual update installation/restart and Gatekeeper behavior. The sections below describe this PR's code, which includes follow-ups not present in the published beta.1 assets.
 
-**The current-state beta.2 prerelease does not lift the pause on promotion or later releases pending review and an independent presentation.** That presentation is not complete. Attribution alone does not resolve the concern about the copied presentation. Existing screenshots, releases and history are retained as provenance, not evidence of an independent redesign or completed safety review.
+**The current-state beta.2 prerelease does not lift the pause on promotion or later releases pending review and an independent presentation.** This UI branch implements the owner's chosen Review ledger direction: reasons and exclusions beside a non-deleting selection receipt, with separate agent access. It is a first implementation for review, not part of beta.2 and not a claim that the presentation review is complete. Attribution alone does not resolve the concern about the copied presentation. Earlier screenshots, releases and history are retained as provenance, not evidence of completed design or safety review.
 
-## Screenshot
+## Review ledger (unreleased UI)
 
 The panel opens from the menu bar. Moving the pointer outside does not close it. Click outside, press Escape, or click the menu-bar button again to dismiss it. Escape closes an open action list before closing the panel.
 
-![Shelf panel](shots/tray.png)
+The wide ledger compares candidates with a selection receipt. Below 620 points it stacks these sections in one scrollable column. Live system readings stay in the footer instead of leading the decision. These panel examples use synthetic data and make no scan, model request or file change.
 
-Protected folders, the hour hold, and the locked system paths.
+![Review ledger, synthetic example](shots/review-ledger.png)
 
-![Protected settings](shots/settings-protected.png)
+![Recorded choice, no deletion](shots/review-receipt.png)
 
-Agents that are on `PATH`.
+Folder actions show the target and its reason. Ask Agent still uses the eligible selection, not the action target. Protected settings explain user exclusions, recent-change holds and built-in exclusions separately; their rules are unchanged.
 
-![Agent settings](shots/settings-agent.png)
+![Folder and review actions](shots/review-actions.png)
+
+![Exclusion rules, example retained folder](shots/exclusion-rules.png)
+
+Agents on `PATH` and model controls remain in Settings.
+
+![Agent settings](shots/review-agent-settings.png)
+
+Historical presentation: [original panel](shots/tray.png), [original Protected settings](shots/settings-protected.png), [earlier Agent settings](shots/settings-agent.png). These files remain unchanged.
 
 ## Brand assets
 
@@ -38,10 +46,10 @@ The bundled app uses [Shelf.icns](assets/Shelf.icns), generated from the Painter
 
 ## Implemented prototype features
 
-- Menu-bar panel with Memory, CPU, and GPU
-- Free space, ready space, and a capacity bar
-- Careful, Balanced, and Aggressive choices, plus a Selected override
-- One summary line for what the choice would free
+- Menu-bar review ledger with compact live memory, CPU, GPU and free-space readings
+- Candidate selection reasons, exclusions and an estimated-footprint receipt; no reclaimed-space claim
+- Careful, Balanced, and Aggressive presets, plus a Selected override
+- Record choice keeps an in-memory choice, not a cleanup instruction
 - Actions for the row under the pointer: Finder, keep, unlock, and the rest
 - Protected folders you add, a “keep what changed within” hold, and built-in locked paths
 - AI tools detected on `PATH`, from the same command list as [ai-launcher](https://github.com/jellydn/ai-launcher)

@@ -37,7 +37,7 @@ pub fn focus_ask(s: &mut State) {
     }
 }
 
-pub const WIDTH: f32 = 360.0;
+pub const WIDTH: f32 = 720.0;
 pub const TRAY_H: f32 = 718.0;
 
 /// Header, rules, rows, and the search line. The list does not grow, so this is the window height.
@@ -58,7 +58,7 @@ pub fn height(s: &State) -> f32 {
     let items = n + rules;
     let gaps = items.saturating_sub(1) as f32 * 2.0;
     let list = 12.0 + n as f32 * 32.0 + rules as f32 * 9.0 + gaps;
-    44.0 + 1.0 + list + 1.0 + 40.0
+    132.0 + 1.0 + list + 1.0 + 40.0
 }
 
 pub fn fit(s: &mut State, tx: &mut Tx) {
@@ -76,7 +76,7 @@ pub fn open_height() -> f32 {
     let rules = 2.0;
     let gaps = (n + rules - 1.0) * 2.0;
     let list = 12.0 + n * 32.0 + rules * 9.0 + gaps;
-    44.0 + 1.0 + list + 1.0 + 40.0
+    132.0 + 1.0 + list + 1.0 + 40.0
 }
 
 pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
@@ -148,6 +148,18 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
 }
 
 pub fn panel(s: &State) -> El {
+    let reason = match s.target {
+        Some(Target::Leaf(index)) if index < s.catalog.leaves.len() => {
+            super::selection_reason(s, index)
+        }
+        Some(Target::Group(index)) => s
+            .catalog
+            .groups
+            .get(index)
+            .map(|group| group.detail.clone())
+            .unwrap_or_else(|| "Folder no longer in scan".into()),
+        _ => "No folder target".into(),
+    };
     let shown = rows(s);
     let mut list = col().w_full().px(8.0).py(6.0).gap(2.0);
     for (index, action) in shown.iter().enumerate() {
@@ -157,7 +169,7 @@ pub fn panel(s: &State) -> El {
         list = list.child(action_row(s, action, index));
     }
     let query = if s.query.is_empty() {
-        text("Search for actions...")
+        text("Filter folder and review actions…")
             .font(type_::BODY)
             .color(paint(MUTED))
     } else {
@@ -170,17 +182,22 @@ pub fn panel(s: &State) -> El {
         .radius(14.0)
         .transition(Transition::none())
         .child(
-            row()
+            col()
                 .w_full()
-                .h(44.0)
+                .h(132.0)
                 .px(16.0)
-                .center_y()
+                .py(12.0)
+                .gap(6.0)
                 .window_drag()
+                .child(text("Folder actions / selection review").font(type_::LABEL).color(paint(MUTED)))
                 .child(
                     text(target_name(s))
                         .font(TextStyle::new(15.0, 600.0))
-                        .color(paint(INK)),
-                ),
+                        .color(paint(INK)).truncate(),
+                )
+                .child(text(reason).font(type_::LABEL).color(paint(MUTED)).truncate().w_full())
+                .child(text("Folder actions use this row. Ask Agent uses the eligible selection, not this row.")
+                    .font(type_::LABEL).color(paint(MUTED)).wrap().w_full()),
         )
         .child(rule())
         .child(list)
@@ -223,7 +240,9 @@ fn action_row(s: &State, action: &Row, index: usize) -> El {
             text(action.title.clone())
                 .font(type_::BODY)
                 .color(paint(ink))
-                .grow(1.0),
+                .grow(1.0)
+                .min_w(0.0)
+                .truncate(),
         );
     if show_shortcut(s, action.shortcut) {
         line = line.child(text(action.shortcut).font(type_::LABEL).color(paint(MUTED)));
@@ -258,11 +277,16 @@ fn action_rows(s: &State) -> Vec<Row> {
     let path = !target_indexes(s).is_empty();
     vec![
         item("finder", "Show in Finder", "⌘↩", path),
-        item("keep", "Always keep", "⌘D", path),
-        item("unlock", "Unlock", "⌘U", path),
-        item("select", "Select", "›", s.target.is_some()),
-        item("analyse", "Analyse now", "⌘R", path),
-        item("ask", "Ask Agent", "⌘J", true),
+        item("keep", "Keep excluded from review", "⌘D", path),
+        item(
+            "unlock",
+            "Allow for this session (where permitted)",
+            "⌘U",
+            path,
+        ),
+        item("select", "Change selection", "›", s.target.is_some()),
+        item("analyse", "Measure folder again", "⌘R", path),
+        item("ask", "Ask Agent about eligible selection", "⌘J", true),
         item("pause", "Pause alerts for 1 hour", "⌘P", true),
         item("settings", "Settings…", "⌘,", true),
         item("close", "Close", "esc", true),
@@ -398,6 +422,7 @@ fn keep(s: &mut State) {
     }
     prefs::save_to(&s.prefs_path, &s.prefs);
     s.note = "Shelf keeps this.".to_string();
+    s.confirmed = false;
     close(s);
 }
 
@@ -410,6 +435,7 @@ fn unlock(s: &mut State) {
     }
     prefs::save_to(&s.prefs_path, &s.prefs);
     s.note = "Unlocked.".to_string();
+    s.confirmed = false;
     close(s);
 }
 
@@ -419,6 +445,7 @@ fn analyse(s: &mut State) {
         catalog::remeasure(&mut s.catalog.leaves[index]);
     }
     s.note = format!("Measured {name}.");
+    s.confirmed = false;
     close(s);
 }
 

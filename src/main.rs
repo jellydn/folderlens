@@ -25,19 +25,17 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use catalog::{Catalog, Level};
 use rune::tok::{type_, TextStyle};
 use rune::{
-    canvas, col, el, rich, row, text, Align, App, AppSpec, Color, Cx, El, KeyEvent, LineCap,
-    MacWindowOptions, ScrollSpec, Shape, Span, Transition, Tx, WindowOptions, WindowSpec,
+    canvas, col, el, row, text, Align, App, AppSpec, Color, Cx, El, KeyEvent, LineCap,
+    MacWindowOptions, ScrollSpec, Shape, Transition, Tx, WindowOptions, WindowSpec,
 };
 
-const PANEL: &str = "#1c1c1e";
-const INK: &str = "#f5f5f7";
-const MUTED: &str = "#98989d";
+const PANEL: &str = "#17242b";
+const INK: &str = "#edf4f3";
+const MUTED: &str = "#a6bbc2";
 const LINE: &str = "#ffffff";
-const GREEN: &str = "#30d158";
-const BLUE: &str = "#0a84ff";
+const BLUE: &str = "#79d8cb";
 const RED: &str = "#ff453a";
-const YELLOW: &str = "#ffd60a";
-const TRACK: &str = "#3a3a3c";
+const TRACK: &str = "#2b4049";
 
 struct State {
     catalog: Catalog,
@@ -96,6 +94,18 @@ fn state_from(catalog: Catalog) -> State {
 
 fn live_state() -> State {
     if rune::is_headless() {
+        let mut args = std::env::args().skip(1);
+        while let Some(arg) = args.next() {
+            let scene = if arg == "--scene" {
+                args.next()
+            } else {
+                arg.strip_prefix("--scene=").map(str::to_string)
+            };
+            if scene.is_some_and(|name| name.ends_with("-example") || name == "agent-error-details")
+            {
+                return state_from(catalog::fixture());
+            }
+        }
         return state_from(catalog::load_live());
     }
     state_from(catalog::pending())
@@ -173,6 +183,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     let prefs = prefs::load_from(&s.prefs_path);
     if prefs != s.prefs {
         s.prefs = prefs;
+        s.confirmed = false;
         changed = true;
     }
     if let Some(job) = &s.agent {
@@ -228,13 +239,6 @@ fn leaf_view(s: &State, index: usize) -> catalog::Leaf {
         leaf.detail = format!("Changed within {} h", s.prefs.keep_hours);
     }
     leaf
-}
-
-fn viewed_ready(s: &State) -> u64 {
-    (0..s.catalog.leaves.len())
-        .filter(|&index| catalog::can_tick(&leaf_view(s, index)))
-        .map(|index| s.catalog.leaves[index].bytes)
-        .sum()
 }
 
 fn cycle_level(s: &mut State) {
@@ -367,7 +371,7 @@ fn cleanup_line(s: &State) -> String {
         return String::new();
     }
     let lead = format!(
-        "Your cleanup frees {}",
+        "Selected footprint {}",
         catalog::format_bytes(ticked_bytes(s))
     );
     if groups.len() == 1 {
@@ -403,108 +407,8 @@ fn rule() -> El {
     el().w_full().h(1.0).fill(paint(LINE).alpha(0.08))
 }
 
-fn laptop() -> El {
-    let ink = paint(MUTED);
-    el().size(16.0, 12.0)
-        .child(
-            el().size(14.0, 9.0)
-                .radius(2.0)
-                .border(1.2, ink)
-                .absolute(1.0, 0.0),
-        )
-        .child(
-            el().size(16.0, 1.5)
-                .radius(1.0)
-                .fill(ink)
-                .absolute(0.0, 10.0),
-        )
-}
-
-/// 270° of ticks. The gap sits at the bottom. Y grows downward, so angle 0 is to the right.
-fn gauge_shape(pct: f32) -> Shape {
-    let (cx, cy, r) = (46.0, 38.0, 30.0);
-    let ticks = 28;
-    let start = 135.0_f32.to_radians();
-    let sweep = 270.0_f32.to_radians();
-    let cyan = paint("#64d2ff");
-    let yellow = paint(YELLOW);
-    let orange = paint("#ff9f0a");
-    let rest = paint("#545458");
-    let filled = (pct / 100.0 * ticks as f32)
-        .round()
-        .clamp(0.0, ticks as f32) as i32;
-    let mut shape = Shape::new();
-    for i in 0..ticks {
-        let along = i as f32 / (ticks - 1) as f32;
-        let ang = start + sweep * along;
-        let (s, c) = ang.sin_cos();
-        let color = if (i as i32) < filled {
-            let u = if filled <= 1 {
-                0.0
-            } else {
-                i as f32 / (filled - 1) as f32
-            };
-            if u < 0.5 {
-                cyan.mix(yellow, u * 2.0)
-            } else {
-                yellow.mix(orange, (u - 0.5) * 2.0)
-            }
-        } else {
-            rest
-        };
-        shape = shape.line(
-            [cx + (r - 8.0) * c, cy + (r - 8.0) * s],
-            [cx + r * c, cy + r * s],
-            2.4,
-            LineCap::Round,
-            color,
-        );
-    }
-    shape
-}
-
-fn gauge(name: &str, pct: u32) -> El {
-    let w = 92.0;
-    let h = 74.0;
-    col()
-        .grow(1.0)
-        .items_center()
-        .gap(0.0)
-        .child(
-            el().size(w, h)
-                .child(
-                    canvas(gauge_shape(pct as f32))
-                        .size(w, h)
-                        .absolute(0.0, 0.0),
-                )
-                .child(
-                    text(format!("{pct}%"))
-                        .font(TextStyle::new(18.0, 600.0).lh(22.0))
-                        .color(paint(INK))
-                        .align(Align::Center)
-                        .w(w)
-                        .absolute(0.0, 26.0),
-                ),
-        )
-        .child(text(name).font(type_::LABEL).color(paint(MUTED)))
-}
-
-fn capacity_bar(catalog: &Catalog, ready_bytes: u64) -> El {
-    let total = catalog.disk_total as f64 / 1_000_000_000.0;
-    let free = catalog.disk_free as f64 / 1_000_000_000.0;
-    let ready = ready_bytes as f64 / 1_000_000_000.0;
-    let (red, yellow, green, gray) = catalog::bar_counts(total, free, ready);
-    let mut bar = row().key("disk-bar").w_full().h(9.0).gap(1.5);
-    for (count, color) in [(red, RED), (yellow, YELLOW), (green, GREEN), (gray, TRACK)] {
-        for _ in 0..count {
-            bar = bar.child(el().grow(1.0).h(9.0).radius(2.0).fill(paint(color)));
-        }
-    }
-    bar
-}
-
 fn check_mark() -> Shape {
-    let ink = Color::WHITE;
+    let ink = paint(PANEL);
     Shape::new()
         .line([3.5, 8.0], [6.5, 11.0], 1.6, LineCap::Round, ink)
         .line([6.5, 11.0], [12.5, 4.5], 1.6, LineCap::Round, ink)
@@ -541,20 +445,7 @@ fn lock_icon() -> El {
         )
 }
 
-fn letter_icon(mark: &str, tint: &str) -> El {
-    el().size(22.0, 22.0)
-        .radius(6.0)
-        .fill(paint(tint))
-        .center()
-        .child(
-            text(mark)
-                .font(TextStyle::new(12.0, 700.0))
-                .color(Color::WHITE),
-        )
-}
-
 fn status_line(s: &State) -> El {
-    let muted = paint(MUTED);
     let ink = paint(INK);
     if !s.note.is_empty() {
         return text(s.note.clone())
@@ -572,21 +463,12 @@ fn status_line(s: &State) -> El {
     }
     let bytes = ticked_bytes(s);
     if bytes == 0 {
-        let line = "Nothing to clean up. More to choose from.";
-        let choose = line.find("to choose").unwrap_or(0);
-        rich(
-            line,
-            vec![
-                Span::new(0, "Nothing".len()).weight(650.0).color(ink),
-                Span::new(choose, choose + "to choose".len())
-                    .weight(650.0)
-                    .color(ink),
-            ],
-        )
-        .key("status")
-        .font(TextStyle::new(13.0, 400.0).lh(18.0))
-        .color(muted)
-        .w_full()
+        text("Nothing selected. Choose a preset or select an eligible folder.")
+            .key("status")
+            .font(TextStyle::new(13.0, 400.0).lh(18.0))
+            .color(paint(MUTED))
+            .wrap()
+            .w_full()
     } else {
         text(cleanup_line(s))
             .key("status")
@@ -601,9 +483,14 @@ fn group_row(s: &State, index: usize) -> El {
     let group = &s.catalog.groups[index];
     let id = group.id.clone();
     let name = group.name.clone();
-    let detail = group.detail.clone();
-    let mark = group.mark.clone();
-    let tint = group.tint.clone();
+    let excluded = leaf_range(s, index)
+        .filter(|&leaf| !catalog::can_tick(&leaf_view(s, leaf)))
+        .count();
+    let detail = if group.count == 1 {
+        selection_reason(s, group.first)
+    } else {
+        format!("{} folders · {excluded} excluded", group.count)
+    };
     let opens = group.count > 1;
     let open = s.open.get(index).copied().unwrap_or(false);
     let size = catalog::format_bytes(group_bytes(s, index));
@@ -634,18 +521,24 @@ fn group_row(s: &State, index: usize) -> El {
     row()
         .key(format!("row-{id}"))
         .w_full()
-        .h(44.0)
+        .h(52.0)
         .px(8.0)
         .gap(8.0)
         .center_y()
         .child(lead)
-        .child(letter_icon(&mark, &tint))
         .child(
             col()
                 .grow(1.0)
                 .gap(1.0)
-                .child(text(name).font(type_::BODY).color(paint(INK)))
-                .child(text(detail).font(type_::LABEL).color(paint(MUTED))),
+                .min_w(0.0)
+                .child(text(name).font(type_::BODY).color(paint(INK)).truncate())
+                .child(
+                    text(detail)
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                ),
         )
         .child(text(size).font(type_::LABEL).color(paint("#d1d1d6")))
         .child(chevron_el)
@@ -660,10 +553,8 @@ fn child_row(s: &State, index: usize) -> El {
     let leaf = leaf_view(s, index);
     let id = leaf.id.clone();
     let name = leaf.name.clone();
-    let detail = leaf.detail.clone();
+    let detail = selection_reason(s, index);
     let size = s.catalog.leaves[index].size_label.clone();
-    let mark = leaf.mark.clone();
-    let tint = leaf.tint.clone();
     let locked = !catalog::can_tick(&leaf);
     let lead = if locked {
         lock_icon()
@@ -673,24 +564,29 @@ fn child_row(s: &State, index: usize) -> El {
             toggle_leaf(state, index)
         })
     };
-    let mut line = row()
+    let line = row()
         .key(format!("row-{id}"))
         .w_full()
-        .h(36.0)
-        .pl(34.0)
+        .min_h(58.0)
+        .py(6.0)
+        .pl(18.0)
         .pr(8.0)
         .gap(8.0)
         .center_y()
         .child(lead);
-    if !locked {
-        line = line.child(letter_icon(&mark, &tint));
-    }
     line.child(
         col()
             .grow(1.0)
+            .min_w(0.0)
             .gap(1.0)
-            .child(text(name).font(type_::BODY).color(paint(INK)))
-            .child(text(detail).font(type_::LABEL).color(paint(MUTED))),
+            .child(text(name).font(type_::BODY).color(paint(INK)).truncate())
+            .child(
+                text(detail)
+                    .font(type_::LABEL)
+                    .color(paint(MUTED))
+                    .wrap()
+                    .w_full(),
+            ),
     )
     .child(text(size).font(type_::LABEL).color(paint("#d1d1d6")))
     .on_secondary_press(move |state: &mut State, _, tx| {
@@ -700,31 +596,27 @@ fn child_row(s: &State, index: usize) -> El {
     })
 }
 
-fn gauge_band(s: &State) -> Option<El> {
-    let mut parts = Vec::new();
-    if s.prefs.gauge_memory {
-        parts.push(("Memory", s.catalog.memory));
+fn selection_reason(s: &State, index: usize) -> String {
+    let leaf = leaf_view(s, index);
+    if !catalog::can_tick(&leaf) {
+        return format!("Excluded · {}", leaf.detail);
     }
-    if s.prefs.gauge_cpu {
-        parts.push(("CPU", s.catalog.cpu));
-    }
-    if s.prefs.gauge_gpu {
-        parts.push(("GPU", s.catalog.gpu));
-    }
-    if parts.is_empty() {
-        return None;
-    }
-    let mut band = row().key("gauge").w_full().h(100.0).px(4.0).center_y();
-    for (index, (name, pct)) in parts.into_iter().enumerate() {
-        if index > 0 {
-            band = band.child(el().w(1.0).h(56.0).fill(paint(LINE).alpha(0.08)));
+    if let Some(on) = s.ticks[index] {
+        return if on {
+            "Selected by you"
+        } else {
+            "Excluded by you"
         }
-        band = band.child(gauge(name, pct));
+        .into();
     }
-    Some(band)
+    if is_ticked(s, index) {
+        format!("{} preset · {}", level_name(s.level), leaf.detail)
+    } else {
+        format!("Not in this preset · {}", leaf.detail)
+    }
 }
 
-fn view(s: &State, _: &mut Cx<State>) -> El {
+fn view(s: &State, cx: &mut Cx<State>) -> El {
     // Publish each rendered selection change without waiting for the next polling interval.
     if let Some(job) = &s.agent {
         job.set_access(palette::ask_access(s));
@@ -732,18 +624,7 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
     if s.palette {
         return palette::panel(s);
     }
-    let (free_n, free_unit) = if s.catalog.disk_total == 0 {
-        ("—".to_string(), "")
-    } else {
-        catalog::free_parts(s.catalog.disk_free)
-    };
-    let ready_bytes = viewed_ready(s);
-    let ready = if s.catalog.missing {
-        String::new()
-    } else {
-        format!("{} ready", catalog::format_bytes(ready_bytes))
-    };
-    let checked = s.catalog.checked.clone();
+    let compact = cx.layout_size("ledger").is_some_and(|size| size[0] < 620.0);
     let mut list = col().key("list").w_full().py(4.0);
     for index in 0..s.catalog.groups.len() {
         list = list.child(group_row(s, index));
@@ -755,18 +636,54 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
             }
         }
     }
-    let confirm = if s.confirmed {
-        "Nothing deleted"
+    let candidates = col()
+        .key("candidates")
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(8.0)
+        .child(
+            row()
+                .w_full()
+                .h(36.0)
+                .center_y()
+                .child(
+                    text("Candidates / exclusions")
+                        .font(TextStyle::new(13.0, 600.0))
+                        .color(paint(INK))
+                        .grow(1.0),
+                )
+                .child(
+                    row()
+                        .key("level-menu")
+                        .h(24.0)
+                        .px(8.0)
+                        .gap(4.0)
+                        .center_y()
+                        .radius(6.0)
+                        .fill(paint(TRACK))
+                        .on_press(|state: &mut State| cycle_level(state))
+                        .child(
+                            text(level_label(s))
+                                .key("level-label")
+                                .font(type_::LABEL)
+                                .color(paint(INK)),
+                        )
+                        .child(text("⌄").font(type_::LABEL).color(paint(MUTED))),
+                ),
+        )
+        .child(list);
+    let receipt = selection_receipt(s).key("receipt").min_w(0.0);
+    let workspace = if compact {
+        col().w_full().gap(20.0).child(candidates).child(receipt)
     } else {
-        "Confirm"
+        row()
+            .w_full()
+            .gap(24.0)
+            .child(candidates)
+            .child(receipt.w(260.0))
     };
-    let confirm_ink = if s.confirmed {
-        paint(MUTED)
-    } else {
-        paint(INK)
-    };
-
-    let mut body = col()
+    col()
+        .key("ledger")
         .w_full()
         .h_full()
         .fill(paint(PANEL))
@@ -775,168 +692,108 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         .child(
             row()
                 .w_full()
-                .h(44.0)
-                .px(14.0)
-                .gap(8.0)
+                .h(56.0)
+                .px(18.0)
                 .center_y()
                 .window_drag()
-                .child(laptop())
                 .child(
-                    text("Shelf")
-                        .font(TextStyle::new(15.0, 600.0))
-                        .color(paint(INK)),
+                    text("Shelf / Review ledger")
+                        .font(TextStyle::new(16.0, 650.0))
+                        .color(paint(INK))
+                        .grow(1.0),
+                )
+                .child(
+                    text("Actions")
+                        .key("actions")
+                        .font(type_::BODY)
+                        .color(paint(BLUE))
+                        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                            tx.instant();
+                            palette::open(state, None);
+                            palette::fit(state, tx);
+                        }),
                 ),
         )
-        .child(rule());
-    if let Some(band) = gauge_band(s) {
-        body = body.child(band).child(rule());
+        .child(rule())
+        .child(
+            col()
+                .w_full()
+                .padding(18.0)
+                .gap(12.0)
+                .child(
+                    text("Selection preview. Recording does not start cleanup.")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                )
+                .child(status_line(s))
+                .child(workspace)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .grow(1.0)
+                .min_h(0.0),
+        )
+        .child(rule())
+        .child(
+            text(system_readings(s))
+                .font(type_::LABEL)
+                .color(paint(MUTED))
+                .px(18.0)
+                .py(10.0)
+                .wrap()
+                .w_full(),
+        )
+}
+
+fn selection_receipt(s: &State) -> El {
+    let selected = (0..s.catalog.leaves.len())
+        .filter(|&i| is_ticked(s, i))
+        .count();
+    let excluded = (0..s.catalog.leaves.len())
+        .filter(|&i| !catalog::can_tick(&leaf_view(s, i)))
+        .count();
+    col().w_full().gap(12.0)
+        .child(text("Selection receipt").font(TextStyle::new(16.0, 600.0)).color(paint(INK)))
+        .child(rule())
+        .child(text(format!("{selected} selected · {excluded} protected / unavailable\n{} estimated footprint", catalog::format_bytes(ticked_bytes(s))))
+            .font(type_::BODY).color(paint(INK)).wrap().w_full().key("receipt-summary"))
+        .child(text("0 files deleted. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Agent access / separate decision").font(TextStyle::new(13.0, 600.0)).color(paint(INK)))
+        .child(text(if !s.prefs.allow_start { "Agent start is off. Configure access before requesting analysis." }
+            else if s.prefs.send_paths { "Eligible selected paths may be shared. Live reads use original ∩ current selection; protected paths stay excluded." }
+            else { "Saved selection context only. Folder paths are not shared." })
+            .key("access-summary").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Review access settings →").key("review-access").font(type_::LABEL).color(paint(BLUE))
+            .on_press(|_: &mut State| settings::open(settings::Page::Access)))
+        .child(text("Ask Agent").key("ask-agent").font(type_::BODY).color(paint(BLUE)).on_press(palette::ask))
+        .child(text("Manual request; provider costs may apply. An answer is not proof of cleanup safety.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(agent_review(s))
+        .child(if s.agent.is_some() { text("Open saved chat").key("agent-terminal").font(type_::LABEL).color(paint(BLUE))
+            .on_press(|state: &mut State| { if let Some(job) = &state.agent { if let Err(error) = job.open_chat(&state.prefs) { state.note = error; } } }) } else { el() })
+        .child(rule())
+        .child(text(if s.confirmed { "Choice recorded · nothing deleted" } else { "Record choice" }).key("confirm")
+            .font(TextStyle::new(14.0, 600.0)).color(paint(BLUE)).wrap().w_full()
+            .on_press(|state: &mut State| state.confirmed = (0..state.catalog.leaves.len()).any(|i| is_ticked(state, i))))
+        .child(text("In memory only. Selection changes require a new record.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+}
+
+fn system_readings(s: &State) -> String {
+    let mut readings = vec![format!(
+        "{} free",
+        catalog::format_bytes(s.catalog.disk_free)
+    )];
+    for (show, name, value) in [
+        (s.prefs.gauge_memory, "Memory", s.catalog.memory),
+        (s.prefs.gauge_cpu, "CPU", s.catalog.cpu),
+        (s.prefs.gauge_gpu, "GPU", s.catalog.gpu),
+    ] {
+        if show {
+            readings.push(format!("{name} {value}%"));
+        }
     }
-    body.child(
-        col()
-            .w_full()
-            .px(16.0)
-            .py(10.0)
-            .gap(10.0)
-            .child(
-                row()
-                    .w_full()
-                    .items_end()
-                    .child(
-                        text(free_n)
-                            .font(TextStyle::new(28.0, 640.0).lh(32.0))
-                            .color(paint(INK)),
-                    )
-                    .child(
-                        text(free_unit)
-                            .font(TextStyle::new(15.0, 500.0))
-                            .color(paint(INK))
-                            .mb(4.0)
-                            .ml(4.0),
-                    )
-                    .child(
-                        text("free")
-                            .font(type_::BODY)
-                            .color(paint(MUTED))
-                            .mb(4.0)
-                            .ml(6.0),
-                    )
-                    .child(el().grow(1.0))
-                    .child(
-                        text(ready)
-                            .font(TextStyle::new(15.0, 600.0))
-                            .color(paint(GREEN))
-                            .mb(4.0),
-                    ),
-            )
-            .child(capacity_bar(&s.catalog, ready_bytes)),
-    )
-    .child(rule())
-    .child(col().w_full().px(16.0).py(10.0).child(status_line(s)))
-    .child(rule())
-    .child(
-        row()
-            .w_full()
-            .h(36.0)
-            .px(16.0)
-            .center_y()
-            .child(
-                text("Ready to free")
-                    .font(TextStyle::new(13.0, 600.0))
-                    .color(paint(INK))
-                    .grow(1.0),
-            )
-            .child(if s.agent.is_some() {
-                text("Terminal")
-                    .key("agent-terminal")
-                    .font(type_::LABEL)
-                    .color(paint(
-                        if s.agent
-                            .as_ref()
-                            .is_some_and(|job| matches!(job.result, Some(Ok(_))))
-                        {
-                            BLUE
-                        } else {
-                            MUTED
-                        },
-                    ))
-                    .mr(8.0)
-                    .on_press(|state: &mut State| {
-                        if let Some(job) = &state.agent {
-                            if let Err(error) = job.open_chat(&state.prefs) {
-                                state.note = error;
-                            }
-                        }
-                    })
-            } else {
-                el()
-            })
-            .child(
-                row()
-                    .key("level-menu")
-                    .h(24.0)
-                    .px(8.0)
-                    .gap(4.0)
-                    .center_y()
-                    .radius(6.0)
-                    .fill(paint("#2a2a2c"))
-                    .on_press(|state: &mut State| cycle_level(state))
-                    .child(
-                        text(level_label(s))
-                            .key("level-label")
-                            .font(type_::LABEL)
-                            .color(paint(INK)),
-                    )
-                    .child(text("⌄").font(type_::LABEL).color(paint(MUTED))),
-            ),
-    )
-    .child(
-        list.scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .grow(1.0)
-        .min_h(0.0),
-    )
-    .child(if s.agent.is_some() { rule() } else { el() })
-    .child(agent_review(s))
-    .child(rule())
-    .child(
-        row()
-            .w_full()
-            .h(36.0)
-            .px(16.0)
-            .gap(16.0)
-            .center_y()
-            .child(
-                text(checked)
-                    .font(type_::LABEL)
-                    .color(paint(MUTED))
-                    .grow(1.0),
-            )
-            .child(
-                row()
-                    .key("actions")
-                    .h(24.0)
-                    .px(4.0)
-                    .center_y()
-                    .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                        tx.instant();
-                        palette::open(state, None);
-                        palette::fit(state, tx);
-                    })
-                    .child(
-                        text("Actions")
-                            .font(TextStyle::new(13.0, 600.0))
-                            .color(paint(INK)),
-                    ),
-            )
-            .child(
-                text(confirm)
-                    .key("confirm")
-                    .font(TextStyle::new(13.0, 600.0))
-                    .color(confirm_ink)
-                    .on_press(|state: &mut State| state.confirmed = true),
-            ),
-    )
+    readings.join(" · ")
 }
 
 fn agent_review(s: &State) -> El {
@@ -1058,7 +915,7 @@ fn launch_size() -> (f32, f32) {
         } else {
             arg.strip_prefix("--scene=").map(str::to_string)
         };
-        if scene.as_deref() == Some("menu") {
+        if matches!(scene.as_deref(), Some("menu" | "menu-example")) {
             return (palette::WIDTH, palette::open_height());
         }
     }
@@ -1072,7 +929,17 @@ fn main() {
     let size = launch_size();
     let spec = AppSpec {
         scenes: &[
-            ("scanning", |s: &mut State| {
+            ("ledger-example", |s: &mut State| {
+                apply_level(s, Level::Balanced);
+                s.note = "Example data · no disk scan or agent request".into();
+            }),
+            ("recorded-example", |s| {
+                apply_level(s, Level::Balanced);
+                s.note = "Example data · no disk scan or agent request".into();
+                s.confirmed = true;
+            }),
+            ("menu-example", |s| palette::open(s, None)),
+            ("scanning", |s| {
                 s.catalog = catalog::pending();
                 s.ticks.clear();
                 s.open.clear();
@@ -1121,9 +988,9 @@ fn main() {
             transparent: true,
             borderless: true,
             always_on_top: true,
-            resizable: false,
-            min_size: Some((palette::WIDTH, 120.0)),
-            max_size: Some((palette::WIDTH, palette::TRAY_H)),
+            resizable: true,
+            min_size: Some((360.0, 120.0)),
+            max_size: Some((960.0, 1000.0)),
             ..WindowOptions::default()
         }
         .macos(
@@ -1174,20 +1041,12 @@ mod tests {
         assert_eq!(ids(Level::Aggressive), vec!["logs", "deps", "spotify"]);
     }
 
-    #[test]
-    fn the_disk_bar_is_mostly_space_in_use() {
-        let (red, yellow, green, gray) = catalog::bar_counts(494.35, 89.0, 70.0);
-        assert_eq!(red + yellow + green + gray, catalog::SEGMENTS);
-        assert!(red > yellow + green + gray);
-        assert_eq!((red, yellow, green, gray), (28, 3, 3, 8));
-    }
-
     fn runtime() -> Runtime<State> {
         let env = Env {
             system_dark: true,
             scale: 2.0,
         };
-        let mut rt = Runtime::new(fixture_state(), view, (360.0, 980.0), env);
+        let mut rt = Runtime::new(fixture_state(), view, (720.0, 718.0), env);
         rt.set_system_reduced_motion(true);
         rt.frame(0.0);
         rt
@@ -1207,6 +1066,67 @@ mod tests {
             .iter()
             .position(|leaf| leaf.id == id)
             .unwrap()
+    }
+
+    #[test]
+    fn ledger_reflows_and_scrolling_keeps_recording_non_destructive() {
+        for width in [360.0, 619.0, 620.0, 720.0] {
+            let mut rt = runtime();
+            rt.set_viewport((width, 718.0), 2.0);
+            rt.frame(0.0);
+            let (candidates, _) = rt.presented("candidates").unwrap();
+            let (receipt, _) = rt.presented("receipt").unwrap();
+            if width < 620.0 {
+                assert!((receipt[0] - candidates[0]).abs() < 1.0);
+                assert!(receipt[1] >= candidates[1] + candidates[3]);
+            } else {
+                assert!(receipt[0] >= candidates[0] + candidates[2]);
+            }
+            for key in ["receipt-summary", "access-summary", "confirm"] {
+                let (rect, _) = rt.presented(key).unwrap();
+                assert!(
+                    rect[0] >= 0.0 && rect[0] + rect[2] <= width,
+                    "{width}: {key}: {rect:?}"
+                );
+            }
+            rt.wheel(width / 2.0, 350.0, -2000.0);
+            rt.frame(0.0);
+            click(&mut rt, "confirm");
+            assert!(
+                !rt.state.confirmed,
+                "empty selection is not a recorded choice"
+            );
+            rt.update(|s, _| apply_level(s, Level::Balanced));
+            rt.frame(0.0);
+            let before = ticked_ids(&rt.state);
+            click(&mut rt, "confirm");
+            assert!(rt.state.confirmed);
+            assert_eq!(ticked_ids(&rt.state), before);
+            assert_eq!(rt.state.catalog.leaves.len(), 7);
+            assert_eq!(ticked_bytes(&rt.state), 6_409_000_000);
+            rt.wheel(width / 2.0, 350.0, 2000.0);
+            rt.frame(0.0);
+            click(&mut rt, "check-logs");
+            assert!(!rt.state.confirmed);
+            assert_eq!(ticked_bytes(&rt.state), 709_000_000);
+            rt.update(|s, _| {
+                s.agent = Some(agent::Job::failed(
+                    "Example",
+                    "preview-only",
+                    &"Agent failed.\n".repeat(50),
+                ));
+                s.agent_details = true;
+            });
+            rt.frame(0.0);
+            rt.wheel(width / 2.0, 350.0, -2000.0);
+            rt.frame(0.0);
+            click(&mut rt, "confirm");
+            assert!(
+                rt.state.confirmed,
+                "expanded errors must not hide recording"
+            );
+            assert_eq!(ticked_bytes(&rt.state), 709_000_000);
+        }
     }
 
     #[test]
@@ -1507,13 +1427,13 @@ mod tests {
         apply_level(&mut state, Level::Careful);
         assert_eq!(
             cleanup_line(&state),
-            "Your cleanup frees 5.70 GB: Logs and crash reports."
+            "Selected footprint 5.70 GB: Logs and crash reports."
         );
         assert_eq!(level_label(&state), "Careful");
         apply_level(&mut state, Level::Aggressive);
         assert_eq!(
             cleanup_line(&state),
-            "Your cleanup frees 9.71 GB: Logs and crash reports, Project dependencies and 1 more."
+            "Selected footprint 9.71 GB: Logs and crash reports, Project dependencies and 1 more."
         );
         state.ticks[2] = Some(false);
         assert_eq!(level_label(&state), "Selected");
