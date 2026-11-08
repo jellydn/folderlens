@@ -3,7 +3,7 @@
 use std::process::{Command, Stdio};
 
 use rune::tok::{type_, TextStyle};
-use rune::{col, row, text, El, Key, KeyEvent, Transition, Tx};
+use rune::{col, row, text, El, Key, KeyEvent, ScrollSpec, Transition, Tx};
 
 use super::{leaf_view, paint, rule, unix_now, State, INK, MUTED, PANEL, TRACK};
 use crate::catalog;
@@ -144,6 +144,9 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
         _ => {}
     }
     fit(s, _tx);
+    if let Some(action) = rows(s).get(s.highlight) {
+        _tx.scroll_into_view(format!("action-{}", action.id));
+    }
     true
 }
 
@@ -156,7 +159,13 @@ pub fn panel(s: &State) -> El {
             .catalog
             .groups
             .get(index)
-            .map(|group| group.detail.clone())
+            .map(|group| {
+                if group.count == 1 {
+                    super::selection_reason(s, group.first)
+                } else {
+                    group.detail.clone()
+                }
+            })
             .unwrap_or_else(|| "Folder no longer in scan".into()),
         _ => "No folder target".into(),
     };
@@ -178,6 +187,8 @@ pub fn panel(s: &State) -> El {
     col()
         .key("palette")
         .w_full()
+        .h_full()
+        .scroll(ScrollSpec { stick_bottom: false })
         .fill(paint(PANEL))
         .radius(14.0)
         .transition(Transition::none())

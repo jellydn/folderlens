@@ -645,7 +645,7 @@ fn protected(state: &Settings) -> El {
         .gap(14.0)
         .child(heading("Exclusion rules"))
         .child(text("Why a folder stays outside the review").font(type_::BODY).color(paint(INK)))
-        .child(text("These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule does not select or delete a folder.")
+        .child(text("These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule can select eligible folders through the active preset or a retained manual selection. Nothing is deleted.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(folders))
         .child(text("Keep a folder out of future selections. Session allowance in folder actions can override this rule, but never a built-in or in-use exclusion.")

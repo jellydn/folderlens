@@ -1347,6 +1347,73 @@ mod tests {
     }
 
     #[test]
+    fn resized_actions_reveal_the_filter_and_keyboard_selection() {
+        let mut rt = runtime();
+        click(&mut rt, "actions");
+        rt.set_viewport((360.0, 120.0), 2.0);
+        rt.frame(0.0);
+        rt.wheel(180.0, 60.0, -2000.0);
+        rt.frame(0.0);
+        let search = rt.presented("action-search").unwrap().0;
+        assert!(
+            search[1] >= 0.0 && search[1] + search[3] <= 120.0,
+            "{search:?}"
+        );
+        for id in [
+            "keep", "unlock", "select", "analyse", "ask", "pause", "settings", "close", "quit",
+            "finder",
+        ] {
+            rt.update(|state, tx| {
+                on_key(
+                    state,
+                    &KeyEvent {
+                        key: rune::Key::Down,
+                        mods: rune::Mods::default(),
+                    },
+                    tx,
+                );
+            });
+            rt.frame(0.0);
+            let rect = rt.presented(&format!("action-{id}")).unwrap().0;
+            assert!(
+                rect[1] >= 0.0 && rect[1] + rect[3] <= 120.0,
+                "{id}: {rect:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ledger_and_folder_actions_explain_current_selection() {
+        let mut rt = runtime();
+        rt.update(|state, _| {
+            apply_level(state, Level::Balanced);
+            state.ticks[2] = Some(false);
+            state.ticks[4] = Some(true);
+        });
+        rt.frame(0.0);
+        for reason in [
+            "Excluded · Shelf leaves this",
+            "Selected by you",
+            "Excluded by you",
+            "Balanced preset · idle 48 h",
+            "Not in this preset · idle 0 h",
+        ] {
+            assert!(
+                rt.elements()
+                    .iter()
+                    .any(|element| element.text.as_deref() == Some(reason)),
+                "{reason}"
+            );
+        }
+        rt.update(|state, _| palette::open(state, Some(palette::Target::Group(2))));
+        rt.frame(0.0);
+        assert!(rt
+            .elements()
+            .iter()
+            .any(|element| element.text.as_deref() == Some("Excluded by you")));
+    }
+
+    #[test]
     fn quit_requests_app_exit_from_actions_and_the_keyboard() {
         let mut rt = runtime();
         click(&mut rt, "actions");
