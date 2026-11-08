@@ -1,6 +1,6 @@
 [package]
 name = "shelf"
-version = "0.2.0-beta.3"
+version = "0.2.0-beta.4"
 edition = "2021"
 publish = false
 description = "Review what a cleanup level would tick. Confirm does not delete."

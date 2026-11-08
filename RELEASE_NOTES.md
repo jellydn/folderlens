@@ -1,3 +1,27 @@
+## Shelf 0.2.0-beta.4 — Quick review preview
+
+**Experimental WIP, prerelease/not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** Estimates are not reclaimed space. PR #13 remains unmerged; the stable Homebrew tap and earlier releases are unchanged.
+
+- Quick review: simple folder reasons, optional Agent help, fixed recording/readings, compact/wide layouts and a 280-point minimum height.
+- Settings: model and request/path-sharing permissions upfront, fixed Apply model, advanced commands on demand, progress/cancel/error/retry and success-only saved-chat discovery retained.
+- Group actions show current exclusions. Provider/model support, bounded reader, protection rules and fail-closed/manual-only update policy remain unchanged.
+
+**Known issue:** Settings can leave the tray unable to reopen the panel. Native testing produced mixed initial-open controls; no cause or fix is claimed. Real native model/tool/Terminal turns and installation/restart remain unverified. Provider costs/data policies apply; controls are not an OS sandbox.
+
+### Manual test checklist
+
+1. Open Shelf from the tray, then Settings → tray. If reopening fails, report the steps and macOS version; this is a known issue, not a passing check.
+2. Resize compact/wide and scroll. Record choice and system readings should remain visible; Actions supports keyboard navigation.
+3. In Agent settings, choose your configured provider/model and Apply. Check that the model persists, invalid flags show an error, and nothing starts automatically. Keep path sharing off unless you choose otherwise.
+4. Select eligible folders and Record choice. Nothing is deleted. Change the selection: the recorded indicator must clear. Protected folders stay excluded.
+5. Inspect Agent setup and advanced controls. Only if you accept the provider's costs/data policy, manually request analysis and check progress/Cancel, error/details/Retry, run files and success-only saved chat. Do not treat a model answer as cleanup approval.
+
+### Download, credit and limits
+
+Apple Silicon, macOS 14+. DMG/ZIP contain an ad-hoc signed app, **not Developer ID signed or notarized**. Verify `SHA256SUMS`; metadata and both archives carry signatures checked against Shelf's pinned Ed25519 publisher key. Normal macOS approval may be required; no Gatekeeper bypass is provided.
+
+[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original UI/layout/interactions. Please support Levo through its official site. Shelf is not affiliated with or endorsed by Levo; attribution does not resolve the earlier presentation concern or establish equivalent cleanup safety. Historical assets and release notes remain below.
+
 ## Shelf 0.2.0-beta.3 — Review ledger preview
 
 **Experimental WIP PoC. Record choice (formerly Confirm) records a selection in memory; it does not delete files or run cleanup.** Footprints are estimates, not reclaimed space or proof of cleanup safety.
