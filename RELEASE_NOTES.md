@@ -4,6 +4,7 @@
 
 - First independent Review ledger implementation from PR #13: reasons/exclusions beside a non-deleting receipt, compact system readings, responsive stacking and clearer folder actions/Protected/Access settings. Design review is still in progress; this prerelease does not merge the PR or declare the presentation review complete.
 - Short README, with detailed agent/update guidance and historical screenshots retained in `docs/guide.md`.
+- Review follow-ups: resized Actions scroll to the filter and reveal keyboard selections; single-folder actions use the current selection reason; exclusion settings explain that removing a rule can restore preset/manual selection without deletion.
 - Existing scoped broker, protection rules and fail-closed updater remain. All current installations are manual-update-only; signed checks and opt-in downloads remain available. Homebrew installs must use Homebrew.
 
 ### Credit and scope
