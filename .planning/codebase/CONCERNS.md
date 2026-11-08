@@ -21,8 +21,8 @@
 ## Fragile Areas
 **Native lifecycle:** `src/status.rs` uses raw AppKit callbacks and macOS 27 expanded interfaces; geometry tests are not complete native event coverage.
 **Installer transaction:** `native/Updater.swift` validates then stages/replaces/restarts. Harmless rollback fixtures pass; a full native install/restart has not been exercised.
-**Homebrew prefix:** Standard Caskroom layouts and `HOMEBREW_PREFIX` are detected. A custom prefix missing from the GUI environment can escape detection; do not claim the approved no-Homebrew-replacement policy is fully enforced for that layout. This remains an open review blocker.
-**Download readiness/backups:** Automatic downloads need a later manual check for the install dialog; no persistent ready indicator exists. Rollback copies are retained, not automatically pruned. Do not remove real backups merely to satisfy a review comment.
+**Installation ownership:** Standard Caskroom layouts and `HOMEBREW_PREFIX` are detected for guidance, not as proof of direct installation. Unknown origin fails closed before consent and replacement, including custom/moved casks without a GUI prefix. Current packages have no trustworthy direct-install provenance, so native replacement is disabled for every current installation. Any future positive-ownership mechanism needs separate review; neither a writable preference nor a copied bundle marker is sufficient.
+**Download readiness/backups:** Automatic downloads need a later manual check for manual-install guidance; no persistent ready indicator exists. Rollback copies are retained, not automatically pruned. Do not remove real backups merely to satisfy a review comment.
 
 ## Scaling Limits
 **Reads:** 512 KiB UTF-8, 2,000 lines or 1,024 directory entries (`src/broker.rs`). Increasing limits requires deliberate resource/privacy review.

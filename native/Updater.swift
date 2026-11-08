@@ -45,7 +45,7 @@ struct UpdateVersion: Comparable, Equatable {
 
 enum UpdateError: Error, LocalizedError {
   case invalidVersion, invalidSignature, invalidMetadata, untrustedDownload, unsupportedInstall,
-    download, process
+    unknownOrigin, download, process
   var errorDescription: String? {
     switch self {
     case .invalidVersion: return "The release version is invalid. No update was installed."
@@ -60,6 +60,9 @@ enum UpdateError: Error, LocalizedError {
     case .unsupportedInstall:
       return
         "Shelf cannot replace this installation safely. Download the release manually, or use brew upgrade --cask jellydn/tap/shelf for Homebrew."
+    case .unknownOrigin:
+      return
+        "Installation origin is unverified, so native replacement is disabled. If Homebrew installed Shelf, use brew upgrade --cask jellydn/tap/shelf. Otherwise install the verified ZIP from ~/Library/Application Support/Shelf/Updates manually, or download the DMG from github.com/jellydn/shelf/releases. macOS approval still applies."
     case .download:
       return "The GitHub update check or download failed. Check your network and retry."
     case .process:
@@ -189,6 +192,14 @@ func isHomebrew(
       $0.appendingPathComponent("Shelf.app").resolvingSymlinksInPath() == target
     } ?? false
   }
+}
+
+func requireDirectInstallation(_ bundle: URL) throws {
+  guard !isHomebrew(bundle) else { throw UpdateError.unsupportedInstall }
+  // No current distribution establishes direct-install ownership. An absent cask receipt,
+  // writable Applications path or copied bundle marker cannot establish that ownership.
+  // Keep both consent and replacement entry points closed until positive proof exists.
+  throw UpdateError.unknownOrigin
 }
 
 // The verified app is staged on the destination filesystem before the running app closes.
@@ -383,6 +394,7 @@ struct Updater {
     }
     // An automatic download never grants installation, even when Shelf later quits.
     guard manual else { return }
+    try requireDirectInstallation(bundle)
     guard
       notice(
         "Install Shelf \(manifest.version)?",
@@ -393,6 +405,7 @@ struct Updater {
   }
 
   func install(_ archive: URL, manifest: Manifest) async throws {
+    try requireDirectInstallation(bundle)
     let fm = FileManager.default
     guard !isHomebrew(bundle), bundle.pathExtension == "app",
       !bundle.path.contains("/AppTranslocation/"),
@@ -467,7 +480,7 @@ struct ShelfUpdater {
     }
     if args.count == 2 && args[1] == "--self-test" {
       do {
-        try selfTest()
+        try await selfTest()
         print("Updater verification tests passed")
       } catch {
         fputs("Updater test failed: \(error)\n", stderr)
@@ -493,7 +506,8 @@ struct ShelfUpdater {
   }
 }
 
-func selfTest() throws {
+@MainActor
+func selfTest() async throws {
   func require(_ value: Bool) { precondition(value) }
   func reject(_ body: () throws -> Void) {
     do {
@@ -568,8 +582,34 @@ func selfTest() throws {
   try FileManager.default.createDirectory(
     at: receipt.deletingLastPathComponent(), withIntermediateDirectories: true)
   require(!isHomebrew(apps, caskrooms: [caskroom]))
+  // An ordinary Applications path is not proof of a direct installation.
+  reject { try requireDirectInstallation(apps) }
   try FileManager.default.createSymbolicLink(at: receipt, withDestinationURL: apps)
   require(isHomebrew(apps, caskrooms: [caskroom]))
+  // Finder may omit a custom prefix, and a moved cask may leave a stale artifact link.
+  reject { try requireDirectInstallation(apps) }
+  let moved = transaction.appendingPathComponent("Moved/Shelf.app")
+  try FileManager.default.createDirectory(
+    at: moved.deletingLastPathComponent(), withIntermediateDirectories: true)
+  try FileManager.default.moveItem(at: apps, to: moved)
+  require(!isHomebrew(moved, caskrooms: [caskroom]))
+  reject { try requireDirectInstallation(moved) }
+  let alias = transaction.appendingPathComponent("Alias.app")
+  try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: moved)
+  reject { try requireDirectInstallation(alias) }
+  // Exercise the actual replacement entry point. An invalid parent prevents any real
+  // termination even if this gate regresses; ownership must reject before other checks.
+  for bundle in [apps, moved, alias] {
+    let updater = Updater(
+      bundle: bundle, prefsPath: transaction.appendingPathComponent("settings.txt"),
+      manual: true, parent: -1)
+    do {
+      try await updater.install(temporary, manifest: manifest)
+      preconditionFailure("Unknown origin reached installation")
+    } catch UpdateError.unknownOrigin {}
+  }
+  require(!FileManager.default.fileExists(atPath: transaction.appendingPathComponent("Updates").path))
+  require(FileManager.default.fileExists(atPath: moved.path))
   require(!isHomebrew(transaction.appendingPathComponent("Other.app"), caskrooms: [caskroom]))
   let target = transaction.appendingPathComponent("Shelf.app")
   let staged = transaction.appendingPathComponent("staged.app")

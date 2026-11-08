@@ -1,10 +1,27 @@
-## Unreleased — PR #10 follow-ups
+## Shelf 0.2.0-beta.2 — current-state prerelease
+
+**Experimental WIP PoC, not a finished cleanup utility.** Cleanup levels preview selections and estimated space. **Confirm records a choice in memory and does not delete files or run cleanup.**
+
+### Levo credit and presentation status
+
+[Levo](https://omggg.wtf/levo/) was the direct UI, layout and interaction-behavior reference for Shelf's current presentation. Please support Levo and consider buying it through its official site. Shelf is not affiliated with or endorsed by Levo. This attribution does not resolve the copied-presentation concern or establish Levo-equivalent cleanup safety.
+
+An independent Shelf presentation is **not complete** and is not included in this release. This is the one authorized current-state prerelease, **not latest stable**. Promotion and subsequent releases remain paused. Existing beta.1 assets and provenance are unchanged; the stable Homebrew tap remains on its stable channel.
+
+### Changes and update ownership
 
 - Painter-designed app icon in the bundle/README, with a matching favicon package for documentation sites.
 - Pointer exit no longer dismisses the panel. Outside-click policy, second-click toggle, Escape and macOS 27 delegate callbacks are retained. Policy tests pass; native tray interaction remains unverified.
 - Bounded native archive download, explicit quarantine, atomic bundle exchange and disposable rollback checks. No real app replacement/restart or Gatekeeper approval was exercised.
 - Cancellation-aware prompt/version writes/reads, exact OpenCode continuation version check, post-mode model validation, Pi continuation model guard and stronger broker revocation/shutdown.
-- Open review limits: custom-prefix Homebrew ownership without a GUI environment; downloaded-ready indication; first-100 release discovery; old backup retention. Do not approve self-installation for an undetected Homebrew installation. Existing beta.1 assets are unchanged and do not contain these fixes.
+- Unknown installation origin is now **manual-update-only**, including custom-prefix Homebrew apps launched without `HOMEBREW_PREFIX`, moved cask apps and aliases. Current packages provide no reliable positive direct-install provenance, so native replacement is disabled for all current installations, even with approval. Verified checks and opt-in downloads remain available; a manual check gives guidance. If Homebrew installed Shelf, use `brew upgrade --cask jellydn/tap/shelf`; otherwise install the verified ZIP or DMG manually.
+- Non-blocking preview limits: no persistent download-ready indicator, first-100 release discovery and retained old rollback copies. No real backups were pruned.
+
+### Installation, signatures and verification limits
+
+Apple Silicon, macOS 14 or later. Download the beta.2 DMG or ZIP explicitly and check `SHA256SUMS`. Metadata, ZIP and DMG carry signatures verified against Shelf's pinned dedicated Ed25519 publisher key. This is distinct from Apple trust: builds are **ad-hoc signed, not Developer ID signed or notarized**. macOS may require **Privacy & Security → Open Anyway**. No Apple Developer account, quarantine removal or Gatekeeper bypass is used.
+
+Provider/model settings, bounded selected-folder tools and exact-session launchers are implemented, but protocol stubs and metadata probes do not verify native model turns, tool routing during a model turn or Terminal continuation. Tray event routing, actual replacement/restart, Gatekeeper approval and recovery from a post-launch crash remain unverified. Native replacement is blocked by the ownership gate, not advertised as a verified install path. Publisher verification, download fixtures and rollback fixtures are separate checks, not end-to-end proof of those paths.
 
 ## Shelf 0.2.0-beta.1 — prerelease
 

@@ -21,7 +21,7 @@ pub(super) fn view(state: &Settings) -> El {
                 persist(s);
             })))
         ))
-        .child(text("Stable releases are the default. Automatic downloads need daily checks enabled. Every installation and restart needs your confirmation; quitting does not install an update.")
+        .child(text("Stable releases are the default. Automatic downloads need daily checks enabled. This preview requires manual installation: current bundles cannot prove direct-install ownership. Quitting never installs an update.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(text("Publisher signatures and checksums are required. Builds are ad-hoc signed, not notarized. macOS may require Privacy & Security → Open Anyway. Shelf never bypasses Gatekeeper.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
@@ -30,7 +30,7 @@ pub(super) fn view(state: &Settings) -> El {
         .child(text("Check for Updates…").key("check-updates").font(type_::BODY).color(paint(BLUE))
             .on_press(|s: &mut Settings| {
                 s.update_note = match crate::update::check() {
-                    Ok(()) => "Checking in a separate native dialog. Finish any agent review before you approve installation.".into(),
+                    Ok(()) => "Checking in a separate native dialog. Native replacement is blocked without verified installation ownership; use the manual-update guidance.".into(),
                     Err(error) => error.into(),
                 };
             }))
