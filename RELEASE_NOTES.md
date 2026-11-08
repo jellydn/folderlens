@@ -1,3 +1,24 @@
+## Shelf 0.2.0-beta.5 — Persistent Quick review
+
+**Experimental prerelease, not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** PR #13 remains unmerged. Stable/Homebrew and earlier releases are unchanged.
+
+- Outside clicks and transient expanded-interface session endings no longer request panel dismissal. Close, Escape and the tray toggle remain explicit dismissal controls; Escape closes Actions first.
+- The update helper orders out its alert and returns focus to its presenter without reopening explicitly closed windows. Policy and native-callback regressions pass; the complete native popup flow remains unverified.
+- Cleaner Quick review and Settings: shorter labels, less repeated copy, explicit Close controls and provider-specific model guidance under advanced setup. Model Apply, permissions, protection, progress/Cancel, errors/Retry, run files and success-only saved chat remain available.
+- Current headless screenshots cover the features in the concise README and linked guide. Agent progress, errors and saved-chat images are fixtures, not real model turns.
+
+### Manual test checklist
+
+1. Open Shelf, then click another app. Shelf should stay open. Close an update notice: Shelf should stay visible and usable. Test Close, Escape and the tray toggle separately; Escape closes Actions first. Do not install an update to test its notice.
+2. Open Settings and close it, then click the tray. **Settings→tray reopening is a separate unresolved issue**; report exact steps and macOS version if it fails. This release does not claim to fix it.
+3. Resize compact/wide, scroll and use keyboard Actions. Record choice and readings should stay reachable. Record an eligible selection, then change it: the recorded indicator clears and no files are deleted.
+4. Check Settings → Agent / Access: your provider/model, Apply, advanced setup, request and selected-path permissions. Switches save immediately; model edits need Apply. No request starts automatically.
+5. Only if you accept your provider's costs/data policy, request analysis and check progress/Cancel, error/details/Retry, run files and successful saved-chat continuation. No real model/tool/Terminal turn was verified for this release.
+
+Apple Silicon, macOS 14+. Verify `SHA256SUMS` and publisher signatures. DMG/ZIP contain an **ad-hoc signed app, not Developer ID signed or notarized**; normal macOS approval may be required. All current installs remain manual-update-only. Real install/restart/Gatekeeper behavior is unverified. No installed app, preferences, model account or cleanup was changed during verification.
+
+[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original presentation. Please support Levo. Shelf is unaffiliated and not endorsed; retained attribution/history do not establish equivalent cleanup safety. Earlier release notes follow.
+
 ## Shelf 0.2.0-beta.4 — Quick review preview
 
 **Experimental WIP, prerelease/not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** Estimates are not reclaimed space. PR #13 remains unmerged; the stable Homebrew tap and earlier releases are unchanged.

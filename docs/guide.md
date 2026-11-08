@@ -16,15 +16,19 @@ The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual
 
 **Beta.3 previews the owner's chosen Review ledger direction**, with reasons and exclusions beside a non-deleting selection receipt and separate agent access. This first implementation is still under design review; beta.2 does not contain it. This one beta release does not authorize a merge, promotion or later releases. Attribution alone does not resolve the concern about the copied presentation. Earlier screenshots, releases and history are retained as provenance, not evidence of completed design or safety review.
 
-## Quick review (beta.4 preview)
+## Quick review (beta.5 preview)
 
-The owner selected Quick review after comparing three independent prototypes. This follow-up is the beta.4 preview, not the earlier beta.3 layout. It keeps folder reasons, protection rules and Agent capabilities while making daily actions easier to find.
+The owner selected Quick review after comparing three independent prototypes. Beta.5 refines that direction with shorter labels, less repeated text and explicit Close controls. It keeps folder reasons, protection rules and every Agent capability; beta.3 retains the earlier ledger layout.
 
-The panel opens from the menu bar. Moving the pointer outside does not close it. Click outside, press Escape, or click the menu-bar button again to dismiss it. Escape closes an open action list before closing the panel.
+The panel opens from the menu bar and stays open across pointer movement, outside clicks and transient update dialogs. Use **Close**, Escape or the menu-bar button to hide it. Escape closes Actions first. Settings also has Close and Escape. The native update helper orders out its alert and restores its presenter's focus without reopening a window that was explicitly closed. Policy/callback regressions cover dismissal; headless renders do not prove the full native popup flow.
 
 **Known native issue:** beta.3 testing observed that the tray could stop reopening the ledger after Settings opened. The cause and a native fix are not verified. A later isolated diagnostic run also failed its initial tray-open control, so it does not establish a Settings-specific cause. Headless navigation tests do not verify AppKit event routing.
 
 The wide panel puts folders beside optional Agent help. Below 620 points, Agent help precedes the folders in one scrollable column. **Record choice** stays visible with the selection count, estimated footprint and explicit non-deleting status. Live system readings stay below it. These panel examples use synthetic data and make no scan, model request or file change.
+
+## Feature gallery (beta.5)
+
+All current images below are headless Rune GPU renders. Folder examples and Agent progress/error/saved-chat states are fixtures, not native model turns or popup tests. Settings reflects example configuration, not proof of login, free access or a working provider. Scrolling and keyboard behavior are tested separately.
 
 ![Quick review, synthetic example](../shots/review-ledger.png)
 
@@ -41,6 +45,20 @@ Settings uses General, Agent, Keep safe, Access and Updates tabs. Agent shows th
 The fixed **Agent** entry scrolls to Ask Agent or the current review's progress, Cancel and result. **Agent setup** opens provider configuration. **Access and limits** expands the configured provider/model and safety limits. **Run files in Finder** opens an existing request's folder only when clicked. **Continue saved chat in Terminal** appears only after a successful review; a running or failed request has no completed session to continue. These controls do not change the selected-folder broker or provider safety rules.
 
 ![Quick review Agent settings](../shots/quick-agent-settings.png)
+
+| General readings | Selected-folder access |
+| --- | --- |
+| ![General settings](../shots/quick-general.png) | ![Manual requests, selected paths and system access](../shots/quick-access.png) |
+
+| Progress and Cancel — simulated | Error, details and Retry — simulated |
+| --- | --- |
+| ![Agent progress fixture](../shots/quick-agent-progress.png) | ![Agent error fixture](../shots/quick-agent-error.png) |
+
+| Successful review and saved chat — simulated | Updates and manual-install limits |
+| --- | --- |
+| ![Completed review fixture with saved-chat discovery](../shots/quick-agent-saved.png) | ![Update choices and publisher verification limits](../shots/quick-updates.png) |
+
+## Earlier screenshots and provenance
 
 ![Published beta.3 Agent settings, before this follow-up](../shots/review-agent-settings.png)
 
@@ -114,7 +132,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, download the DMG or ZIP from [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) for Quick review. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout.
+For Apple Silicon Macs running macOS 14 or later, download the DMG or ZIP from [beta.5](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.5) for refined Quick review. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout. Existing releases and assets are not replaced.
 
 For the older stable version (not the beta):
 

@@ -253,12 +253,20 @@ func run(_ executable: String, _ arguments: [String]) throws {
 
 @MainActor
 func notice(_ title: String, _ message: String, buttons: [String] = ["OK"]) -> Int {
+  let presenter = NSWorkspace.shared.frontmostApplication
   NSApplication.shared.setActivationPolicy(.accessory)
   NSApplication.shared.activate(ignoringOtherApps: true)
   let alert = NSAlert()
   alert.messageText = title
   alert.informativeText = message
   for button in buttons { alert.addButton(withTitle: button) }
+  defer {
+    alert.window.orderOut(nil)
+    // Return focus without reopening a Shelf window that the user explicitly closed.
+    if presenter?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+      presenter?.activate(options: [])
+    }
+  }
   return alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
 }
 

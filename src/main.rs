@@ -656,7 +656,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .h(36.0)
                 .center_y()
                 .child(
-                    text("Folders to review")
+                    text("Folders")
                         .font(TextStyle::new(13.0, 600.0))
                         .color(paint(INK))
                         .grow(1.0),
@@ -703,7 +703,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .w_full()
                 .h(56.0)
                 .px(18.0)
-                .gap(16.0)
+                .gap(12.0)
                 .center_y()
                 .window_drag()
                 .child(
@@ -744,6 +744,15 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                             palette::open(state, None);
                             palette::fit(state, tx);
                         }),
+                )
+                .child(
+                    text("Close")
+                        .key("close-panel")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .h(32.0)
+                        .center_y()
+                        .on_press(|_: &mut State| status::conceal()),
                 ),
         )
         .child(rule())
@@ -751,14 +760,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             col()
                 .w_full()
                 .padding(18.0)
-                .gap(12.0)
-                .child(
-                    text("Review your choices. Shelf never deletes files.")
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .wrap()
-                        .w_full(),
-                )
+                .gap(16.0)
                 .child(status_line(s))
                 .child(workspace)
                 .scroll(ScrollSpec {
@@ -783,8 +785,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
 
 fn agent_help(s: &State) -> El {
     col().w_full().gap(10.0)
-        .child(text(if s.agent.is_some() { "Agent review" } else { "Want a second opinion?" }).font(TextStyle::new(14.0, 500.0)).color(paint(INK)))
-        .child(text(if !s.prefs.allow_start { "Manual requests are off. Set up your agent first." }
+        .child(text(if s.agent.is_some() { "Agent review" } else { "Agent help" }).font(TextStyle::new(14.0, 500.0)).color(paint(INK)))
+        .child(text(if !s.prefs.allow_start { "Set up an agent to request a review." }
             else if s.prefs.send_paths { "Eligible selected folder paths may be shared." }
             else { "Saved context only. Folder paths are not shared." })
             .key("access-summary").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
