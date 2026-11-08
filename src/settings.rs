@@ -9,7 +9,7 @@ use rune::{
 };
 
 use crate::prefs::{self, Agent, Prefs};
-use crate::{BLUE, INK, MUTED, PANEL};
+use crate::{BLUE, INK, MUTED, PANEL, TRACK};
 
 #[path = "settings_updates.rs"]
 mod updates;
@@ -34,6 +34,7 @@ pub struct Settings {
     pub model: TextEdit,
     pub model_error: String,
     pub update_note: String,
+    pub commands_open: bool,
 }
 
 pub fn spec() -> AppSpec<Settings> {
@@ -46,6 +47,10 @@ pub fn spec() -> AppSpec<Settings> {
             }),
             ("agent-pi", |state| {
                 preview_agent(state, "pi", "openrouter/openrouter/free")
+            }),
+            ("agent-advanced", |state| {
+                preview_agent(state, "pi", "openrouter/openrouter/free");
+                state.commands_open = true;
             }),
             ("agent-opencode", |state| {
                 preview_agent(state, "opencode", "opencode/glm-5.3-flash-free")
@@ -96,6 +101,7 @@ pub fn state() -> Settings {
         model: TextEdit::default(),
         model_error: String::new(),
         update_note: String::new(),
+        commands_open: false,
     };
     load_model(&mut state);
     state
@@ -149,7 +155,8 @@ pub fn open(page: Page) {
     };
     // The panel and this window are never on screen together.
     crate::status::conceal();
-    handle.update(move |state, _tx: &mut Tx| {
+    handle.update(move |state, tx: &mut Tx| {
+        tx.instant();
         state.page = page;
         state.prefs = prefs::load_from(&state.path);
         load_model(state);
@@ -172,59 +179,93 @@ fn paint(hex: &str) -> Color {
 }
 
 fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
-    row()
+    col()
         .w_full()
         .h_full()
         .fill(paint(PANEL))
-        .child(sidebar(state))
         .child(
-            col()
-                .grow(1.0)
-                .shrink()
-                .h_full()
-                .min_w(0.0)
-                .fill(paint(PANEL))
+            row()
+                .w_full()
+                .h(56.0)
+                .px(24.0)
+                .center_y()
                 .child(
-                    page(state)
-                        .scroll(ScrollSpec {
-                            stick_bottom: false,
-                        })
-                        .grow(1.0)
-                        .min_h(0.0)
-                        .min_w(0.0)
-                        .w_full(),
+                    text("Shelf settings")
+                        .font(TextStyle::new(16.0, 500.0))
+                        .color(paint(INK))
+                        .grow(1.0),
+                )
+                .child(
+                    text("No file deletion")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED)),
                 ),
+        )
+        .child(navigation(state))
+        .child(
+            page(state)
+                .key("settings-page")
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .grow(1.0)
+                .min_h(0.0)
+                .min_w(0.0)
+                .w_full(),
+        )
+        .child(crate::rule())
+        .child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .center_y()
+                .px(24.0)
+                .py(10.0)
+                .child(
+                    text("Scroll for details. Switches save immediately; model edits need Apply.")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .grow(1.0)
+                        .min_w(0.0),
+                )
+                .child(if state.page == Page::Agent {
+                    text("Apply model")
+                        .key("apply-model")
+                        .font(type_::BODY)
+                        .color(paint(BLUE))
+                        .h(32.0)
+                        .px(10.0)
+                        .radius(6.0)
+                        .fill(paint(TRACK))
+                        .on_press_tx(|state: &mut Settings, tx: &mut Tx| {
+                            save_model(state);
+                            if !state.model_error.is_empty() {
+                                tx.scroll_into_view("model-error");
+                            }
+                        })
+                } else {
+                    el()
+                }),
         )
 }
 
-fn sidebar(state: &Settings) -> El {
-    let mut side = col().w(200.0).h_full().py(16.0).gap(2.0).child(
-        text("Shelf")
-            .font(TextStyle::new(13.0, 600.0))
-            .color(paint(MUTED))
-            .px(20.0)
-            .h(28.0),
-    );
-    for (page, label, mark, tint) in [
-        (Page::General, "General", "G", "#8e8e93"),
-        (Page::Agent, "Agent", "A", BLUE),
-        (Page::Protected, "Protected", "P", GREEN),
-        (Page::Access, "Access", "K", GREEN),
-        (Page::Updates, "Updates", "U", BLUE),
+fn navigation(state: &Settings) -> El {
+    let mut tabs = row().w_full().px(16.0).gap(4.0);
+    for (page, label) in [
+        (Page::General, "General"),
+        (Page::Agent, "Agent"),
+        (Page::Protected, "Keep safe"),
+        (Page::Access, "Access"),
+        (Page::Updates, "Updates"),
     ] {
         let on = state.page == page;
-        side = side.child(side_row(page, label, mark, tint, on));
+        tabs = tabs.child(tab(page, label, on));
     }
-    side
+    col().w_full().child(tabs).child(crate::rule())
 }
 
-fn side_row(
-    page: Page,
-    label: &'static str,
-    mark: &'static str,
-    tint: &'static str,
-    on: bool,
-) -> El {
+fn tab(page: Page, label: &'static str, on: bool) -> El {
     let key = match page {
         Page::General => "nav-general",
         Page::Agent => "nav-agent",
@@ -232,39 +273,25 @@ fn side_row(
         Page::Access => "nav-access",
         Page::Updates => "nav-updates",
     };
-    let mut line = row()
+    col()
         .key(key)
-        .h(32.0)
-        .mx(8.0)
-        .px(8.0)
-        .gap(8.0)
-        .radius(8.0)
-        .center_y();
-    if on {
-        line = line.fill(paint(BLUE));
-    }
-    line.on_press(move |state: &mut Settings| state.page = page)
-        .child(letter(mark, if on { "#ffffff" } else { tint }))
+        .grow(1.0)
+        .min_w(0.0)
+        .on_press_tx(move |state: &mut Settings, tx: &mut Tx| {
+            tx.instant();
+            state.page = page;
+        })
         .child(
             text(label)
-                .font(type_::BODY)
-                .color(paint(if on { PANEL } else { INK })),
+                .font(TextStyle::new(13.0, 600.0))
+                .color(paint(if on { BLUE } else { MUTED }))
+                .h(38.0)
+                .center(),
         )
-}
-
-fn letter(mark: &str, tint: &str) -> El {
-    el().size(18.0, 18.0)
-        .radius(5.0)
-        .fill(paint(tint))
-        .center()
         .child(
-            text(mark)
-                .font(TextStyle::new(11.0, 700.0))
-                .color(if tint == "#ffffff" {
-                    paint(PANEL)
-                } else {
-                    Color::WHITE
-                }),
+            el().w_full()
+                .h(2.0)
+                .fill(paint(if on { BLUE } else { PANEL })),
         )
 }
 
@@ -281,7 +308,7 @@ fn page(state: &Settings) -> El {
 
 fn heading(title: &str) -> El {
     text(title)
-        .font(TextStyle::new(22.0, 650.0))
+        .font(TextStyle::new(18.0, 500.0))
         .color(paint(INK))
 }
 
@@ -292,7 +319,7 @@ fn section(title: &str) -> El {
 fn card(rows: El) -> El {
     col()
         .w_full()
-        .radius(12.0)
+        .radius(6.0)
         .fill(paint(CARD))
         .px(4.0)
         .py(4.0)
@@ -302,10 +329,19 @@ fn card(rows: El) -> El {
 fn setting_row(label: &str, trailing: El) -> El {
     row()
         .w_full()
-        .h(40.0)
+        .min_h(44.0)
+        .py(8.0)
         .px(12.0)
+        .gap(16.0)
         .center_y()
-        .child(text(label).font(type_::BODY).color(paint(INK)).grow(1.0))
+        .child(
+            text(label)
+                .font(type_::BODY)
+                .color(paint(INK))
+                .grow(1.0)
+                .min_w(0.0)
+                .wrap(),
+        )
         .child(trailing)
 }
 
@@ -328,8 +364,9 @@ fn general(state: &Settings) -> El {
     col()
         .w_full()
         .gap(14.0)
-        .child(heading("General"))
-        .child(section("Tray"))
+        .child(heading("Only the readings you need"))
+        .child(text("Choose the readings shown with your selection. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(section("Readings and shortcuts"))
         .child(card(
             col()
                 .w_full()
@@ -341,21 +378,21 @@ fn general(state: &Settings) -> El {
                     }),
                 ))
                 .child(setting_row(
-                    "Memory gauge",
+                    "Memory usage",
                     toggle("gauge-memory", state.prefs.gauge_memory, |state| {
                         state.prefs.gauge_memory = !state.prefs.gauge_memory;
                         persist(state);
                     }),
                 ))
                 .child(setting_row(
-                    "CPU gauge",
+                    "CPU usage",
                     toggle("gauge-cpu", state.prefs.gauge_cpu, |state| {
                         state.prefs.gauge_cpu = !state.prefs.gauge_cpu;
                         persist(state);
                     }),
                 ))
                 .child(setting_row(
-                    "GPU gauge",
+                    "GPU load",
                     toggle("gauge-gpu", state.prefs.gauge_gpu, |state| {
                         state.prefs.gauge_gpu = !state.prefs.gauge_gpu;
                         persist(state);
@@ -363,7 +400,7 @@ fn general(state: &Settings) -> El {
                 )),
         ))
         .child(
-            text("Record choice keeps the selection in memory and deletes nothing. Readings appear in the ledger footer.")
+            text("Record choice keeps the selection in memory and deletes nothing. Readings appear below the review.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()
@@ -372,31 +409,22 @@ fn general(state: &Settings) -> El {
 }
 
 fn agent(state: &Settings) -> El {
-    let found = prefs::agents();
-    let mut list = col().w_full();
-    if found.is_empty() {
-        list = list.child(
-            text("Shelf found no agent on PATH.")
-                .font(type_::BODY)
-                .color(paint(MUTED))
-                .px(12.0)
-                .h(40.0),
-        );
-    }
-    for agent in found {
-        list = list.child(agent_row(state, agent));
-    }
     col()
         .w_full()
         .gap(14.0)
-        .child(heading("Agent"))
+        .child(heading("Set up your agent"))
         .child(
-            text("Ask your agent starts this command.")
+            text("Choose an agent and model. Nothing starts until you ask.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()
                 .w_full(),
         )
+        .child(card(col().w_full().padding(8.0).gap(6.0)
+            .child(text(prefs::agent_name(&state.prefs.agent_id).unwrap_or("Custom / unconfigured agent")).font(type_::BODY).color(paint(INK)))
+            .child(text(format!("Selected command: {}", if state.prefs.agent_bin.is_empty() { "not set" } else { &state.prefs.agent_bin })).key("selected-command").font(type_::BODY).color(paint(INK)).wrap().w_full())
+            .child(text(if state.commands_open { "Hide commands and saved-file details" } else { "Change agent / advanced setup" }).key("agent-commands-toggle").font(type_::LABEL).color(paint(BLUE)).wrap().w_full()
+                .on_press_tx(|s: &mut Settings, tx: &mut Tx| { tx.instant(); s.commands_open = !s.commands_open; if s.commands_open { tx.scroll_into_view("agent-commands"); } }))))
         .child(section(&format!(
             "Model for {}",
             prefs::agent_name(&state.prefs.agent_id).unwrap_or("the selected command")
@@ -417,18 +445,16 @@ fn agent(state: &Settings) -> El {
                                 .grow(1.0)
                                 .min_w(0.0)
                                 .h(32.0)
+                                .px(8.0)
+                                .radius(4.0)
+                                .border(1.0, paint(TRACK))
+                                .fill(paint(PANEL))
                                 .single_line()
                                 .placeholder("Model ID (or CLI default)", paint(MUTED))
                                 .color(paint(INK))
                                 .on_edit(|state: &mut Settings| &mut state.model),
                         )
-                        .child(
-                            text("Apply")
-                                .key("apply-model")
-                                .font(type_::BODY)
-                                .color(paint(BLUE))
-                                .on_press(save_model),
-                        ),
+                        ,
                 )
                 .child(
                     text(crate::agent::model_note(&state.prefs.agent_bin))
@@ -448,11 +474,34 @@ fn agent(state: &Settings) -> El {
                         .w_full()
                 }),
         ))
-        .child(section("On this Mac"))
+        .child(agent_permissions(state))
+        .child(text("Provider costs and data policies apply. No automatic requests. Login, model access and native analysis are not verified here.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("More access settings").key("agent-access").font(type_::LABEL).color(paint(BLUE)).on_press_tx(|s: &mut Settings, tx: &mut Tx| { tx.instant(); s.page = Page::Access; }))
+        .child(if state.commands_open { agent_commands(state) } else { el() })
+}
+
+fn agent_commands(state: &Settings) -> El {
+    let mut list = col().w_full();
+    let found = prefs::agents();
+    if found.is_empty() {
+        list = list.child(
+            text("No agent found on PATH.")
+                .font(type_::BODY)
+                .color(paint(MUTED))
+                .wrap()
+                .w_full(),
+        );
+    }
+    for agent in found {
+        list = list.child(agent_row(state, agent));
+    }
+    col().key("agent-commands").w_full().gap(12.0)
+        .child(section("Commands detected on this Mac"))
+        .child(text("Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a Shelf review; detection does not verify login, runtime dependencies or model access.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(list.max_h(160.0).scroll(ScrollSpec {
             stick_bottom: false,
         })))
-        .child(section("Other command"))
+        .child(section("Custom executable / same adapter rules"))
         .child(
             row()
                 .w_full()
@@ -462,7 +511,12 @@ fn agent(state: &Settings) -> El {
                     text_input(&state.custom, TextStyle::new(13.0, 400.0))
                         .key("agent-command")
                         .grow(1.0)
+                        .min_w(0.0)
                         .h(32.0)
+                        .px(8.0)
+                        .radius(4.0)
+                        .border(1.0, paint(TRACK))
+                        .fill(paint(PANEL))
                         .single_line()
                         .placeholder("Command on PATH", paint(MUTED))
                         .color(paint(INK))
@@ -485,6 +539,7 @@ fn agent(state: &Settings) -> El {
                         }),
                 ),
         )
+        .child(text("Each manual run saves private context and a continuation launcher. Shared paths may remain in run files until you remove them. Analysis and an exact saved session are available only after success. Credentials belong in the provider's setup, not the model field. Copilot, Pi and OpenCode use Shelf's bounded reader; Grok/Antigravity Terminal tools rely on their native controls, not Shelf's live read boundary.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
 }
 
 fn agent_row(state: &Settings, agent: &Agent) -> El {
@@ -643,7 +698,7 @@ fn protected(state: &Settings) -> El {
     col()
         .w_full()
         .gap(14.0)
-        .child(heading("Exclusion rules"))
+        .child(heading("What stays out"))
         .child(text("Why a folder stays outside the review").font(type_::BODY).color(paint(INK)))
         .child(text("These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule can select eligible folders through the active preset or a retained manual selection. Nothing is deleted.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
@@ -745,6 +800,27 @@ fn lock_mark_on(ink: Color, cover: Color, size: f32) -> El {
         )
 }
 
+fn agent_permissions(state: &Settings) -> El {
+    card(
+        col()
+            .w_full()
+            .child(setting_row(
+                "Allow manual agent requests",
+                toggle("allow-start", state.prefs.allow_start, |state| {
+                    state.prefs.allow_start = !state.prefs.allow_start;
+                    persist(state);
+                }),
+            ))
+            .child(setting_row(
+                "Share eligible selected paths",
+                toggle("send-paths", state.prefs.send_paths, |state| {
+                    state.prefs.send_paths = !state.prefs.send_paths;
+                    persist(state);
+                }),
+            )),
+    )
+}
+
 fn access(state: &Settings) -> El {
     col()
         .w_full()
@@ -757,25 +833,7 @@ fn access(state: &Settings) -> El {
                 .wrap()
                 .w_full(),
         )
-        .child(section("Agent"))
-        .child(card(
-            col()
-                .w_full()
-                .child(setting_row(
-                    "Allow manual agent requests",
-                    toggle("allow-start", state.prefs.allow_start, |state| {
-                        state.prefs.allow_start = !state.prefs.allow_start;
-                        persist(state);
-                    }),
-                ))
-                .child(setting_row(
-                    "Share eligible selected paths",
-                    toggle("send-paths", state.prefs.send_paths, |state| {
-                        state.prefs.send_paths = !state.prefs.send_paths;
-                        persist(state);
-                    }),
-                )),
-        ))
+        .child(agent_permissions(state))
         .child(section("Folders"))
         .child(card(setting_row(
             "Full Disk Access",
@@ -880,9 +938,113 @@ mod tests {
             let (rect, opacity) = rt.presented(key).unwrap_or_else(|| panic!("missing {key}"));
             assert!(opacity > 0.5, "{key} opacity {opacity}");
             assert!(
-                rect[0] >= 200.0 && rect[0] + rect[2] <= 760.0,
+                rect[0] >= 24.0 && rect[0] + rect[2] <= 736.0,
                 "{key} {rect:?}"
             );
+        }
+    }
+
+    #[test]
+    fn settings_navigation_keeps_access_and_model_choices_separate() {
+        use rune::{Env, Runtime};
+
+        for size in [(360.0, 420.0), (640.0, 420.0), (960.0, 700.0)] {
+            let mut state = state();
+            preview_agent(&mut state, "pi", "openrouter/openrouter/free");
+            let path = state.path.clone();
+            let mut rt = Runtime::new(
+                state,
+                view,
+                size,
+                Env {
+                    system_dark: true,
+                    scale: 2.0,
+                },
+            );
+            rt.set_system_reduced_motion(true);
+            rt.frame(0.0);
+            for (key, page) in [
+                ("nav-general", Page::General),
+                ("nav-protected", Page::Protected),
+                ("nav-updates", Page::Updates),
+                ("nav-agent", Page::Agent),
+            ] {
+                let (rect, _) = rt.presented(key).unwrap();
+                assert!(rect[0] >= 0.0 && rect[0] + rect[2] <= size.0);
+                assert!(rect[1] >= 0.0 && rect[1] + rect[3] < size.1);
+                let (x, y) = rt.find(key).unwrap();
+                rt.pointer_down(x, y);
+                rt.pointer_up(x, y);
+                rt.frame(0.0);
+                assert_eq!(rt.state.page, page);
+            }
+            assert!(
+                rt.find("agent-command").is_none(),
+                "advanced setup starts closed"
+            );
+            let (apply, _) = rt.presented("apply-model").unwrap();
+            rt.wheel(size.0 / 2.0, size.1 / 2.0, -2000.0);
+            rt.frame(0.0);
+            assert_eq!(rt.presented("apply-model").unwrap().0, apply);
+            let (x, y) = rt.find("agent-access").unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            assert_eq!(rt.state.page, Page::Access);
+            assert!(
+                !path.exists(),
+                "navigation does not change saved permissions"
+            );
+            for key in ["allow-start", "send-paths"] {
+                let (rect, _) = rt.presented(key).unwrap();
+                assert!(
+                    rect[1] >= 97.0 && rect[1] + rect[3] <= size.1 - 34.0,
+                    "{size:?}: {key}: {rect:?}"
+                );
+                let (x, y) = rt.find(key).unwrap();
+                rt.pointer_down(x, y);
+                rt.pointer_up(x, y);
+                rt.frame(0.0);
+            }
+            let saved = prefs::load_from(&path);
+            assert!(saved.allow_start && saved.send_paths);
+            assert_eq!(saved.agent_id, "pi");
+            assert_eq!(saved.model(), "openrouter/openrouter/free");
+            assert!(!saved.update_downloads && !saved.update_prereleases);
+            let (x, y) = rt.find("nav-agent").unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            rt.wheel(size.0 / 2.0, size.1 / 2.0, 2000.0);
+            rt.frame(0.0);
+            let (x, y) = rt.find("agent-commands-toggle").unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            assert!(rt.state.commands_open);
+            rt.update(|_, tx| tx.scroll_into_view("agent-command"));
+            rt.frame(0.0);
+            for key in ["agent-command", "use-command"] {
+                let (rect, _) = rt.presented(key).unwrap();
+                assert!(
+                    rect[1] >= 97.0 && rect[1] + rect[3] <= apply[1],
+                    "{size:?}: {key}: {rect:?}"
+                );
+            }
+            rt.state.custom.text = "/usr/local/bin/pi".into();
+            let (x, y) = rt.find("use-command").unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            let saved = prefs::load_from(&path);
+            assert_eq!(saved.agent_id, "custom");
+            assert_eq!(saved.agent_bin, "/usr/local/bin/pi");
+            assert_eq!(
+                saved.models.get("pi").unwrap(),
+                "openrouter/openrouter/free"
+            );
+            assert!(saved.allow_start && saved.send_paths);
+            std::fs::remove_file(path).unwrap();
         }
     }
 
@@ -915,7 +1077,7 @@ mod tests {
             let (rect, opacity) = rt.presented(key).unwrap_or_else(|| panic!("missing {key}"));
             assert!(opacity > 0.5, "{key} opacity {opacity}");
             assert!(
-                rect[0] >= 200.0 && rect[0] + rect[2] <= 760.0,
+                rect[0] >= 24.0 && rect[0] + rect[2] <= 736.0,
                 "{key} {rect:?}"
             );
         }

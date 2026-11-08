@@ -18,8 +18,8 @@ The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codeba
 - `cargo run -- --theme dark --scene ledger-example --snap shots/review-ledger.png` — synthetic Review ledger shot, without a disk scan.
 - `cargo run -- --window settings --theme dark --scene agent --snap shots/settings-agent.png` — headless Settings shot.
 
-Panel scenes: `ledger-example`, `recorded-example`, `menu-example`, `scanning`, `careful`, `balanced`, `aggressive`, `asking`, `reviewed`, `agent-failed`, `agent-error-details`, `confirmed`, `menu`, `selected`.
-Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-opencode`, `agent-model-error`, `access`, `protected`, `protected-example`, `updates`, `updates-preview`.
+Panel scenes: `ledger-example`, `recorded-example`, `menu-example`, `asking-example`, `reviewed-example`, `scanning`, `careful`, `balanced`, `aggressive`, `asking`, `reviewed`, `agent-failed`, `agent-error-details`, `confirmed`, `menu`, `selected`.
+Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-advanced`, `agent-opencode`, `agent-model-error`, `access`, `protected`, `protected-example`, `updates`, `updates-preview`.
 `--list-windows` shows `main` and `settings`; `--list-scenes` prints the selected window's scenes. Headless `*-example` and `agent-error-details` scenes use synthetic catalog data; other panel snapshots scan the real Mac. Scene choices do not persist settings.
 
 ## Layout and quirks
@@ -41,7 +41,7 @@ Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-opencod
 - `catalog::load_live()` scans `$HOME` and caches sizes at `~/Library/Application Support/Shelf/sizes.tsv`. Delete that file to force a remeasure. First `cargo run`/`--snap` is slow.
 - `prefs::path_for_state()` returns a unique temp file under `cfg(test)`. Tests must not read or write the real `~/Library/Application Support/Shelf/settings.txt`.
 - Settings and the panel are never visible together: opening Settings calls `status::conceal()`, and a status-item click hides Settings.
-- Review ledger starts at 720×718 points, resizes from 360 to 960 points wide, and stacks candidates above the receipt below 620 points. The body scrolls; the header and system readings remain fixed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
+- Quick review starts at 720×718 points and resizes from 360 to 960 points wide. Below 620 points, Agent help precedes the folders in one scroll body. The header, Record choice and system readings stay fixed. Settings supports 360×420 points with a scrolling body and fixed Apply model action; advanced commands start collapsed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
 
 ## Invariants
 

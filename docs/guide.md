@@ -16,13 +16,17 @@ The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual
 
 **Beta.3 previews the owner's chosen Review ledger direction**, with reasons and exclusions beside a non-deleting selection receipt and separate agent access. This first implementation is still under design review; beta.2 does not contain it. This one beta release does not authorize a merge, promotion or later releases. Attribution alone does not resolve the concern about the copied presentation. Earlier screenshots, releases and history are retained as provenance, not evidence of completed design or safety review.
 
-## Review ledger (beta.3 preview)
+## Quick review (unreleased follow-up)
+
+The owner selected Quick review after comparing three independent prototypes. This local follow-up is not in the published beta.3 assets. It keeps folder reasons, protection rules and Agent capabilities while making daily actions easier to find.
 
 The panel opens from the menu bar. Moving the pointer outside does not close it. Click outside, press Escape, or click the menu-bar button again to dismiss it. Escape closes an open action list before closing the panel.
 
-The wide ledger compares candidates with a selection receipt. Below 620 points it stacks these sections in one scrollable column. Live system readings stay in the footer instead of leading the decision. These panel examples use synthetic data and make no scan, model request or file change.
+**Known native issue:** beta.3 testing observed that the tray could stop reopening the ledger after Settings opened. The cause and a native fix are not verified. A later isolated diagnostic run also failed its initial tray-open control, so it does not establish a Settings-specific cause. Headless navigation tests do not verify AppKit event routing.
 
-![Review ledger, synthetic example](../shots/review-ledger.png)
+The wide panel puts folders beside optional Agent help. Below 620 points, Agent help precedes the folders in one scrollable column. **Record choice** stays visible with the selection count, estimated footprint and explicit non-deleting status. Live system readings stay below it. These panel examples use synthetic data and make no scan, model request or file change.
+
+![Quick review, synthetic example](../shots/review-ledger.png)
 
 ![Recorded choice, no deletion](../shots/review-receipt.png)
 
@@ -32,9 +36,13 @@ Folder actions show the target and its reason. Ask Agent still uses the eligible
 
 ![Exclusion rules, example retained folder](../shots/exclusion-rules.png)
 
-Agents on `PATH` and model controls remain in Settings.
+Settings uses General, Agent, Keep safe, Access and Updates tabs. Agent shows the configured executable, per-provider model and explicit request/path-sharing permissions. **Apply model** stays visible while the page scrolls; switches save immediately. **Change agent / advanced setup** reveals detected commands, the custom executable and saved-file details. Access retains the same permission switches and system-access information. Detection does not verify login, model access or a working native session.
 
-![Agent settings](../shots/review-agent-settings.png)
+The fixed **Agent** entry scrolls to Ask Agent or the current review's progress, Cancel and result. **Agent setup** opens provider configuration. **Access and limits** expands the configured provider/model and safety limits. **Run files in Finder** opens an existing request's folder only when clicked. **Continue saved chat in Terminal** appears only after a successful review; a running or failed request has no completed session to continue. These controls do not change the selected-folder broker or provider safety rules.
+
+![Quick review Agent settings](../shots/quick-agent-settings.png)
+
+![Published beta.3 Agent settings, before this follow-up](../shots/review-agent-settings.png)
 
 Historical presentation: [original panel](../shots/tray.png), [original Protected settings](../shots/settings-protected.png), [earlier Agent settings](../shots/settings-agent.png). These files remain unchanged.
 
