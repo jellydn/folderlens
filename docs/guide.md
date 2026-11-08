@@ -16,6 +16,8 @@ The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual
 
 **Beta.3 previews the owner's chosen Review ledger direction**, with reasons and exclusions beside a non-deleting selection receipt and separate agent access. This first implementation is still under design review; beta.2 does not contain it. This one beta release does not authorize a merge, promotion or later releases. Attribution alone does not resolve the concern about the copied presentation. Earlier screenshots, releases and history are retained as provenance, not evidence of completed design or safety review.
 
+<a name="quick-review-beta4-preview"></a>
+
 ## Quick review (beta.5 preview)
 
 The owner selected Quick review after comparing three independent prototypes. Beta.5 refines that direction with shorter labels, less repeated text and explicit Close controls. It keeps folder reasons, protection rules and every Agent capability; beta.3 retains the earlier ledger layout.
@@ -132,7 +134,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, download the DMG or ZIP from [beta.5](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.5) for refined Quick review. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout. Existing releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, find DMG and ZIP downloads on the [releases page](https://github.com/jellydn/shelf/releases). Choose beta.5 when listed for refined Quick review; [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) is the earlier Quick review preview. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout. Existing releases and assets are not replaced.
 
 For the older stable version (not the beta):
 
@@ -155,7 +157,7 @@ open target/release/Shelf.app
 
 Copy `target/release/Shelf.app` to Applications if you want to keep it there. The bundle uses `io.github.jellydn.shelf` as its stable identifier and `LSUIElement` to stay out of the Dock. The build script signs it ad hoc for local use; it is not a notarised release.
 
-The archivebox icon appears before the disk scan finishes. Click it to open the panel. Click it again, click outside, or press Escape to close it; moving the pointer outside no longer dismisses it in this PR. On macOS 27, the panel uses AppKit's expanded-interface session; older systems use the button action. Native event routing remains unverified.
+The archivebox icon appears before the disk scan finishes. Click it to open the panel. In beta.5, outside clicks and pointer movement leave the panel open. Use Close, Escape or the menu-bar button to hide it; Escape closes Actions first. On macOS 27, the panel uses AppKit's expanded-interface session; older systems use the button action. Native event routing remains unverified.
 
 The first scan and system gauge commands run on background threads. Memory, CPU, and GPU update about once a second. GPU load comes from the driver's IOKit performance statistics, with renderer/tiler values as a fallback when device utilisation is unavailable. A driver that exposes no load still shows 0%.
 

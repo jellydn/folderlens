@@ -3,6 +3,7 @@
 **Experimental prerelease, not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** PR #13 remains unmerged. Stable/Homebrew and earlier releases are unchanged.
 
 - Outside clicks and transient expanded-interface session endings no longer request panel dismissal. Close, Escape and the tray toggle remain explicit dismissal controls; Escape closes Actions first.
+- Starting a new tray session toggles a still-visible panel instead of reopening it. Wrapped exclusion reasons have content-sized rows at the compact/wide boundary. Both regression checks failed before their fixes and pass afterward; native event routing remains unverified.
 - The update helper orders out its alert and returns focus to its presenter without reopening explicitly closed windows. Policy and native-callback regressions pass; the complete native popup flow remains unverified.
 - Cleaner Quick review and Settings: shorter labels, less repeated copy, explicit Close controls and provider-specific model guidance under advanced setup. Model Apply, permissions, protection, progress/Cancel, errors/Retry, run files and success-only saved chat remain available.
 - Current headless screenshots cover the features in the concise README and linked guide. Agent progress, errors and saved-chat images are fixtures, not real model turns.

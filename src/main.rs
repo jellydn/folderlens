@@ -519,8 +519,9 @@ fn group_row(s: &State, index: usize) -> El {
     row()
         .key(format!("row-{id}"))
         .w_full()
-        .h(52.0)
+        .min_h(52.0)
         .px(8.0)
+        .py(8.0)
         .gap(8.0)
         .center_y()
         .child(lead)
@@ -1415,6 +1416,57 @@ mod tests {
         click(&mut rt, "confirm");
         assert!(rt.state.confirmed);
         assert_eq!(ticked_ids(&rt.state), before);
+    }
+
+    #[test]
+    fn wrapped_group_reasons_fit_between_adjacent_rows() {
+        let mut rt = runtime();
+        rt.update(|s, _| {
+            for leaf in &mut s.catalog.leaves {
+                leaf.bytes = u64::MAX / 7;
+                leaf.locked = true;
+                leaf.detail = "Always protected · Cloud storage".into();
+            }
+        });
+        for width in [619.0, 620.0, 720.0] {
+            rt.set_viewport((width, 718.0), 2.0);
+            rt.frame(0.0);
+            rt.frame(0.0);
+            let elements = rt.elements();
+            for (i, group) in rt
+                .state
+                .catalog
+                .groups
+                .iter()
+                .enumerate()
+                .filter(|(_, g)| g.count == 1)
+            {
+                let row_key = format!("row-{}", group.id);
+                let row = rt.presented(&row_key).unwrap().0;
+                let reason = group_reason(&rt.state, i);
+                let text = elements
+                    .iter()
+                    .find(|el| {
+                        if el.text.as_deref() != Some(&reason) {
+                            return false;
+                        }
+                        let mut parent = el.parent;
+                        while let Some(index) = parent {
+                            if elements[index].key.as_deref() == Some(&row_key) {
+                                return true;
+                            }
+                            parent = elements[index].parent;
+                        }
+                        false
+                    })
+                    .unwrap()
+                    .rect;
+                assert!(
+                    text[1] >= row[1] && text[1] + text[3] <= row[1] + row[3],
+                    "{width}: {reason}: text {text:?}, row {row:?}"
+                );
+            }
+        }
     }
 
     #[test]
