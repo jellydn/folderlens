@@ -6,13 +6,13 @@ A macOS menu-bar prototype for reviewing folder selections, reasons and exclusio
 
 **Experimental WIP. Record choice (formerly Confirm) records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space. [PR #13](https://github.com/jellydn/shelf/pull/13)'s Review ledger is a first independent presentation, still under review.
 
-Quick review below is the beta.5 preview.
+Quick review below shows the current PR, including button refinements after beta.5. Those refinements are not in the published beta.5 assets.
 
 ![Quick review preview with synthetic example data](shots/review-ledger.png)
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP from [Releases](https://github.com/jellydn/shelf/releases) and check `SHA256SUMS`. Choose beta.5 when listed; [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) is the earlier Quick review preview. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP from the [beta.5 prerelease](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.5) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 For the older stable version, not this beta:
 
@@ -32,7 +32,7 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install).
 
 ## Feature gallery
 
-These current Rune renders use example Agent states, not real model turns or native popup verification. [Full gallery](docs/guide.md#feature-gallery-beta5) covers review/recording, folder actions, General, provider/model Apply, selected-path access, protection, Agent progress/Cancel, errors/Retry, saved chat and Updates.
+These current Rune renders use example Agent states, not real model turns or native popup verification. [Full gallery](docs/guide.md#feature-gallery-beta5) covers review/recording, folder actions, General, provider/model Apply, selected-path access, protection, Agent progress/Cancel, errors/Retry, saved chat and Updates. Filled buttons mark the main action; secondary actions are outlined, and removing an exclusion uses a warning style. Record choice never deletes.
 
 | Agent setup and model | Updates and manual-install policy |
 | --- | --- |

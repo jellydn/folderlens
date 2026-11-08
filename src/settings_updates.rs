@@ -27,13 +27,13 @@ pub(super) fn view(state: &Settings) -> El {
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(text("Homebrew apps are not replaced. Use brew upgrade --cask jellydn/tap/shelf; the stable cask excludes prereleases.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("Check for Updates…").key("check-updates").font(type_::BODY).color(paint(BLUE))
+        .child(row().w_full().justify_end().child(button("Check for Updates…", ButtonStyle::Primary).key("check-updates")
             .on_press(|s: &mut Settings| {
                 s.update_note = match crate::update::check() {
                     Ok(()) => "Checking in a separate native dialog. Native replacement is blocked without verified installation ownership; use the manual-update guidance.".into(),
                     Err(error) => error.into(),
                 };
-            }))
+            })))
         .child(text(&state.update_note).font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
 }
 

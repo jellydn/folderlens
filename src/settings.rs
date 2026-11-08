@@ -9,7 +9,7 @@ use rune::{
 };
 
 use crate::prefs::{self, Agent, Prefs};
-use crate::{BLUE, INK, MUTED, PANEL, TRACK};
+use crate::{button, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
 
 #[path = "settings_updates.rs"]
 mod updates;
@@ -200,12 +200,8 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                         .grow(1.0),
                 )
                 .child(
-                    text("Close")
+                    button("Close", ButtonStyle::Quiet)
                         .key("close-settings")
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .h(32.0)
-                        .center_y()
                         .on_press(|_: &mut Settings| hide()),
                 ),
         )
@@ -242,14 +238,8 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                     .min_w(0.0),
                 )
                 .child(if state.page == Page::Agent {
-                    text("Apply model")
+                    button("Apply model", ButtonStyle::Primary)
                         .key("apply-model")
-                        .font(type_::BODY)
-                        .color(paint(BLUE))
-                        .h(32.0)
-                        .px(10.0)
-                        .radius(6.0)
-                        .fill(paint(TRACK))
                         .on_press_tx(|state: &mut Settings, tx: &mut Tx| {
                             save_model(state);
                             if !state.model_error.is_empty() {
@@ -580,10 +570,8 @@ fn agent_commands(state: &Settings) -> El {
                         .on_edit(|state: &mut Settings| &mut state.custom),
                 )
                 .child(
-                    text("Use")
+                    button("Use", ButtonStyle::Secondary)
                         .key("use-command")
-                        .font(TextStyle::new(13.0, 600.0))
-                        .color(paint(BLUE))
                         .on_press(|state: &mut Settings| {
                             let bin = state.custom.text.trim().to_string();
                             if bin.is_empty() {
@@ -662,16 +650,9 @@ fn protected(state: &Settings) -> El {
                     .grow(1.0),
             )
             .child(
-                el().key("add-folder")
-                    .size(28.0, 28.0)
-                    .radius(6.0)
-                    .center()
-                    .on_press(add_folder)
-                    .child(
-                        text("+")
-                            .font(TextStyle::new(18.0, 500.0))
-                            .color(paint(INK)),
-                    ),
+                button("Add folder", ButtonStyle::Secondary)
+                    .key("add-folder")
+                    .on_press(add_folder),
             ),
     );
     let mut paths = col().w_full();
@@ -680,7 +661,7 @@ fn protected(state: &Settings) -> El {
         paths = paths.child(
             row()
                 .w_full()
-                .h(32.0)
+                .min_h(40.0)
                 .px(12.0)
                 .gap(8.0)
                 .center_y()
@@ -694,10 +675,8 @@ fn protected(state: &Settings) -> El {
                         .truncate_middle(),
                 )
                 .child(
-                    text("Stop keeping")
+                    button("Stop keeping", ButtonStyle::Destructive)
                         .key(format!("unkeep-{path}"))
-                        .font(type_::LABEL)
-                        .color(paint(BLUE))
                         .on_press(move |state: &mut Settings| {
                             state.prefs.kept.retain(|kept| kept != &path);
                             persist(state);

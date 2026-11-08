@@ -18,9 +18,11 @@ The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (beta.5 preview)
+## Quick review (current PR, after beta.5)
 
 The owner selected Quick review after comparing three independent prototypes. Beta.5 refines that direction with shorter labels, less repeated text and explicit Close controls. It keeps folder reasons, protection rules and every Agent capability; beta.3 retains the earlier ledger layout.
+
+The current source adds consistent button alignment and styles after beta.5: filled Record choice, Apply model and update-check actions; outlined secondary actions; quiet navigation; and a warning style for removing an exclusion. A recorded choice becomes secondary. Empty-selection buttons are muted, do not take focus and have no press handler. Enabled buttons support Tab/Space, hover/press feedback and a visible focus ring. These refinements are not in the immutable beta.5 release.
 
 The panel opens from the menu bar and stays open across pointer movement, outside clicks and transient update dialogs. Use **Close**, Escape or the menu-bar button to hide it. Escape closes Actions first. Settings also has Close and Escape. The native update helper orders out its alert and restores its presenter's focus without reopening a window that was explicitly closed. Policy/callback regressions cover dismissal; headless renders do not prove the full native popup flow.
 
@@ -28,7 +30,9 @@ The panel opens from the menu bar and stays open across pointer movement, outsid
 
 The wide panel puts folders beside optional Agent help. Below 620 points, Agent help precedes the folders in one scrollable column. **Record choice** stays visible with the selection count, estimated footprint and explicit non-deleting status. Live system readings stay below it. These panel examples use synthetic data and make no scan, model request or file change.
 
-## Feature gallery (beta.5)
+<a name="feature-gallery-beta5"></a>
+
+## Feature gallery (current PR)
 
 All current images below are headless Rune GPU renders. Folder examples and Agent progress/error/saved-chat states are fixtures, not native model turns or popup tests. Settings reflects example configuration, not proof of login, free access or a working provider. Scrolling and keyboard behavior are tested separately.
 

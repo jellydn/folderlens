@@ -410,6 +410,58 @@ fn rule() -> El {
     el().w_full().h(1.0).fill(paint(LINE).alpha(0.08))
 }
 
+#[derive(Clone, Copy)]
+enum ButtonStyle {
+    Primary,
+    Secondary,
+    Quiet,
+    Destructive,
+    Disabled,
+}
+
+fn button(label: &str, style: ButtonStyle) -> El {
+    let (ink, fill, border) = match style {
+        ButtonStyle::Primary => (PANEL, BLUE, BLUE),
+        ButtonStyle::Secondary => (INK, TRACK, "#4a6069"),
+        ButtonStyle::Quiet => (MUTED, PANEL, PANEL),
+        ButtonStyle::Destructive => ("#ffaca5", "#3b2a30", "#88504e"),
+        ButtonStyle::Disabled => (MUTED, "#23333b", "#23333b"),
+    };
+    let enabled = !matches!(style, ButtonStyle::Disabled);
+    row()
+        .role("button")
+        .label(label)
+        .min_h(32.0)
+        .min_w(0.0)
+        .px(8.0)
+        .py(6.0)
+        .gap(0.0)
+        .center()
+        .radius(7.0)
+        .fill(paint(fill))
+        .border(1.0, paint(border))
+        .hover(if enabled {
+            paint(INK).alpha(0.07)
+        } else {
+            Color::TRANSPARENT
+        })
+        .press(if enabled {
+            paint(INK).alpha(0.14)
+        } else {
+            Color::TRANSPARENT
+        })
+        .focusable(enabled)
+        .focus_ring(2.0, 2.0, paint(BLUE))
+        .disabled(!enabled)
+        .child(
+            text(label)
+                .font(TextStyle::new(12.0, 500.0))
+                .color(paint(ink))
+                .wrap()
+                .min_w(0.0),
+        )
+}
+
 fn check_mark() -> Shape {
     let ink = paint(PANEL);
     Shape::new()
@@ -704,7 +756,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .w_full()
                 .h(56.0)
                 .px(18.0)
-                .gap(12.0)
+                .gap(6.0)
                 .center_y()
                 .window_drag()
                 .child(
@@ -716,10 +768,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                         .truncate(),
                 )
                 .child(
-                    text("Agent")
+                    button("Agent", ButtonStyle::Quiet)
                         .key("agent-reveal")
-                        .font(type_::BODY)
-                        .color(paint(BLUE))
                         .on_press_tx(|state: &mut State, tx: &mut Tx| {
                             tx.scroll_into_view(if state.agent.is_some() {
                                 "agent-review"
@@ -729,17 +779,13 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                         }),
                 )
                 .child(
-                    text("Settings")
+                    button("Settings", ButtonStyle::Quiet)
                         .key("open-settings")
-                        .font(type_::BODY)
-                        .color(paint(BLUE))
                         .on_press(|_: &mut State| settings::open(settings::Page::Agent)),
                 )
                 .child(
-                    text("Actions")
+                    button("Actions", ButtonStyle::Secondary)
                         .key("actions")
-                        .font(type_::BODY)
-                        .color(paint(BLUE))
                         .on_press_tx(|state: &mut State, tx: &mut Tx| {
                             tx.instant();
                             palette::open(state, None);
@@ -747,12 +793,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                         }),
                 )
                 .child(
-                    text("Close")
+                    button("Close", ButtonStyle::Quiet)
                         .key("close-panel")
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .h(32.0)
-                        .center_y()
                         .on_press(|_: &mut State| status::conceal()),
                 ),
         )
@@ -785,6 +827,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
 }
 
 fn agent_help(s: &State) -> El {
+    let can_ask = (0..s.catalog.leaves.len()).any(|i| is_ticked(s, i));
     col().w_full().gap(10.0)
         .child(text(if s.agent.is_some() { "Agent review" } else { "Agent help" }).font(TextStyle::new(14.0, 500.0)).color(paint(INK)))
         .child(text(if !s.prefs.allow_start { "Set up an agent to request a review." }
@@ -792,16 +835,16 @@ fn agent_help(s: &State) -> El {
             else { "Saved context only. Folder paths are not shared." })
             .key("access-summary").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(if s.agent.as_ref().is_some_and(|job| job.result.is_none()) { el() } else {
-            text("Ask Agent").key("ask-agent").font(type_::BODY).color(paint(BLUE))
-                .disabled(!(0..s.catalog.leaves.len()).any(|i| is_ticked(s, i))).on_press(palette::ask)
+            let ask = button("Ask Agent", if can_ask { ButtonStyle::Secondary } else { ButtonStyle::Disabled }).key("ask-agent");
+            if can_ask { ask.on_press(palette::ask) } else { ask }
         })
         .child(text("Manual request. Provider costs may apply.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("Agent setup").key("agent-configure").font(type_::LABEL).color(paint(BLUE))
+        .child(button("Agent setup", ButtonStyle::Quiet).key("agent-configure")
             .on_press(|_: &mut State| settings::open(settings::Page::Agent)))
         .child(agent_review(s))
-        .child(if s.agent.as_ref().is_some_and(|job| matches!(job.result, Some(Ok(_)))) { text("Continue saved chat in Terminal").key("agent-terminal").font(type_::LABEL).color(paint(BLUE)).wrap().w_full()
+        .child(if s.agent.as_ref().is_some_and(|job| matches!(job.result, Some(Ok(_)))) { button("Continue saved chat in Terminal", ButtonStyle::Secondary).key("agent-terminal").w_full()
             .on_press(|state: &mut State| { if let Some(job) = &state.agent { if let Err(error) = job.open_chat(&state.prefs) { state.note = error; } } }) } else { el() })
-        .child(if s.agent.is_some() { text("Run files in Finder").key("agent-files").font(type_::LABEL).color(paint(BLUE))
+        .child(if s.agent.is_some() { button("Run files in Finder", ButtonStyle::Quiet).key("agent-files")
             .on_press(|state: &mut State| {
                 if let Some(folder) = state.agent.as_ref().and_then(|job| job.script.parent()) {
                     state.note = match std::process::Command::new("open").arg(folder).spawn() {
@@ -852,25 +895,31 @@ fn record_choice(s: &State) -> El {
                     .min_w(0.0)
                     .key("receipt-summary"),
                 )
-                .child(
-                    text(if s.confirmed {
-                        "Choice recorded"
+                .child({
+                    let record = button(
+                        if s.confirmed {
+                            "Choice recorded"
+                        } else {
+                            "Record choice"
+                        },
+                        if selected == 0 {
+                            ButtonStyle::Disabled
+                        } else if s.confirmed {
+                            ButtonStyle::Secondary
+                        } else {
+                            ButtonStyle::Primary
+                        },
+                    )
+                    .key("confirm");
+                    if selected > 0 {
+                        record.on_press(|state: &mut State| {
+                            state.confirmed =
+                                (0..state.catalog.leaves.len()).any(|i| is_ticked(state, i))
+                        })
                     } else {
-                        "Record choice"
-                    })
-                    .key("confirm")
-                    .font(TextStyle::new(13.0, 500.0))
-                    .color(paint(if selected > 0 { BLUE } else { MUTED }))
-                    .h(32.0)
-                    .px(10.0)
-                    .radius(6.0)
-                    .fill(paint(TRACK))
-                    .disabled(selected == 0)
-                    .on_press(|state: &mut State| {
-                        state.confirmed =
-                            (0..state.catalog.leaves.len()).any(|i| is_ticked(state, i))
-                    }),
-                ),
+                        record
+                    }
+                }),
         )
         .child(
             text(format!(
@@ -925,10 +974,8 @@ fn agent_review(s: &State) -> El {
                         .wrap(),
                 )
                 .child(if job.result.is_none() {
-                    text("Cancel")
+                    button("Cancel", ButtonStyle::Secondary)
                         .key("agent-cancel")
-                        .font(type_::LABEL)
-                        .color(paint(BLUE))
                         .on_press(|state: &mut State| {
                             if let Some(job) = &state.agent {
                                 job.cancel();
@@ -964,30 +1011,28 @@ fn agent_review(s: &State) -> El {
             panel = panel.child(
                 row()
                     .w_full()
-                    .gap(16.0)
+                    .gap(6.0)
+                    .flex_wrap()
                     .child(
-                        rune::text(if s.agent_details {
-                            "Hide details"
-                        } else {
-                            "Details"
-                        })
+                        button(
+                            if s.agent_details {
+                                "Hide details"
+                            } else {
+                                "Details"
+                            },
+                            ButtonStyle::Quiet,
+                        )
                         .key("agent-error-toggle")
-                        .font(type_::LABEL)
-                        .color(paint(BLUE))
                         .on_press(|state: &mut State| state.agent_details = !state.agent_details),
                     )
                     .child(
-                        rune::text("Agent settings")
+                        button("Agent settings", ButtonStyle::Quiet)
                             .key("agent-error-settings")
-                            .font(type_::LABEL)
-                            .color(paint(BLUE))
                             .on_press(|_: &mut State| settings::open(settings::Page::Agent)),
                     )
                     .child(
-                        rune::text("Retry")
+                        button("Retry", ButtonStyle::Secondary)
                             .key("agent-retry")
-                            .font(type_::LABEL)
-                            .color(paint(BLUE))
                             .on_press(palette::ask),
                     ),
             );
@@ -1181,6 +1226,54 @@ mod tests {
             .iter()
             .position(|leaf| leaf.id == id)
             .unwrap()
+    }
+
+    #[test]
+    fn recording_is_keyboard_reachable_but_empty_selection_is_not() {
+        for width in [360.0, 960.0] {
+            let mut rt = runtime();
+            rt.set_viewport((width, 718.0), 2.0);
+            rt.frame(0.0);
+            let record = rt
+                .elements()
+                .into_iter()
+                .find(|el| el.key.as_deref() == Some("confirm"))
+                .unwrap();
+            assert!(!record.focusable);
+            click(&mut rt, "confirm");
+            assert!(!rt.state.confirmed);
+            click(&mut rt, "ask-agent");
+            assert!(rt.state.agent.is_none() && rt.state.note.is_empty());
+            rt.update(|s, _| apply_level(s, Level::Balanced));
+            rt.frame(0.0);
+            let before = ticked_ids(&rt.state);
+            for _ in 0..30 {
+                rt.key(KeyEvent {
+                    key: rune::Key::Tab,
+                    mods: rune::Mods::default(),
+                });
+                rt.frame(0.0);
+                if rt
+                    .elements()
+                    .iter()
+                    .any(|el| el.key.as_deref() == Some("confirm") && el.focused)
+                {
+                    break;
+                }
+            }
+            assert!(rt
+                .elements()
+                .iter()
+                .any(|el| el.key.as_deref() == Some("confirm") && el.focused));
+            rt.key(KeyEvent {
+                key: rune::Key::Text(" ".into()),
+                mods: rune::Mods::default(),
+            });
+            rt.frame(0.0);
+            assert!(rt.state.confirmed);
+            assert_eq!(ticked_ids(&rt.state), before);
+            assert_eq!(rt.state.catalog.leaves.len(), 7);
+        }
     }
 
     #[test]
