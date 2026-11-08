@@ -12,7 +12,7 @@ Quick review below is the beta.5 preview.
 
 ## Install
 
-Apple Silicon, macOS 14+. Download the [beta.5 DMG or ZIP](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.5) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP from [Releases](https://github.com/jellydn/shelf/releases) and check `SHA256SUMS`. Choose beta.5 when listed; [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) is the earlier Quick review preview. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 For the older stable version, not this beta:
 

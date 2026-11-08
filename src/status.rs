@@ -220,6 +220,12 @@ mod macos {
                 return;
             }
             let item = ITEM.load(Ordering::Acquire);
+            // A new session's initiating press belongs to begin(), not this monitor.
+            if !EXPANDED.load(Ordering::Relaxed)
+                || msg0(item, sel(c"expandedInterfaceSession")).is_null()
+            {
+                return;
+            }
             let window = msg0(msg0(item, sel(c"button")), sel(c"window"));
             let rect = msg_rect(window, sel(c"frame"));
             let point = msg_point(class(c"NSEvent"), sel(c"mouseLocation"));
@@ -230,9 +236,7 @@ mod macos {
                 h: rect.size.h,
             };
             let mouse_down = matches!(msg_usize(event, sel(c"type")), 1 | 3 | 25);
-            if EXPANDED.load(Ordering::Relaxed)
-                && button_pressed(button, point.x, point.y, mouse_down)
-            {
+            if button_pressed(button, point.x, point.y, mouse_down) {
                 conceal();
             }
         });
@@ -322,7 +326,13 @@ mod macos {
             msg_f64_ret(process, sel(c"systemUptime")).to_bits(),
             Ordering::Relaxed,
         );
-        apply(true);
+        // A previous session can end while the persistent panel stays visible.
+        // Treat the next initiating tray press as a toggle, not another open.
+        if is_visible() {
+            conceal();
+        } else {
+            apply(true);
+        }
     }
 
     unsafe extern "C" fn end(
@@ -636,6 +646,27 @@ mod macos {
                 is_visible(),
                 "Ending a transient session must not hide Shelf"
             );
+            unsafe {
+                begin(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+            }
+            assert!(
+                !is_visible(),
+                "A new tray session must toggle the persistent panel closed"
+            );
+            unsafe {
+                begin(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+            }
+            assert!(is_visible(), "The next tray session must reopen Shelf");
             conceal();
             assert!(!is_visible(), "Explicit dismissal must still hide Shelf");
             unsafe {
