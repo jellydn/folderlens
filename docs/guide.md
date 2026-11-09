@@ -18,11 +18,11 @@ The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (current PR, after beta.5)
+## Quick review (beta.6)
 
 The owner selected Quick review after comparing three independent prototypes. Beta.5 refines that direction with shorter labels, less repeated text and explicit Close controls. It keeps folder reasons, protection rules and every Agent capability; beta.3 retains the earlier ledger layout.
 
-The current source adds consistent button alignment and styles after beta.5: filled Record choice, Apply model and update-check actions; outlined secondary actions; quiet navigation; and a warning style for removing an exclusion. A recorded choice becomes secondary. Empty-selection buttons are muted, do not take focus and have no press handler. Enabled buttons support Tab/Space, hover/press feedback and a visible focus ring. These refinements are not in the immutable beta.5 release.
+Beta.6 includes consistent button alignment and styles added after beta.5: filled Record choice, Apply model and update-check actions; outlined secondary actions; quiet navigation; and a warning style for removing an exclusion. A recorded choice becomes secondary. Empty-selection buttons are muted, do not take focus and have no press handler. Enabled buttons support Tab/Space, hover/press feedback and a visible focus ring. These refinements are not in the immutable beta.5 release. Beta.6 also caps protocol lines before parsing, bounds the message queue and counts newlines in the diagnostic log budget; completed reports retain their 256 KiB limit.
 
 The panel opens from the menu bar and stays open across pointer movement, outside clicks and transient update dialogs. Use **Close**, Escape or the menu-bar button to hide it. Escape closes Actions first. Settings also has Close and Escape. The native update helper orders out its alert and restores its presenter's focus without reopening a window that was explicitly closed. Policy/callback regressions cover dismissal; headless renders do not prove the full native popup flow.
 
@@ -32,7 +32,7 @@ The wide panel puts folders beside optional Agent help. Below 620 points, Agent 
 
 <a name="feature-gallery-beta5"></a>
 
-## Feature gallery (current PR)
+## Feature gallery (current source)
 
 All current images below are headless Rune GPU renders. Folder examples and Agent progress/error/saved-chat states are fixtures, not native model turns or popup tests. Settings reflects example configuration, not proof of login, free access or a working provider. Scrolling and keyboard behavior are tested separately.
 
@@ -138,7 +138,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, find DMG and ZIP downloads on the [releases page](https://github.com/jellydn/shelf/releases). Choose beta.5 when listed for refined Quick review; [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) is the earlier Quick review preview. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout. Existing releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, find DMG and ZIP downloads on the [releases page](https://github.com/jellydn/shelf/releases). Choose [beta.6](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.6) for refined Quick review and bounded agent transport; [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) is the earlier Quick review preview. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout. Existing releases and assets are not replaced.
 
 For the older stable version (not the beta):
 
