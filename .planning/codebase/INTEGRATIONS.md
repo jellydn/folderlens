@@ -1,36 +1,56 @@
 # External Integrations
 
-**Analysis Date:** 2026-11-07
+**Analysis Date:** 2026-11-09
 
 ## APIs & External Services
-**Agents:** Grok/Agy/Copilot/OpenCode use ACP; Pi uses RPC (`src/agent.rs`, `src/provider.rs`).
-Provider credentials and inference accounts are managed by the CLI, not Shelf. Free labels do not guarantee free account usage.
-**Updates:** GitHub release discovery over HTTPS, followed by pinned Ed25519 verification (`native/Updater.swift`).
+
+**Agent processes:** `src/provider.rs` adapts `grok`, `agy`, `copilot`, `pi` and `opencode`. Grok/Antigravity/Copilot/OpenCode use newline-delimited ACP; Pi uses RPC (`src/agent.rs`). OpenCode is gated to 2.0.23. Other detected tools have no adapter and fail visibly.
+- Client: Rust process pipes and `serde_json`; no hosted inference SDK in Shelf.
+- Auth: CLI-managed accounts/keys. Shelf does not log in, supply inference credit or promise free use.
+- Consent: `allow_start` is required for each manual review; `send_paths` separately controls eligible path sharing (`src/prefs.rs`, `src/palette.rs`).
+
+**GitHub updates:** `native/Updater.swift` discovers up to 100 releases at `api.github.com/repos/jellydn/shelf/releases?per_page=100`. It constructs fixed `github.com/jellydn/shelf/releases/download/<tag>/` URLs, then verifies metadata and archive content with the pinned publisher key. No scan or agent data is sent.
+
+**System services:** Finder/Terminal launch through `open`; folder selection uses `osascript`; Full Disk Access opens System Settings. Scan/gauge inputs include `ps`, `diskutil`, `sysctl`, `vm_stat`, Mach and IOKit (`src/prefs.rs`, `src/palette.rs`, `src/catalog.rs`, `src/gpu.rs`).
 
 ## Data Storage
-**Databases:** None. `src/prefs.rs` owns plain-text settings.
-**File Storage:** Private local run folders hold context, reports, session IDs and launchers. They persist until the user removes them.
-**Caching:** `src/scan.rs` uses a size cache; the updater uses a private Updates directory and persistent daily-check timestamp.
+
+**Databases:** None. Preferences live in `~/Library/Application Support/Shelf/settings.txt` (`src/prefs.rs`). Model choices are stored per provider, or per custom executable.
+
+**File Storage:** `Runs/chat-…/` holds `context.md`, `Ask.command`, redacted `agent.log`, and success-only `analysis.md`/`session.txt`. Pi adds `sessions/` and its extension; OpenCode adds private configuration directories (`src/agent.rs`, `src/provider.rs`). Run directories are mode 0700 and persist until the user removes them.
+
+**Caching:** `sizes.tsv` stores versioned size/newest-time/root-mtime data (`src/scan.rs`). `Updates/` holds verified archives, a daily-check timestamp and a lock file (`native/Updater.swift`). These are local files, not cloud storage.
 
 ## Authentication & Identity
-**Auth Provider:** Existing CLI login/account/key setup. Shelf asks for agent-start and optional path-sharing permission.
-Publisher identity comes from `native/update-public-key.txt`, not unsigned GitHub metadata.
+
+**Auth Provider:** Existing CLI setup. Blank models can use paid CLI defaults; Copilot blank selects Auto; OpenCode requires an explicit model. Exact advertised model checks precede prompts (`src/provider.rs`, `src/agent.rs`).
+
+Shelf publisher identity comes from `native/update-public-key.txt`. Ad-hoc Apple code signatures and publisher Ed25519 signatures serve different purposes. All current installs fail the direct-install provenance gate (`native/Updater.swift`).
 
 ## Monitoring & Observability
-**Error Tracking:** No remote error-tracking integration in this repository.
-**Logs:** Bounded redacted agent diagnostics; raw local paths/credentials must not appear in errors (`src/agent.rs`).
+
+**Error Tracking:** No remote telemetry or error-reporting service is configured.
+
+**Logs:** Per-run redacted agent diagnostics, inline status/errors with Retry, and local updater notices. Do not log local paths, credentials or signing secrets (`src/agent.rs`, `native/Updater.swift`).
 
 ## CI/CD & Deployment
-**Hosting:** `jellydn/shelf` GitHub Releases; stable cask in `jellydn/homebrew-tap`.
-**CI Pipeline:** Formatting, Clippy, full tests and packaging on macos-26; tag workflow also signs/verifies before publication.
-The release workflow publishes prerelease tags as not latest (`.github/workflows/release.yml`).
+
+**Hosting:** GitHub Releases for `jellydn/shelf`. The stable Homebrew cask is maintained separately in `jellydn/homebrew-tap`; beta releases do not update it (`AGENTS.md`).
+
+**CI Pipeline:** `.github/workflows/ci.yml` checks formatting, Clippy, tests and packaging on `macos-26`. `.github/workflows/release.yml` does the same for matching `v*` tags, then signs metadata/ZIP/DMG and independently verifies them before publication. Prerelease tags set `prerelease: true` and `make_latest: false`.
 
 ## Environment Configuration
-**Required env vars:** Signing job requires `SPARKLE_PRIVATE_KEY`; provider-specific private overrides are set per run in `src/provider.rs`.
-**Secrets location:** Shelf Actions secret for publishing; provider-managed authentication for inference. Never copy Oak's signing key.
+
+**Required env vars:** Release signing needs `SPARKLE_PRIVATE_KEY`. Runtime uses `HOME` and `PATH`. Per-run controls include `NO_COLOR`, `GROK_FOLDER_TRUST`, `SHELF_READER_EXECUTABLE`, `SHELF_READER_SOCKET`, `SHELF_EXPECTED_MODEL` and private `OPENCODE_*` overrides (`src/provider.rs`). Unsafe Copilot overrides are removed. `HOMEBREW_PREFIX` helps cask detection but cannot prove direct installation.
+
+**Secrets location:** Dedicated Shelf Actions signing secret and each provider's own credential store. No private key or provider credential is committed.
 
 ## Webhooks & Callbacks
-**Incoming:** Private Unix socket and stdio MCP/JSON helpers, not a network listener (`src/broker.rs`).
-**Outgoing:** Agent process messages and GitHub HTTPS requests; no automatic model requests.
 
-*Integration audit: 2026-11-07*
+**Incoming:** Private `/tmp/shelf-read-…/read.sock`, bounded JSON forwarding and stdio MCP helpers (`src/broker.rs`); Pi explicit extension callbacks (`src/pi-reader.mjs`); AppKit status callbacks (`src/status.rs`). No public webhook or HTTP listener.
+
+**Outgoing:** ACP/RPC messages to configured local processes, GitHub HTTPS update requests, and explicit Finder/Terminal actions. No automatic model request or cleanup command.
+
+---
+
+*Integration audit: 2026-11-09*
