@@ -2,19 +2,19 @@
 
 <img src="assets/shelf-icon.png" width="96" height="96" alt="Shelf app icon">
 
-A macOS menu-bar prototype for reviewing folder selections, reasons and exclusions, with optional agent analysis.
+A macOS menu-bar app for reviewing folder selections, reasons and exclusions, with optional agent analysis.
 
-**Experimental WIP. Record choice (formerly Confirm) records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space. [PR #13](https://github.com/jellydn/shelf/pull/13)'s Review ledger is a first independent presentation, still under review.
+**Record choice records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
 
-Quick review below shows the current source, including the button refinements in beta.6. Beta.6 also bounds agent transport and refreshes all seven codebase map documents.
+Version **0.2.0** brings Quick review, folder protections, manual agent help and publisher-verified update checks. Agent transport is bounded, and all seven [codebase map documents](.planning/codebase/ARCHITECTURE.md) reflect the current source.
 
 ![Quick review preview with synthetic example data](shots/review-ledger.png)
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP from the [beta.6 prerelease](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.6) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP from the [0.2.0 stable release](https://github.com/jellydn/shelf/releases/tag/v0.2.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
-For the older stable version, not this beta:
+Or install the stable release through Homebrew. The cask checks for new stable versions every six hours, so it can lag behind a new release.
 
 ```sh
 brew install --cask jellydn/tap/shelf
@@ -45,9 +45,7 @@ These current Rune renders use example Agent states, not real model turns or nat
 - Tests/headless renders are not native end-to-end proof. Tray routing, model/tool turns, Terminal continuation and real install/restart/Gatekeeper behavior remain unverified. Cleanup safety is not established.
 - Settings→tray reopening remains a separate known issue; the popup changes do not establish a fix for it.
 
-## Credit and details
-
-[Levo](https://omggg.wtf/levo/) was the direct UI/layout/behavior reference for beta.2 and earlier. Please support or buy Levo. Shelf is unaffiliated and not endorsed; credit does not resolve the earlier copied-presentation concern or establish equivalent safety.
+## Details
 
 [Full guide and historical screenshots](docs/guide.md) · [Agent boundary](docs/adr/0001-scoped-agent-sessions.md) · [Update policy](docs/adr/0002-publisher-verified-updates.md) · [Release notes](RELEASE_NOTES.md)
 

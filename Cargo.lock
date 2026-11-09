@@ -2765,7 +2765,7 @@ dependencies = [
 
 [[package]]
 name = "shelf"
-version = "0.2.0-beta.6"
+version = "0.2.0"
 dependencies = [
  "block2 0.6.2",
  "libc",

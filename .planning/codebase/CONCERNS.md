@@ -64,7 +64,7 @@ Fresh source audit of the whole repository. Findings below distinguish fixed def
 
 ## Missing Critical Features
 
-**No cleanup/delete engine:** Intentional: `src/main.rs` only records an eligible choice. This is a prototype, not a production cleanup utility. Do not add deletion as an audit fix.
+**No cleanup/delete engine:** Intentional: `src/main.rs` only records an eligible choice. Stable 0.2.0 is a selection-review app, not a cleanup utility. Do not add deletion as an audit fix.
 
 **Preview conveniences:** No persistent download-ready indicator or automatic rollback pruning (`native/Updater.swift`, `src/settings_updates.rs`). A later manual check gives download guidance. `src/palette.rs` stores an alerts-paused notice/deadline, but no periodic agent-analysis scheduler exists. None authorizes automatic paid requests or deleting old backups.
 

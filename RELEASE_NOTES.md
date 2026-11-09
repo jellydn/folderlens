@@ -1,3 +1,28 @@
+## Shelf 0.2.0 — Quick review
+
+**Stable release for Apple Silicon, macOS 14+.** Review folder selections, reasons and exclusions from the menu bar. **Record choice saves a selection in memory; it never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
+
+- Quick review has compact and wide layouts, visible protection reasons, optional Agent help, fixed recording/system readings and explicit Close controls. Main actions, secondary actions and warnings have distinct button styles, with keyboard focus and Space activation.
+- Manual Ask Agent supports per-provider model settings, explicit start/path-sharing permissions, a bounded selected-folder reader, progress/Cancel, errors/Retry and success-only saved chat. Provider costs and data policies apply; no provider starts automatically.
+- Agent protocol lines are bounded to 2 MiB before parsing, the message queue holds at most eight messages, and diagnostic allocation/log budgets are bounded. Regression checks cover oversized unterminated output and blank-line flooding. Completed reports retain their 256 KiB cap.
+- All seven codebase map documents were regenerated from current source on 2026-11-09. The README and guide now describe stable 0.2.0 and its limits.
+- Daily publisher-verified update checks and opt-in downloads remain available. All current installs are **manual-update-only**; Homebrew installs use Homebrew. There is no automatic replacement or install-on-quit.
+
+### Verification and known limits
+
+Release checks cover formatting, Clippy, the full macOS Rust suite, native updater self-tests, packaging, arm64 architecture and code signatures. Dedicated Shelf Ed25519 signatures protect the metadata and archives. Published assets must also be downloaded again and verified against `SHA256SUMS`, GitHub asset digests and the committed publisher public key.
+
+**Settings→tray reopening remains an unresolved native report.** Its cause and a native fix are not verified. Headless layouts and callback tests do not establish full native tray behavior. Real model/tool turns, native Terminal continuation and actual install/restart/Gatekeeper behavior remain unverified. Provider controls are not an OS sandbox. No real model request, installed-app replacement or cleanup is part of release verification.
+
+Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal macOS approval if required; Shelf does not bypass Gatekeeper. The stable label does not remove these limits.
+
+### Manual test checklist
+
+1. Test initial tray-open, Settings→tray, outside clicks, Close, Escape and tray toggle separately. Report failed steps and macOS version.
+2. Choose eligible folders and Record choice. Nothing is deleted. Change the selection: the record clears. Protected/in-use folders stay excluded.
+3. Check compact/wide layouts, keyboard focus/Space, model Apply and explicit request/path-sharing permissions. No agent starts automatically.
+4. Only with separate provider cost/data consent, test analysis, Cancel, errors/Retry and saved-chat continuation. Stubs do not establish native model-turn coverage.
+
 ## Shelf 0.2.0-beta.6 — Fresh source map and bounded agent transport
 
 **Experimental prerelease, not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** This release uses current main after PR #13 merged. Stable/Homebrew and earlier release assets are unchanged.

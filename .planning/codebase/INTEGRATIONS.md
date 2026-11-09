@@ -37,7 +37,7 @@ Shelf publisher identity comes from `native/update-public-key.txt`. Ad-hoc Apple
 
 **Hosting:** GitHub Releases for `jellydn/shelf`. The stable Homebrew cask is maintained separately in `jellydn/homebrew-tap`; beta releases do not update it (`AGENTS.md`).
 
-**CI Pipeline:** `.github/workflows/ci.yml` checks formatting, Clippy, tests and packaging on `macos-26`. `.github/workflows/release.yml` does the same for matching `v*` tags, then signs metadata/ZIP/DMG and independently verifies them before publication. Prerelease tags set `prerelease: true` and `make_latest: false`.
+**CI Pipeline:** `.github/workflows/ci.yml` checks formatting, Clippy, tests and packaging on `macos-26`. `.github/workflows/release.yml` does the same for matching `v*` tags, then signs metadata/ZIP/DMG and independently verifies them before publication. Only the current tag's section of `RELEASE_NOTES.md` is published; a mismatched heading fails. Prerelease tags set `prerelease: true` and `make_latest: false`; stable tags set latest.
 
 ## Environment Configuration
 

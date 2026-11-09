@@ -5,6 +5,7 @@ Date: 2026-11-07
 ## Status
 Accepted by the owner for the prerelease. No Apple Developer account is available.
 Amended 2026-11-08: unknown-origin installations are manual-update-only. One current-state beta.2 prerelease is authorized; promotion and subsequent releases remain paused.
+Amended 2026-11-09: the owner authorizes stable 0.2.0 and current documentation updates. The manual-update-only rule and all publisher, consent and verification requirements remain unchanged.
 
 ## Context
 Shelf needs update checks and optional downloads without automatic install/restart or a paid Apple account. Oak provides a working Ed25519/signing-secret pattern, but Sparkle's automatic-download path can install on quit, which conflicts with the approved policy.

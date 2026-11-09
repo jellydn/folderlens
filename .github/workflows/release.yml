@@ -38,10 +38,17 @@ jobs:
           path: target/release/assets/*
           if-no-files-found: error
           compression-level: 0
+      - name: Prepare current release notes
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '
+            NR == 1 && index($0, "## Shelf " substr(tag, 2) " — ") != 1 { exit 1 }
+            /^## Shelf / && ++sections > 1 { exit }
+            { print }
+          ' RELEASE_NOTES.md > target/release/notes.md
       - name: Publish release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
-          body_path: RELEASE_NOTES.md
+          body_path: target/release/notes.md
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
           generate_release_notes: true

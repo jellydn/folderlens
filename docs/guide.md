@@ -1,28 +1,24 @@
-# Shelf prototype guide
+# Shelf guide
 
 Detailed implementation, usage and verification notes. Start with the [short README](../README.md).
 
 <img src="../assets/shelf-icon.png" width="128" height="128" alt="Shelf: a folder in an archive tray on a shelf">
 
-> Experimental WIP proof of concept for reviewing cleanup selections. Record choice (formerly Confirm) records a choice; it does not delete files or run cleanup.
+> Shelf reviews folder selections. Record choice records a choice; it does not delete files or run cleanup.
 
-## Current status and Levo credit
+## Current status
 
-[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original UI, layout and interaction behavior, not just a general inspiration. That presentation remains in the published beta.2 and earlier releases. If you like this idea, please support Levo and consider buying it through its official site. Shelf is not affiliated with or endorsed by Levo.
+Shelf **0.2.0** is a stable release of the selection-review app, not a cleanup engine. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory; Shelf does not delete the selected files.** Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
 
-Shelf is an experimental **WIP PoC**, not a finished cleanup utility or a claim of Levo-equivalent cleanup safety. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory; Shelf does not delete the selected files.** Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
-
-The code in [PR #10](https://github.com/jellydn/shelf/pull/10) implements manual Ask Agent adapters, per-agent model settings, a bounded selected-folder reader, saved-session launchers and signed-update checks. Protocol stubs, headless UI tests and limited native metadata/download checks exercise these implementations. They do **not** establish end-to-end native model analysis, tool routing during a model turn, Terminal continuation, tray event routing, or actual update installation/restart and Gatekeeper behavior. The sections below describe this PR's code, which includes follow-ups not present in the published beta.1 assets.
-
-**Beta.3 previews the owner's chosen Review ledger direction**, with reasons and exclusions beside a non-deleting selection receipt and separate agent access. This first implementation is still under design review; beta.2 does not contain it. This one beta release does not authorize a merge, promotion or later releases. Attribution alone does not resolve the concern about the copied presentation. Earlier screenshots, releases and history are retained as provenance, not evidence of completed design or safety review.
+The app includes manual Ask Agent adapters, per-agent model settings, a bounded selected-folder reader, saved-session launchers and signed-update checks. Protocol stubs, headless UI tests and limited native metadata/download checks exercise these implementations. They do **not** establish end-to-end native model analysis, tool routing during a model turn, Terminal continuation, tray event routing, or actual update installation/restart and Gatekeeper behavior. Earlier screenshots, releases and history remain available; they are not evidence of completed safety review.
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (beta.6)
+## Quick review (0.2.0)
 
-The owner selected Quick review after comparing three independent prototypes. Beta.5 refines that direction with shorter labels, less repeated text and explicit Close controls. It keeps folder reasons, protection rules and every Agent capability; beta.3 retains the earlier ledger layout.
+Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
-Beta.6 includes consistent button alignment and styles added after beta.5: filled Record choice, Apply model and update-check actions; outlined secondary actions; quiet navigation; and a warning style for removing an exclusion. A recorded choice becomes secondary. Empty-selection buttons are muted, do not take focus and have no press handler. Enabled buttons support Tab/Space, hover/press feedback and a visible focus ring. These refinements are not in the immutable beta.5 release. Beta.6 also caps protocol lines before parsing, bounds the message queue and counts newlines in the diagnostic log budget; completed reports retain their 256 KiB limit.
+The main actions use filled buttons: Record choice, Apply model and update checks. Secondary actions are outlined; navigation is quiet; removing an exclusion uses a warning style. A recorded choice becomes secondary. Empty-selection buttons are muted, do not take focus and have no press handler. Enabled buttons support Tab/Space, hover/press feedback and a visible focus ring. Agent protocol lines are capped before parsing, the message queue is bounded and newline bytes count toward the diagnostic log budget. Completed reports have a 256 KiB limit.
 
 The panel opens from the menu bar and stays open across pointer movement, outside clicks and transient update dialogs. Use **Close**, Escape or the menu-bar button to hide it. Escape closes Actions first. Settings also has Close and Escape. The native update helper orders out its alert and restores its presenter's focus without reopening a window that was explicitly closed. Policy/callback regressions cover dismissal; headless renders do not prove the full native popup flow.
 
@@ -74,7 +70,7 @@ Historical presentation: [original panel](../shots/tray.png), [original Protecte
 
 The bundled app uses [Shelf.icns](../assets/Shelf.icns), generated from the Painter-designed [app icon](../assets/shelf-icon.png). The matching small-size [favicon](../assets/favicon.svg) uses the same teal, amber and cream shapes. [ICO](../assets/favicon.ico), [PNG](../assets/favicon.png), Apple touch/PWA icons and [web manifest](../assets/site.webmanifest) are in `assets/` for documentation sites; GitHub controls its own browser favicon. Regenerate with `uv run --with pillow scripts/icons.py` on macOS. Normal builds copy the committed ICNS and need no image-generation tools.
 
-## Implemented prototype features
+## Features
 
 - Menu-bar review ledger with compact live memory, CPU, GPU and free-space readings
 - Candidate selection reasons, exclusions and an estimated-footprint receipt; no reclaimed-space claim
@@ -138,9 +134,9 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, find DMG and ZIP downloads on the [releases page](https://github.com/jellydn/shelf/releases). Choose [beta.6](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.6) for refined Quick review and bounded agent transport; [beta.4](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.4) is the earlier Quick review preview. [Beta.3](https://github.com/jellydn/shelf/releases/tag/v0.2.0-beta.3) retains the earlier Review ledger layout. Existing releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP from the [0.2.0 stable release](https://github.com/jellydn/shelf/releases/tag/v0.2.0). Check `SHA256SUMS`. Existing releases and assets are not replaced.
 
-For the older stable version (not the beta):
+Or install the stable release through Homebrew. Its cask checks for new stable versions every six hours and can lag behind publication:
 
 ```sh
 brew install --cask jellydn/tap/shelf
