@@ -1,6 +1,6 @@
 //! A bounded, read-only ACP client. Agents never receive a write or terminal capability.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -274,20 +274,40 @@ fn analyze(
     let stderr = child.stderr.take().ok_or("Agent stderr is unavailable")?;
     let (stderr_done, stderr_finished) = mpsc::channel();
     std::thread::spawn(move || {
+        let mut stderr = BufReader::new(stderr);
         let mut size = 0;
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-            let line = redact_diagnostics(&line);
-            size += line.len();
-            if size <= 16_384 {
-                let _ = writeln!(log, "{line}");
+        loop {
+            let mut line = String::new();
+            match stderr.by_ref().take(16_385).read_line(&mut line) {
+                Ok(0) | Err(_) => break,
+                _ if line.len() > 16_384 => break,
+                _ => {}
             }
+            let line = redact_diagnostics(&line);
+            size += line.len() + 1;
+            if size > 16_384 {
+                break;
+            }
+            let _ = writeln!(log, "{line}");
         }
+        // Drain without allocating or logging a truncated line that could hide a secret marker.
+        let _ = std::io::copy(&mut stderr, &mut std::io::sink());
         let _ = stderr_done.send(());
     });
-    let (sender, lines) = mpsc::channel();
+    let (sender, lines) = mpsc::sync_channel(8);
     std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines() {
-            if sender.send(line.map_err(|err| err.to_string())).is_err() {
+        let mut stdout = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            // Allow JSON escaping of a 256 KiB report, but bound even unterminated input.
+            let result = match stdout.by_ref().take(2_097_153).read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) if line.len() > 2_097_152 => Err("Agent protocol line exceeds 2 MiB.".into()),
+                Ok(_) => Ok(line),
+                Err(error) => Err(error.to_string()),
+            };
+            let failed = result.is_err();
+            if sender.send(result).is_err() || failed {
                 break;
             }
         }
@@ -689,6 +709,44 @@ mod tests {
     }
 
     #[test]
+    fn oversized_protocol_lines_fail_without_waiting_for_a_newline_or_saving_success() {
+        let root = prefs::path_for_state().with_extension("oversized-protocol");
+        std::fs::create_dir(&root).unwrap();
+        let bin = root.join("grok");
+        std::fs::write(
+            &bin,
+            "#!/bin/sh\n/usr/bin/head -c 2097153 /dev/zero | /usr/bin/tr '\\000' x\nexec sleep 30\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut job = Job::start_in(
+            &root.join("Runs"),
+            bin.to_str().unwrap(),
+            "Grok",
+            "",
+            "Saved selection",
+            Access::default(),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while job.result.is_none() && Instant::now() < deadline {
+            job.poll();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let result = job.result.clone();
+        job.cancel();
+        wait(&mut job);
+        let dir = job.script.parent().unwrap();
+        assert!(!dir.join("analysis.md").exists());
+        assert!(!dir.join("session.txt").exists());
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(
+            result.is_some_and(|result| result.is_err_and(|error| error.contains("2 MiB"))),
+            "oversized protocol input must fail before EOF or a newline"
+        );
+    }
+
+    #[test]
     fn reviews_share_only_eligible_files_and_resume_the_exact_session() {
         for (name, share) in [
             ("grok", true),
@@ -834,6 +892,7 @@ done
         for (body, expected) in [
             ("printf '%s\\n' 'unknown flag: --silent' >&2; exit 2", "unknown flag: --silent"),
             ("printf '%s\\n' 'Unable to connect' '/Users/private/cache' 'token=secret-value' >&2; exit 23", "23"),
+            ("/usr/bin/awk 'BEGIN { for (i = 0; i < 20000; i++) print \"\" }' >&2; exit 23", "23"),
             ("exit 0", "without an answer"),
             (r#"while IFS= read -r line; do
 case "$line" in
@@ -862,6 +921,7 @@ done"#, "empty output"),
                 assert!(!dir.join("session.txt").exists());
                 assert!(!Command::new(&job.script).output().unwrap().status.success());
                 let log = std::fs::read_to_string(dir.join("agent.log")).unwrap();
+                assert!(log.len() <= 16_384, "newlines count toward the diagnostic limit");
                 assert!(!log.contains("/Users/private"));
                 assert!(!log.contains("secret-value"));
             }
