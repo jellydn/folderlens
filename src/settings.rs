@@ -194,7 +194,7 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                 .px(24.0)
                 .center_y()
                 .child(
-                    text("Shelf settings")
+                    text("FolderLens settings")
                         .font(TextStyle::new(16.0, 500.0))
                         .color(paint(INK))
                         .grow(1.0),
@@ -544,7 +544,7 @@ fn agent_commands(state: &Settings) -> El {
         .child(section("Model access and cost"))
         .child(text(crate::agent::model_note(&state.prefs.agent_bin)).font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Commands detected on this Mac"))
-        .child(text("Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a Shelf review; detection does not verify login, runtime dependencies, model access or native analysis.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a FolderLens review; detection does not verify login, runtime dependencies, model access or native analysis.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(card(list.max_h(160.0).scroll(ScrollSpec {
             stick_bottom: false,
         })))
@@ -584,7 +584,7 @@ fn agent_commands(state: &Settings) -> El {
                         }),
                 ),
         )
-        .child(text("Each manual run saves private context and a continuation launcher. Shared paths may remain in run files until you remove them. Analysis and an exact saved session are available only after success. Credentials belong in the provider's setup, not the model field. Copilot, Pi and OpenCode use Shelf's bounded reader; Grok/Antigravity Terminal tools rely on their native controls, not Shelf's live read boundary.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Each manual run saves private context and a continuation launcher. Shared paths may remain in run files until you remove them. Analysis and an exact saved session are available only after success. Credentials belong in the provider's setup, not the model field. Copilot, Pi and OpenCode use FolderLens's bounded reader; Grok/Antigravity Terminal tools rely on their native controls, not FolderLens's live read boundary.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
 }
 
 fn agent_row(state: &Settings, agent: &Agent) -> El {
@@ -880,7 +880,7 @@ fn access(state: &Settings) -> El {
                 .on_press(|_state: &mut Settings| prefs::open_full_disk_access()),
         )))
         .child(
-            text("macOS hides some folders until Full Disk Access is on. Shelf measures the rest of your home either way.")
+            text("macOS hides some folders until Full Disk Access is on. FolderLens measures the rest of your home either way.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()

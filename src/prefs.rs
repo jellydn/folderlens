@@ -1,4 +1,4 @@
-//! Shelf's own settings file. The tray and the settings window share the path
+//! FolderLens's own settings file. The tray and the settings window share the path
 //! under Application Support. Tests each get a fresh file.
 
 use std::collections::BTreeMap;
@@ -89,7 +89,7 @@ pub fn user_path() -> PathBuf {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    home.join("Library/Application Support/Shelf/settings.txt")
+    home.join("Library/Application Support/FolderLens/settings.txt")
 }
 
 pub fn path_for_state() -> PathBuf {
@@ -97,7 +97,7 @@ pub fn path_for_state() -> PathBuf {
     {
         static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return std::env::temp_dir().join(format!("shelf-prefs-{}-{n}.txt", std::process::id()));
+        return std::env::temp_dir().join(format!("folderlens-prefs-{}-{n}.txt", std::process::id()));
     }
     #[cfg(not(test))]
     {
@@ -178,7 +178,7 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
 }
 
 /// Command names from the ai-launcher catalog. The first binary found on PATH wins.
-/// Shelf does not spawn these tools to detect them.
+/// FolderLens does not spawn these tools to detect them.
 const TOOLS: &[(&str, &str, &[&str])] = &[
     ("claude", "Claude", &["claude"]),
     ("cline", "Cline", &["cline"]),
@@ -317,10 +317,10 @@ pub fn prepare_ask(
         return Err("Choose an agent in Settings.");
     }
     if !prefs.allow_start {
-        return Err("Grant access in Settings before Shelf starts an agent.");
+        return Err("Grant access in Settings before FolderLens starts an agent.");
     }
     let mut prompt = format!(
-        "# Shelf cleanup context\n\nHelp me clean up the items currently selected in Shelf.\nSelection mode: {selection}.\n{detail}\n\nInspect the selected items and propose a safe cleanup. Ask for approval before deleting files or running destructive commands. Leave unselected, protected, held, and in-use items unchanged. Shelf Confirm only records a choice and does not delete files."
+        "# FolderLens cleanup context\n\nHelp me clean up the items currently selected in FolderLens.\nSelection mode: {selection}.\n{detail}\n\nInspect the selected items and propose a safe cleanup. Ask for approval before deleting files or running destructive commands. Leave unselected, protected, held, and in-use items unchanged. FolderLens Confirm only records a choice and does not delete files."
     );
     if prefs.send_paths && !paths.is_empty() {
         prompt.push_str("\nSelected paths (in the same order as the items):\n");
@@ -353,7 +353,7 @@ pub fn prepare_run(runs: &Path, context: &str) -> Result<PathBuf, String> {
     }
     std::fs::write(dir.join("context.md"), context).map_err(|err| err.to_string())?;
     let script_path = dir.join("Ask.command");
-    let script = "#!/bin/zsh\nprint -u2 -- 'Shelf analysis is not complete. Open this launcher after a successful review.'\nexit 1\n";
+    let script = "#!/bin/zsh\nprint -u2 -- 'FolderLens analysis is not complete. Open this launcher after a successful review.'\nexit 1\n";
     std::fs::write(&script_path, script).map_err(|err| err.to_string())?;
     #[cfg(unix)]
     {
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn a_round_trip_keeps_the_agent_and_the_grant() {
-        let path = std::env::temp_dir().join(format!("shelf-prefs-round-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("folderlens-prefs-round-{}", std::process::id()));
         let prefs = Prefs {
             agent_id: "claude".into(),
             agent_bin: "/usr/local/bin/claude".into(),
@@ -441,7 +441,7 @@ mod tests {
         prefs.agent_bin = "claude".into();
         assert_eq!(
             prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use"),
-            Err("Grant access in Settings before Shelf starts an agent.")
+            Err("Grant access in Settings before FolderLens starts an agent.")
         );
         prefs.allow_start = true;
         let prompt = prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use").unwrap();
@@ -515,7 +515,7 @@ mod tests {
 
     #[test]
     fn an_old_file_leaves_the_hour_hold_off() {
-        let path = std::env::temp_dir().join(format!("shelf-prefs-old-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("folderlens-prefs-old-{}", std::process::id()));
         std::fs::write(&path, "agent_id=grok\nkeep_hours=nope\n").unwrap();
         let prefs = load_from(&path);
         assert_eq!(prefs.agent_id, "grok");
@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn detection_uses_the_first_binary_and_skips_the_rest() {
-        let dir = std::env::temp_dir().join(format!("shelf-agents-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("folderlens-agents-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for name in ["kimi", "cursor", "cursor-agent", "qoder", "kiro"] {

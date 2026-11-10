@@ -11,20 +11,20 @@ if [ "${GITHUB_REF_TYPE:-}" = tag ] && [ "${GITHUB_REF_NAME:-}" != "v$version" ]
 fi
 
 sh scripts/bundle.sh
-app="$target/release/Shelf.app"
+app="$target/release/FolderLens.app"
 codesign --verify --deep --strict "$app"
-lipo "$app/Contents/MacOS/Shelf" -verify_arch arm64
+lipo "$app/Contents/MacOS/FolderLens" -verify_arch arm64
 assets="$target/release/assets"
 mkdir -p "$assets"
 staging=$(mktemp -d "$target/release/dmg-root.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
-ditto "$app" "$staging/Shelf.app"
+ditto "$app" "$staging/FolderLens.app"
 ln -s /Applications "$staging/Applications"
-hdiutil create -volname Shelf -srcfolder "$staging" -ov -format UDZO \
-  "$assets/Shelf-$version-macos-arm64.dmg"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$assets/Shelf-$version-macos-arm64.zip"
+hdiutil create -volname FolderLens -srcfolder "$staging" -ov -format UDZO \
+  "$assets/FolderLens-$version-macos-arm64.dmg"
+ditto -c -k --sequesterRsrc --keepParent "$app" "$assets/FolderLens-$version-macos-arm64.zip"
 (
   cd "$assets"
-  shasum -a 256 "Shelf-$version-macos-arm64.dmg" "Shelf-$version-macos-arm64.zip" > SHA256SUMS
+  shasum -a 256 "FolderLens-$version-macos-arm64.dmg" "FolderLens-$version-macos-arm64.zip" > SHA256SUMS
 )
 printf 'Release assets: %s\n' "$assets"

@@ -1,6 +1,6 @@
-# Shelf
+# FolderLens
 
-<img src="assets/shelf-icon.png" width="96" height="96" alt="Shelf app icon">
+<img src="assets/folderlens-icon.png" width="96" height="96" alt="FolderLens app icon">
 
 A macOS menu-bar app for reviewing folder selections, reasons and exclusions, with optional agent analysis.
 
@@ -12,12 +12,12 @@ Version **0.2.0** brings Quick review, folder protections, manual agent help and
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP from the [0.2.0 stable release](https://github.com/jellydn/shelf/releases/tag/v0.2.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP from the [0.2.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. The cask checks for new stable versions every six hours, so it can lag behind a new release.
 
 ```sh
-brew install --cask jellydn/tap/shelf
+brew install --cask jellydn/tap/folderlens
 ```
 
 For Homebrew trust or source builds, see the [guide](docs/guide.md#install).
