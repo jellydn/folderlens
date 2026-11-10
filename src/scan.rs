@@ -322,7 +322,7 @@ pub(super) fn scan_root(
         }
     }
     let paths = drop_descendants(hits.keys().cloned().collect());
-    let cache_file = home.join("Library/Application Support/Shelf/sizes.tsv");
+    let cache_file = home.join("Library/Application Support/FolderLens/sizes.tsv");
     let mut cache = load_cache(&cache_file);
     let mut pending = Vec::new();
     let mut measured = Vec::new();
@@ -747,7 +747,7 @@ mod tests {
 
     #[test]
     fn a_temp_home_finds_a_cache_a_project_and_a_removed_app() {
-        let home = std::env::temp_dir().join(format!("shelf-scan-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("folderlens-scan-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         write_file(&home.join("Library/Caches/Demo/blob"), 64);
         write_file(&home.join("Library/Caches/com.apple.bird/blob"), 64);
@@ -797,7 +797,7 @@ mod tests {
 
     #[test]
     fn allocated_blocks_skip_sparse_holes_and_count_a_hard_link_once() {
-        let dir = std::env::temp_dir().join(format!("shelf-measure-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("folderlens-measure-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let hole = dir.join("hole");
@@ -827,7 +827,7 @@ mod tests {
 
     #[test]
     fn a_cache_without_the_v2_header_is_ignored() {
-        let dir = std::env::temp_dir().join(format!("shelf-cache-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("folderlens-cache-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("sizes.tsv");

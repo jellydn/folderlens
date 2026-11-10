@@ -4,13 +4,13 @@ use std::time::{Duration, Instant};
 
 #[test]
 fn saved_continuation_rechecks_version_and_bounds_inherited_stdout() {
-    let root = std::env::temp_dir().join(format!("shelf-continuation-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("folderlens-continuation-{}", std::process::id()));
     std::fs::create_dir(&root).unwrap();
     let bin = root.join("opencode");
     let run = || {
-        Command::new(env!("CARGO_BIN_EXE_shelf"))
+        Command::new(env!("CARGO_BIN_EXE_folderlens"))
             .args([
-                "--shelf-opencode-resume",
+                "--folderlens-opencode-resume",
                 bin.to_str().unwrap(),
                 "--standalone",
                 "--session",

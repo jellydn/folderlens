@@ -295,7 +295,7 @@ fn action_rows(s: &State) -> Vec<Row> {
         item("pause", "Pause alerts for 1 hour", "⌘P", true),
         item("settings", "Settings…", "⌘,", true),
         item("close", "Close", "esc", true),
-        item("quit", "Quit Shelf", "⌘Q", true),
+        item("quit", "Quit FolderLens", "⌘Q", true),
     ]
 }
 
@@ -426,7 +426,7 @@ fn keep(s: &mut State) {
         }
     }
     prefs::save_to(&s.prefs_path, &s.prefs);
-    s.note = "Shelf keeps this.".to_string();
+    s.note = "FolderLens keeps this.".to_string();
     s.confirmed = false;
     close(s);
 }
@@ -562,14 +562,14 @@ fn target_name(s: &State) -> String {
             .groups
             .get(index)
             .map(|group| group.name.clone())
-            .unwrap_or_else(|| "Shelf".to_string()),
+            .unwrap_or_else(|| "FolderLens".to_string()),
         Some(Target::Leaf(index)) => s
             .catalog
             .leaves
             .get(index)
             .map(|leaf| leaf.name.clone())
-            .unwrap_or_else(|| "Shelf".to_string()),
-        None => "Shelf".to_string(),
+            .unwrap_or_else(|| "FolderLens".to_string()),
+        None => "FolderLens".to_string(),
     }
 }
 

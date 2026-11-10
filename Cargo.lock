@@ -2764,7 +2764,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "shelf"
+name = "folderlens"
 version = "0.2.0"
 dependencies = [
  "block2 0.6.2",

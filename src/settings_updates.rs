@@ -6,7 +6,7 @@ pub(super) fn view(state: &Settings) -> El {
         .w_full()
         .gap(14.0)
         .child(heading("Updates"))
-        .child(text(format!("Shelf {} · Apple Silicon", env!("CARGO_PKG_VERSION"))).font(type_::LABEL).color(paint(MUTED)))
+        .child(text(format!("FolderLens {} · Apple Silicon", env!("CARGO_PKG_VERSION"))).font(type_::LABEL).color(paint(MUTED)))
         .child(card(col().w_full()
             .child(setting_row("Check daily", toggle("update-checks", state.prefs.update_checks, |s| {
                 s.prefs.update_checks = !s.prefs.update_checks;
@@ -21,11 +21,11 @@ pub(super) fn view(state: &Settings) -> El {
                 persist(s);
             })))
         ))
-        .child(text("Stable releases are the default. Automatic downloads need daily checks enabled. Shelf requires manual installation: current bundles cannot prove direct-install ownership. Quitting never installs an update.")
+        .child(text("Stable releases are the default. Automatic downloads need daily checks enabled. FolderLens requires manual installation: current bundles cannot prove direct-install ownership. Quitting never installs an update.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("Publisher signatures and checksums are required. Builds are ad-hoc signed, not notarized. macOS may require Privacy & Security → Open Anyway. Shelf never bypasses Gatekeeper.")
+        .child(text("Publisher signatures and checksums are required. Builds are ad-hoc signed, not notarized. macOS may require Privacy & Security → Open Anyway. FolderLens never bypasses Gatekeeper.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(text("Homebrew apps are not replaced. Use brew upgrade --cask jellydn/tap/shelf; the stable cask excludes prereleases.")
+        .child(text("Homebrew apps are not replaced. Use brew upgrade --cask jellydn/tap/folderlens; the stable cask excludes prereleases.")
             .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(row().w_full().justify_end().child(button("Check for Updates…", ButtonStyle::Primary).key("check-updates")
             .on_press(|s: &mut Settings| {

@@ -1,4 +1,4 @@
-//! Shelf's own catalog. It measures folders on this Mac. It does not read Levo.
+//! FolderLens's own catalog. It measures folders on this Mac. It does not read Levo.
 //!
 //! Hints name a group, a tier, and day fields. Careful waits the full day count,
 //! Balanced waits at most a day, and Aggressive waits an hour. A project day
@@ -281,7 +281,7 @@ fn leaf(
         path: format!("/fixture/{id}"),
         name: name.to_string(),
         detail: if locked {
-            "Shelf leaves this".to_string()
+            "FolderLens leaves this".to_string()
         } else {
             format!("idle {idle_h} h")
         },
@@ -333,7 +333,7 @@ fn assemble(rows: &[Row], hints: &HashMap<String, Hint>, updated: f64, commands:
         let detail = if held {
             format!("In use · {}", idle_phrase(idle_h))
         } else if tier_locked {
-            format!("Shelf leaves this · {}", idle_phrase(idle_h))
+            format!("FolderLens leaves this · {}", idle_phrase(idle_h))
         } else {
             idle_phrase(idle_h)
         };

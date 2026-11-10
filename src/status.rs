@@ -1,6 +1,6 @@
 //! The menu-bar item that shows and hides the panel.
 //!
-//! Rune has no macOS status item. Shelf installs its own. A headless snap and a
+//! Rune has no macOS status item. FolderLens installs its own. A headless snap and a
 //! unit test leave the panel where it is. The coordinate helper is pure so the
 //! position can be checked without AppKit.
 
@@ -168,7 +168,7 @@ mod macos {
         }
         let item = msg0(item, sel(c"retain"));
         // A stable name. An automatic Item-N can come back hidden.
-        msg_void_ptr(item, sel(c"setAutosaveName:"), ns_string("Shelf"));
+        msg_void_ptr(item, sel(c"setAutosaveName:"), ns_string("FolderLens"));
         let button = msg0(item, sel(c"button"));
         if button.is_null() {
             msg_void_ptr(bar, sel(c"removeStatusItem:"), item);
@@ -199,7 +199,7 @@ mod macos {
             if msg_ptr_bool(
                 msg0(window, sel(c"title")),
                 sel(c"isEqualToString:"),
-                ns_string("Shelf"),
+                ns_string("FolderLens"),
             ) {
                 PANEL.store(window, Ordering::Release);
                 break;
@@ -210,7 +210,7 @@ mod macos {
     }
 
     // macOS 27 needs a second-button-click toggle while a session is active.
-    // Other apps, including ShelfUpdater's dialog, must not dismiss Shelf.
+    // Other apps, including FolderLensUpdater's dialog, must not dismiss FolderLens.
     unsafe fn monitor_clicks() {
         let handler = block2::RcBlock::new(|event: *mut c_void| {
             if !is_visible()
@@ -261,24 +261,24 @@ mod macos {
             class(c"NSImage"),
             sel(c"imageWithSystemSymbolName:accessibilityDescription:"),
             name,
-            ns_string("Shelf"),
+            ns_string("FolderLens"),
         );
         if image.is_null() {
-            msg_void_ptr(button, sel(c"setTitle:"), ns_string("Shelf"));
+            msg_void_ptr(button, sel(c"setTitle:"), ns_string("FolderLens"));
             return;
         }
         msg_bool(image, sel(c"setTemplate:"), true);
         msg_void_ptr(button, sel(c"setImage:"), image);
-        msg_void_ptr(button, sel(c"setToolTip:"), ns_string("Shelf"));
+        msg_void_ptr(button, sel(c"setToolTip:"), ns_string("FolderLens"));
     }
 
     fn make_target() -> *mut c_void {
         static CLASS: OnceLock<usize> = OnceLock::new();
         let cls = *CLASS.get_or_init(|| unsafe {
             let super_cls = objc_getClass(c"NSObject".as_ptr());
-            let cls = objc_allocateClassPair(super_cls, c"ShelfStatusTarget".as_ptr(), 0);
+            let cls = objc_allocateClassPair(super_cls, c"FolderLensStatusTarget".as_ptr(), 0);
             if cls.is_null() {
-                return objc_getClass(c"ShelfStatusTarget".as_ptr()) as usize;
+                return objc_getClass(c"FolderLensStatusTarget".as_ptr()) as usize;
             }
             let protocol = objc_getProtocol(c"NSStatusItemExpandedInterfaceDelegate".as_ptr());
             if !protocol.is_null() {
@@ -342,7 +342,7 @@ mod macos {
         _animated: i8,
     ) {
         // A helper dialog or another app can end AppKit's transient session.
-        // Shelf stays visible until Close, Escape, or an explicit tray toggle.
+        // FolderLens stays visible until Close, Escape, or an explicit tray toggle.
         set_highlight(is_visible());
     }
 
@@ -411,7 +411,7 @@ mod macos {
 
     fn ns_string(text: &str) -> *mut c_void {
         let c = std::ffi::CString::new(text)
-            .unwrap_or_else(|_| std::ffi::CString::new("Shelf").unwrap());
+            .unwrap_or_else(|_| std::ffi::CString::new("FolderLens").unwrap());
         msg_cstr(
             class(c"NSString"),
             sel(c"stringWithUTF8String:"),
@@ -616,10 +616,10 @@ mod macos {
         #[test]
         fn ending_an_update_popup_session_preserves_the_panel_until_explicit_close() {
             // The status item owns process-wide callbacks; isolate from headless UI tests.
-            if std::env::var_os("SHELF_STATUS_TEST_CHILD").is_none() {
+            if std::env::var_os("FOLDERLENS_STATUS_TEST_CHILD").is_none() {
                 let result = std::process::Command::new(std::env::current_exe().unwrap())
                     .args(["--exact", std::thread::current().name().unwrap()])
-                    .env("SHELF_STATUS_TEST_CHILD", "1")
+                    .env("FOLDERLENS_STATUS_TEST_CHILD", "1")
                     .output()
                     .unwrap();
                 assert!(
@@ -644,7 +644,7 @@ mod macos {
             }
             assert!(
                 is_visible(),
-                "Ending a transient session must not hide Shelf"
+                "Ending a transient session must not hide FolderLens"
             );
             unsafe {
                 begin(
@@ -666,9 +666,12 @@ mod macos {
                     std::ptr::null_mut(),
                 );
             }
-            assert!(is_visible(), "The next tray session must reopen Shelf");
+            assert!(is_visible(), "The next tray session must reopen FolderLens");
             conceal();
-            assert!(!is_visible(), "Explicit dismissal must still hide Shelf");
+            assert!(
+                !is_visible(),
+                "Explicit dismissal must still hide FolderLens"
+            );
             unsafe {
                 end(
                     std::ptr::null_mut(),
@@ -677,7 +680,10 @@ mod macos {
                     0,
                 );
             }
-            assert!(!is_visible(), "A late popup callback must not reopen Shelf");
+            assert!(
+                !is_visible(),
+                "A late popup callback must not reopen FolderLens"
+            );
             unsafe {
                 click(
                     std::ptr::null_mut(),
@@ -685,7 +691,10 @@ mod macos {
                     std::ptr::null_mut(),
                 );
             }
-            assert!(is_visible(), "The explicit tray callback still opens Shelf");
+            assert!(
+                is_visible(),
+                "The explicit tray callback still opens FolderLens"
+            );
             unsafe {
                 click(
                     std::ptr::null_mut(),
@@ -695,7 +704,7 @@ mod macos {
             }
             assert!(
                 !is_visible(),
-                "The explicit tray callback still closes Shelf"
+                "The explicit tray callback still closes FolderLens"
             );
         }
     }
@@ -753,7 +762,7 @@ mod tests {
             );
             assert!(
                 !button_pressed(button, x, y, true),
-                "Closing a separate update popup must leave Shelf visible: {x}, {y}"
+                "Closing a separate update popup must leave FolderLens visible: {x}, {y}"
             );
         }
     }

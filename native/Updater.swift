@@ -59,10 +59,10 @@ enum UpdateError: Error, LocalizedError {
       return "The download does not match the signed size and checksum. It was rejected."
     case .unsupportedInstall:
       return
-        "Shelf cannot replace this installation safely. Download the release manually, or use brew upgrade --cask jellydn/tap/shelf for Homebrew."
+        "FolderLens cannot replace this installation safely. Download the release manually, or use brew upgrade --cask jellydn/tap/folderlens for Homebrew."
     case .unknownOrigin:
       return
-        "Installation origin is unverified, so native replacement is disabled. If Homebrew installed Shelf, use brew upgrade --cask jellydn/tap/shelf. Otherwise install the verified ZIP from ~/Library/Application Support/Shelf/Updates manually, or download the DMG from github.com/jellydn/shelf/releases. macOS approval still applies."
+        "Installation origin is unverified, so native replacement is disabled. If Homebrew installed FolderLens, use brew upgrade --cask jellydn/tap/folderlens. Otherwise install the verified ZIP from ~/Library/Application Support/FolderLens/Updates manually, or download the DMG from github.com/jellydn/folderlens/releases. macOS approval still applies."
     case .download:
       return "The GitHub update check or download failed. Check your network and retry."
     case .process:
@@ -135,7 +135,7 @@ struct Manifest: Codable {
     guard schema == 1, tag == expected, tag == "v\(version)", expires > now,
       channel == (parsed.prerelease.isEmpty ? "stable" : "prerelease"),
       prereleases || parsed.prerelease.isEmpty,
-      asset == "Shelf-\(version)-macos-arm64.zip", size > 0, size <= 536_870_912,
+      asset == "FolderLens-\(version)-macos-arm64.zip", size > 0, size <= 536_870_912,
       sha256.count == 64, sha256.allSatisfy({ $0.isHexDigit && !$0.isUppercase })
     else { throw UpdateError.invalidMetadata }
   }
@@ -187,9 +187,9 @@ func isHomebrew(
   // Casks move the real app into Applications, then link Caskroom back to it.
   return caskrooms.contains { root in
     let versions = try? FileManager.default.contentsOfDirectory(
-      at: root.appendingPathComponent("shelf"), includingPropertiesForKeys: nil)
+      at: root.appendingPathComponent("folderlens"), includingPropertiesForKeys: nil)
     return versions?.contains {
-      $0.appendingPathComponent("Shelf.app").resolvingSymlinksInPath() == target
+      $0.appendingPathComponent("FolderLens.app").resolvingSymlinksInPath() == target
     } ?? false
   }
 }
@@ -206,7 +206,7 @@ func requireDirectInstallation(_ bundle: URL) throws {
 func replaceBundle(staged: URL, target: URL, launch: (URL) throws -> Void) throws {
   let fm = FileManager.default
   let backup = target.deletingLastPathComponent().appendingPathComponent(
-    ".Shelf-previous-\(UUID().uuidString).app")
+    ".FolderLens-previous-\(UUID().uuidString).app")
   // Atomically exchange: interruption must never leave the installed path absent.
   guard renamex_np(staged.path, target.path, UInt32(RENAME_SWAP)) == 0 else {
     throw UpdateError.process
@@ -228,7 +228,7 @@ func replaceBundle(staged: URL, target: URL, launch: (URL) throws -> Void) throw
 func quarantineDownload(_ file: URL) throws {
   let timestamp = String(Int(Date().timeIntervalSince1970), radix: 16)
   // Publisher verification does not replace Gatekeeper's download assessment.
-  try run("/usr/bin/xattr", ["-w", "com.apple.quarantine", "0083;\(timestamp);Shelf;\(UUID().uuidString)", file.path])
+  try run("/usr/bin/xattr", ["-w", "com.apple.quarantine", "0083;\(timestamp);FolderLens;\(UUID().uuidString)", file.path])
 }
 
 func settings(_ path: URL) -> [String: String] {
@@ -262,7 +262,7 @@ func notice(_ title: String, _ message: String, buttons: [String] = ["OK"]) -> I
   for button in buttons { alert.addButton(withTitle: button) }
   defer {
     alert.window.orderOut(nil)
-    // Return focus without reopening a Shelf window that the user explicitly closed.
+    // Return focus without reopening a FolderLens window that the user explicitly closed.
     if presenter?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
       presenter?.activate(options: [])
     }
@@ -297,7 +297,7 @@ struct Updater {
   func data(_ url: URL, max: Int) async throws -> Data {
     var request = URLRequest(url: url)
     request.setValue(
-      "Shelf/\(Bundle(path: bundle.path)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")",
+      "FolderLens/\(Bundle(path: bundle.path)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")",
       forHTTPHeaderField: "User-Agent")
     let (stream, response) = try await session.bytes(for: request)
     guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError.download }
@@ -334,7 +334,7 @@ struct Updater {
     try String(now).write(to: stamp, atomically: true, encoding: .utf8)
     let prereleases = prefs["update_prereleases"] == "1"
     let currentText =
-      Bundle(path: bundle.path)?.object(forInfoDictionaryKey: "ShelfVersion") as? String ?? Bundle(
+      Bundle(path: bundle.path)?.object(forInfoDictionaryKey: "FolderLensVersion") as? String ?? Bundle(
         path: bundle.path)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
       ?? ""
     let current = try UpdateVersion(currentText)
@@ -347,7 +347,7 @@ struct Updater {
       }), key.count == 32
     else { throw UpdateError.invalidSignature }
     let releaseData = try await data(
-      URL(string: "https://api.github.com/repos/jellydn/shelf/releases?per_page=100")!,
+      URL(string: "https://api.github.com/repos/jellydn/folderlens/releases?per_page=100")!,
       max: 2_097_152)
     guard let releases = try JSONSerialization.jsonObject(with: releaseData) as? [[String: Any]]
     else { throw UpdateError.download }
@@ -362,20 +362,20 @@ struct Updater {
     }.sorted { $0.1 > $1.1 }
     guard let (tag, _) = candidates.first else {
       if manual {
-        _ = notice("Shelf is up to date", "No newer release is available on the selected channel.")
+        _ = notice("FolderLens is up to date", "No newer release is available on the selected channel.")
       }
       return
     }
     // URLs are constructed, never taken from unsigned API metadata or the manifest.
-    let base = URL(string: "https://github.com/jellydn/shelf/releases/download/\(tag)/")!
+    let base = URL(string: "https://github.com/jellydn/folderlens/releases/download/\(tag)/")!
     let manifestData = try await data(base.appendingPathComponent("update.json"), max: 16_384)
     let signature = try await data(base.appendingPathComponent("update.json.sig"), max: 64)
     let manifest = try verifiedManifest(
       manifestData, signature: signature, key: key, tag: tag, prereleases: prereleases, now: now)
     if isHomebrew(bundle) {
       _ = notice(
-        "Shelf \(manifest.version) is available",
-        "This app is managed by Homebrew. Run:\nbrew upgrade --cask jellydn/tap/shelf\nThe stable cask does not install prereleases."
+        "FolderLens \(manifest.version) is available",
+        "This app is managed by Homebrew. Run:\nbrew upgrade --cask jellydn/tap/folderlens\nThe stable cask does not install prereleases."
       )
       return
     }
@@ -384,7 +384,7 @@ struct Updater {
       if manual || prefs["update_downloads"] != "1" {
         guard
           notice(
-            "Shelf \(manifest.version) is available",
+            "FolderLens \(manifest.version) is available",
             "Download a publisher-verified update? Installation and restart need separate confirmation. This build is ad-hoc signed, not notarized.",
             buttons: ["Download", "Later"]) == 0
         else { return }
@@ -400,13 +400,13 @@ struct Updater {
       if fm.fileExists(atPath: archive.path) { try fm.removeItem(at: archive) }
       try fm.moveItem(at: temporary, to: archive)
     }
-    // An automatic download never grants installation, even when Shelf later quits.
+    // An automatic download never grants installation, even when FolderLens later quits.
     guard manual else { return }
     try requireDirectInstallation(bundle)
     guard
       notice(
-        "Install Shelf \(manifest.version)?",
-        "Shelf will close and restart. Finish or cancel any agent review first. The downloaded archive is publisher-verified; macOS Gatekeeper may still require approval because the app is not notarized.",
+        "Install FolderLens \(manifest.version)?",
+        "FolderLens will close and restart. Finish or cancel any agent review first. The downloaded archive is publisher-verified; macOS Gatekeeper may still require approval because the app is not notarized.",
         buttons: ["Install and Restart", "Not Now"]) == 0
     else { return }
     try await install(archive, manifest: manifest)
@@ -427,10 +427,10 @@ struct Updater {
       at: work, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
     defer { try? fm.removeItem(at: work) }
     try run("/usr/bin/ditto", ["-x", "-k", archive.path, work.path])
-    let candidate = work.appendingPathComponent("Shelf.app")
+    let candidate = work.appendingPathComponent("FolderLens.app")
     let info = Bundle(path: candidate.path)
-    guard info?.bundleIdentifier == "io.github.jellydn.shelf",
-      info?.object(forInfoDictionaryKey: "ShelfVersion") as? String == manifest.version,
+    guard info?.bundleIdentifier == "io.github.jellydn.folderlens",
+      info?.object(forInfoDictionaryKey: "FolderLensVersion") as? String == manifest.version,
       try Data(
         contentsOf: candidate.appendingPathComponent("Contents/Resources/update-public-key.txt"))
         == Data(
@@ -438,7 +438,7 @@ struct Updater {
     else { throw UpdateError.untrustedDownload }
     try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", candidate.path])
     let staged = bundle.deletingLastPathComponent().appendingPathComponent(
-      ".Shelf-update-\(UUID().uuidString).app")
+      ".FolderLens-update-\(UUID().uuidString).app")
     try fm.copyItem(at: candidate, to: staged)
     defer { try? fm.removeItem(at: staged) }
     try quarantineDownload(staged)
@@ -456,7 +456,7 @@ struct Updater {
 }
 
 @main
-struct ShelfUpdater {
+struct FolderLensUpdater {
   @MainActor static func main() async {
     let args = CommandLine.arguments
     if args.count == 4 && args[1] == "--verify-release" {
@@ -472,7 +472,7 @@ struct ShelfUpdater {
           key: key, tag: untrusted.tag, prereleases: true, now: Int(Date().timeIntervalSince1970))
         try verifyArchive(directory.appendingPathComponent(manifest.asset), manifest: manifest)
         let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: key)
-        for name in [manifest.asset, "Shelf-\(manifest.version)-macos-arm64.dmg"] {
+        for name in [manifest.asset, "FolderLens-\(manifest.version)-macos-arm64.dmg"] {
           guard
             try publicKey.isValidSignature(
               Data(contentsOf: directory.appendingPathComponent(name + ".sig")),
@@ -506,7 +506,7 @@ struct ShelfUpdater {
       // Do not expose paths, provider context, credentials, URLs or raw transport errors.
       if manual {
         _ = notice(
-          "Shelf update unavailable",
+          "FolderLens update unavailable",
           (error as? UpdateError)?.errorDescription
             ?? "Update verification failed. Check your network and retry. No update was installed.")
       }
@@ -533,7 +533,7 @@ func selfTest() async throws {
   let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
   let manifest = Manifest(
     schema: 1, version: "0.2.0-beta.1", tag: "v0.2.0-beta.1", channel: "prerelease", expires: 200,
-    asset: "Shelf-0.2.0-beta.1-macos-arm64.zip", size: bytes.count, sha256: digest)
+    asset: "FolderLens-0.2.0-beta.1-macos-arm64.zip", size: bytes.count, sha256: digest)
   let data = try JSONEncoder().encode(manifest)
   let signature = try key.signature(for: data)
   let verified = try verifiedManifest(
@@ -578,14 +578,14 @@ func selfTest() async throws {
   try run("/usr/bin/xattr", ["-p", "com.apple.quarantine", temporary.path])
   try (bytes + Data("tampered".utf8)).write(to: temporary)
   reject { try verifyArchive(temporary, manifest: manifest) }
-  require(isHomebrew(URL(fileURLWithPath: "/opt/homebrew/Caskroom/shelf/0.1.0/Shelf.app")))
-  require(!isHomebrew(URL(fileURLWithPath: "/Applications/Shelf.app"), caskrooms: []))
+  require(isHomebrew(URL(fileURLWithPath: "/opt/homebrew/Caskroom/folderlens/0.1.0/FolderLens.app")))
+  require(!isHomebrew(URL(fileURLWithPath: "/Applications/FolderLens.app"), caskrooms: []))
   let transaction = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   try FileManager.default.createDirectory(at: transaction, withIntermediateDirectories: false)
   defer { try? FileManager.default.removeItem(at: transaction) }
-  let apps = transaction.appendingPathComponent("Applications/Shelf.app")
+  let apps = transaction.appendingPathComponent("Applications/FolderLens.app")
   let caskroom = transaction.appendingPathComponent("Caskroom")
-  let receipt = caskroom.appendingPathComponent("shelf/0.1.0/Shelf.app")
+  let receipt = caskroom.appendingPathComponent("folderlens/0.1.0/FolderLens.app")
   try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
   try FileManager.default.createDirectory(
     at: receipt.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -596,7 +596,7 @@ func selfTest() async throws {
   require(isHomebrew(apps, caskrooms: [caskroom]))
   // Finder may omit a custom prefix, and a moved cask may leave a stale artifact link.
   reject { try requireDirectInstallation(apps) }
-  let moved = transaction.appendingPathComponent("Moved/Shelf.app")
+  let moved = transaction.appendingPathComponent("Moved/FolderLens.app")
   try FileManager.default.createDirectory(
     at: moved.deletingLastPathComponent(), withIntermediateDirectories: true)
   try FileManager.default.moveItem(at: apps, to: moved)
@@ -619,7 +619,7 @@ func selfTest() async throws {
   require(!FileManager.default.fileExists(atPath: transaction.appendingPathComponent("Updates").path))
   require(FileManager.default.fileExists(atPath: moved.path))
   require(!isHomebrew(transaction.appendingPathComponent("Other.app"), caskrooms: [caskroom]))
-  let target = transaction.appendingPathComponent("Shelf.app")
+  let target = transaction.appendingPathComponent("FolderLens.app")
   let staged = transaction.appendingPathComponent("staged.app")
   try Data("old".utf8).write(to: target)
   try Data("new".utf8).write(to: staged)

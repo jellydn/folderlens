@@ -27,7 +27,7 @@ impl Provider {
             Some("copilot") => Ok(Self::Copilot),
             Some("pi") => Ok(Self::Pi),
             Some("opencode") => Ok(Self::OpenCode),
-            _ => Err("Choose Grok, Antigravity, Copilot, Pi or OpenCode in Agent settings. This executable has no Shelf adapter; Shelf will not switch agents.".into()),
+            _ => Err("Choose Grok, Antigravity, Copilot, Pi or OpenCode in Agent settings. This executable has no FolderLens adapter; FolderLens will not switch agents.".into()),
         }
     }
 
@@ -46,10 +46,10 @@ impl Provider {
                 .split_once('/')
                 .is_some_and(|(provider, id)| !provider.is_empty() && !id.is_empty())
         {
-            return Err("Use an exact model ID with its provider prefix. Shelf does not use fuzzy model matches or a paid fallback.".into());
+            return Err("Use an exact model ID with its provider prefix. FolderLens does not use fuzzy model matches or a paid fallback.".into());
         }
         if self == Self::OpenCode && model.is_empty() {
-            return Err("Choose an explicit model with its provider prefix for OpenCode. Shelf will not select an automatic paid model.".into());
+            return Err("Choose an explicit model with its provider prefix for OpenCode. FolderLens will not select an automatic paid model.".into());
         }
         Ok(())
     }
@@ -72,7 +72,8 @@ impl Launch {
     ) -> Result<Self, String> {
         let provider = Provider::for_bin(bin)?;
         provider.validate_model(model)?;
-        let exe = std::env::current_exe().map_err(|_| "Cannot locate Shelf reader executable")?;
+        let exe =
+            std::env::current_exe().map_err(|_| "Cannot locate FolderLens reader executable")?;
         let mut common = Vec::<String>::new();
         let mut env = Vec::<(&str, PathBuf)>::new();
         let mut unset = Vec::new();
@@ -89,7 +90,7 @@ impl Launch {
                 (&["acp"], &["--conversation"])
             }
             Provider::Copilot => {
-                let mcp = json!({"mcpServers":{"shelf":{"type":"stdio","command":exe,"args":["--shelf-reader",socket],"tools":["read_selected"]}}});
+                let mcp = json!({"mcpServers":{"folderlens":{"type":"stdio","command":exe,"args":["--folderlens-reader",socket],"tools":["read_selected"]}}});
                 common.extend(
                     [
                         "--mode",
@@ -100,8 +101,8 @@ impl Launch {
                         "--disable-builtin-mcps",
                         "--no-bash-env",
                         "--sync-session=off",
-                        "--available-tools=shelf-read_selected",
-                        "--allow-tool=shelf(read_selected)",
+                        "--available-tools=folderlens-read_selected",
+                        "--allow-tool=folderlens(read_selected)",
                         "--additional-mcp-config",
                     ]
                     .map(String::from),
@@ -111,14 +112,14 @@ impl Launch {
                 (&["--acp"], &["--resume"])
             }
             Provider::Pi => {
-                let extension = dir.join("shelf-reader.mjs");
+                let extension = dir.join("folderlens-reader.mjs");
                 // Only this explicit extension loads. The model never controls its executable or socket.
                 std::fs::write(&extension, include_str!("pi-reader.mjs"))
-                    .map_err(|_| "Cannot save Shelf reader extension")?;
+                    .map_err(|_| "Cannot save FolderLens reader extension")?;
                 env.extend([
-                    ("SHELF_READER_EXECUTABLE", exe.clone()),
-                    ("SHELF_READER_SOCKET", socket.into()),
-                    ("SHELF_EXPECTED_MODEL", model.into()),
+                    ("FOLDERLENS_READER_EXECUTABLE", exe.clone()),
+                    ("FOLDERLENS_READER_SOCKET", socket.into()),
+                    ("FOLDERLENS_EXPECTED_MODEL", model.into()),
                 ]);
                 common.extend(
                     [
@@ -131,7 +132,7 @@ impl Launch {
                         "--no-approve",
                         "--offline",
                         "--tools",
-                        "shelf_read_selected",
+                        "folderlens_read_selected",
                         "--extension",
                     ]
                     .map(String::from),
@@ -144,16 +145,16 @@ impl Launch {
             Provider::OpenCode => {
                 // These schemas are verified against 2.0.23, not current 2.2+ web examples.
                 verify_opencode(std::ffi::OsStr::new(bin), cancel)?;
-                let permissions = json!([{"action":"*","resource":"*","effect":"deny"},{"action":"shelf_read_selected","resource":"*","effect":"allow"}]);
+                let permissions = json!([{"action":"*","resource":"*","effect":"deny"},{"action":"folderlens_read_selected","resource":"*","effect":"allow"}]);
                 let config = json!({
-                    "model":model,"default_agent":"shelf-readonly","update":"disable","share":"disabled","snapshots":false,"warming":false,
+                    "model":model,"default_agent":"folderlens-readonly","update":"disable","share":"disabled","snapshots":false,"warming":false,
                     "permissions":permissions,
                     "agents":{
-                        "shelf-readonly":{"mode":"primary","model":model,"description":"Shelf selected-folder review only","permissions":permissions},
+                        "folderlens-readonly":{"mode":"primary","model":model,"description":"FolderLens selected-folder review only","permissions":permissions},
                         "title":{"model":model},"compaction":{"model":model}
                     },
-                    "mcp":{"servers":{"shelf":{"type":"local","command":[exe,"--shelf-reader",socket],"codemode":false}}},
-                    "experimental":{"policies":[{"action":"permission","resource":"*","effect":"deny"},{"action":"permission","resource":"shelf_read_selected:*","effect":"allow"}]}
+                    "mcp":{"servers":{"folderlens":{"type":"local","command":[exe,"--folderlens-reader",socket],"codemode":false}}},
+                    "experimental":{"policies":[{"action":"permission","resource":"*","effect":"deny"},{"action":"permission","resource":"folderlens_read_selected:*","effect":"allow"}]}
                 });
                 let config_path = dir.join("opencode.json");
                 std::fs::write(&config_path, config.to_string())
@@ -195,10 +196,10 @@ impl Launch {
         };
         let mut resume_command = make(resume);
         if provider == Provider::OpenCode {
-            // A saved launcher must recheck after CLI upgrades, even while Shelf is closed.
+            // A saved launcher must recheck after CLI upgrades, even while FolderLens is closed.
             let mut checked = Command::new(&exe);
             checked
-                .arg("--shelf-opencode-resume")
+                .arg("--folderlens-opencode-resume")
                 .arg(bin)
                 .args(resume_command.get_args())
                 .current_dir(dir);
@@ -273,7 +274,7 @@ fn verify_opencode(bin: &std::ffi::OsStr, cancel: &AtomicU8) -> Result<(), Strin
                     return if status.success() && version == "2.0.23" {
                         Ok(())
                     } else {
-                        Err("Shelf's private OpenCode adapter requires 2.0.23. This version's policy and configuration schema is not verified. No review was sent; choose another agent in Settings.".into())
+                        Err("FolderLens's private OpenCode adapter requires 2.0.23. This version's policy and configuration schema is not verified. No review was sent; choose another agent in Settings.".into())
                     };
                 }
             }
@@ -292,7 +293,7 @@ pub(super) fn resume_helper() -> Option<i32> {
     let args = std::env::args_os().collect::<Vec<_>>();
     if args
         .get(1)
-        .is_none_or(|arg| arg != "--shelf-opencode-resume")
+        .is_none_or(|arg| arg != "--folderlens-opencode-resume")
     {
         return None;
     }
@@ -318,7 +319,9 @@ impl super::Session {
                 options.iter().any(|option| {
                     option["id"] == "mode"
                         && option["options"].as_array().is_some_and(|modes| {
-                            modes.iter().any(|mode| mode["value"] == "shelf-readonly")
+                            modes
+                                .iter()
+                                .any(|mode| mode["value"] == "folderlens-readonly")
                         })
                 })
             })
@@ -331,7 +334,7 @@ impl super::Session {
             while !ready(created) {
                 let message = self.next_message().map_err(|error| {
                     if Instant::now() >= self.deadline {
-                        "OpenCode did not load Shelf's private read-only mode in time. No review was sent. Check the CLI version and retry from Agent settings.".into()
+                        "OpenCode did not load FolderLens's private read-only mode in time. No review was sent. Check the CLI version and retry from Agent settings.".into()
                     } else { error }
                 })?;
                 if message["method"] == "session/update"

@@ -14,13 +14,13 @@ fn helper(executable: &Path) -> Option<(PathBuf, PathBuf)> {
     {
         return None;
     }
-    Some((macos.join("ShelfUpdater"), bundle.into()))
+    Some((macos.join("FolderLensUpdater"), bundle.into()))
 }
 
 fn command(manual: bool) -> Result<Command, &'static str> {
-    let executable = std::env::current_exe().map_err(|_| "Cannot locate Shelf.app")?;
+    let executable = std::env::current_exe().map_err(|_| "Cannot locate FolderLens.app")?;
     let (helper, bundle) = helper(&executable)
-        .ok_or("Update checks need the bundled Shelf.app. Build with sh scripts/bundle.sh.")?;
+        .ok_or("Update checks need the bundled FolderLens.app. Build with sh scripts/bundle.sh.")?;
     if !helper.is_file() {
         return Err("This bundle has no update helper. Download a newer verified release.");
     }
@@ -65,13 +65,15 @@ mod tests {
 
     #[test]
     fn only_app_bundles_can_start_the_installer() {
-        assert!(helper(Path::new("/tmp/shelf")).is_none());
-        assert!(helper(Path::new("/tmp/Shelf.app/Other/Shelf")).is_none());
+        assert!(helper(Path::new("/tmp/folderlens")).is_none());
+        assert!(helper(Path::new("/tmp/FolderLens.app/Other/FolderLens")).is_none());
         assert_eq!(
-            helper(Path::new("/Applications/Shelf.app/Contents/MacOS/Shelf")),
+            helper(Path::new(
+                "/Applications/FolderLens.app/Contents/MacOS/FolderLens"
+            )),
             Some((
-                PathBuf::from("/Applications/Shelf.app/Contents/MacOS/ShelfUpdater"),
-                PathBuf::from("/Applications/Shelf.app")
+                PathBuf::from("/Applications/FolderLens.app/Contents/MacOS/FolderLensUpdater"),
+                PathBuf::from("/Applications/FolderLens.app")
             ))
         );
     }

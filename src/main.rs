@@ -1,12 +1,12 @@
-//! Shelf is a menu-tray review of what a cleanup level would tick.
+//! FolderLens is a menu-tray review of what a cleanup level would tick.
 //!
-//! Rune has no macOS status item, so Shelf installs its own. The panel is an
+//! Rune has no macOS status item, so FolderLens installs its own. The panel is an
 //! accessory window: no Dock icon. A click on the menu-bar item shows it under
 //! that item. The action list lives in the panel. Confirm records the choice
 //! and deletes nothing. Settings and the panel are never open together.
 //!
 //! The list, the free-space line, and the gauges come from this Mac.
-//! Shelf ships its own hint catalog and measures the folders itself.
+//! FolderLens ships its own hint catalog and measures the folders itself.
 //! Tests click a fixed fixture so they do not depend on the live disk.
 //!
 //! `CARGO_HOME="$PWD/.cargo-home" cargo run -- --snap shots/tray.png`
@@ -234,7 +234,7 @@ fn leaf_view(s: &State, index: usize) -> catalog::Leaf {
         .any(|root| prefs::path_under(&leaf.path, root))
     {
         leaf.locked = true;
-        leaf.detail = "Shelf keeps this".to_string();
+        leaf.detail = "FolderLens keeps this".to_string();
         return leaf;
     }
     if s.prefs.keep_hours > 0 && catalog::can_tick(&leaf) && leaf.idle_h < s.prefs.keep_hours {
@@ -755,12 +755,12 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             row()
                 .w_full()
                 .h(56.0)
-                .px(18.0)
-                .gap(6.0)
+                .px(if compact { 12.0 } else { 18.0 })
+                .gap(if compact { 4.0 } else { 6.0 })
                 .center_y()
                 .window_drag()
                 .child(
-                    text("Shelf")
+                    text("FolderLens")
                         .font(TextStyle::new(16.0, 500.0))
                         .color(paint(INK))
                         .grow(1.0)
@@ -858,7 +858,7 @@ fn agent_help(s: &State) -> El {
         .child(if s.access_details { col().w_full().gap(8.0)
             .child(text(format!("{} · {}", prefs::agent_name(&s.prefs.agent_id).unwrap_or("Custom / unconfigured agent"), if s.prefs.model().is_empty() { "CLI default model" } else { s.prefs.model() }))
                 .key("agent-configuration").font(type_::LABEL).color(paint(INK)).wrap().w_full())
-            .child(text("Manual request; provider costs and data policies apply. An answer does not prove cleanup is safe. Live reads require the original and current eligible selection. Grok/Antigravity Terminal tools use their native controls, not Shelf's live reader. Provider controls are not an OS sandbox.")
+            .child(text("Manual request; provider costs and data policies apply. An answer does not prove cleanup is safe. Live reads require the original and current eligible selection. Grok/Antigravity Terminal tools use their native controls, not FolderLens's live reader. Provider controls are not an OS sandbox.")
                 .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
             .child(text("Review access settings").key("review-access").font(type_::LABEL).color(paint(BLUE))
                 .on_press(|_: &mut State| settings::open(settings::Page::Access)))
@@ -1117,11 +1117,11 @@ fn main() {
             }),
             ("agent-failed", |s| {
                 apply_level(s, Level::Balanced);
-                s.agent = Some(agent::Job::failed("Grok", "preview-only", "Agent ended without an answer (exit status: 2).\nunknown flag: --silent\nCheck the installed CLI version and login in Agent settings, then retry. Shelf did not change your selection."));
+                s.agent = Some(agent::Job::failed("Grok", "preview-only", "Agent ended without an answer (exit status: 2).\nunknown flag: --silent\nCheck the installed CLI version and login in Agent settings, then retry. FolderLens did not change your selection."));
             }),
             ("agent-error-details", |s| {
                 apply_level(s, Level::Balanced);
-                s.agent = Some(agent::Job::failed("Grok", "preview-only", "Agent ended without an answer (exit status: 2).\nunknown flag: --silent\nCheck the installed CLI version and login in Agent settings, then retry. Shelf did not change your selection."));
+                s.agent = Some(agent::Job::failed("Grok", "preview-only", "Agent ended without an answer (exit status: 2).\nunknown flag: --silent\nCheck the installed CLI version and login in Agent settings, then retry. FolderLens did not change your selection."));
                 s.agent_details = true;
             }),
             ("confirmed", |s| {
@@ -1141,7 +1141,7 @@ fn main() {
         ],
         poll: Some(poll),
         on_key: Some(on_key),
-        ..AppSpec::new("Shelf", size, live_state, view)
+        ..AppSpec::new("FolderLens", size, live_state, view)
     };
     let mut app = App::new(spec).accessory().configured_options(
         WindowOptions {
@@ -1702,7 +1702,7 @@ mod tests {
         });
         rt.frame(0.0);
         for reason in [
-            "Excluded · Shelf leaves this",
+            "Excluded · FolderLens leaves this",
             "Selected by you",
             "Excluded by you",
             "Balanced preset · idle 48 h",
@@ -1808,7 +1808,7 @@ mod tests {
 
         palette::open(&mut state, Some(palette::Target::Leaf(2)));
         palette::run(&mut state, "keep");
-        assert_eq!(leaf_view(&state, 2).detail, "Shelf keeps this");
+        assert_eq!(leaf_view(&state, 2).detail, "FolderLens keeps this");
         assert!(!catalog::can_tick(&leaf_view(&state, 2)));
         let saved = prefs::load_from(&state.prefs_path);
         assert!(saved.kept.iter().any(|path| path == "/fixture/logs"));
@@ -1863,7 +1863,7 @@ mod tests {
 
         state.catalog.leaves[4].path = "/work/app/node_modules".into();
         state.prefs.kept = vec!["/work/app".into()];
-        assert_eq!(leaf_view(&state, 4).detail, "Shelf keeps this");
+        assert_eq!(leaf_view(&state, 4).detail, "FolderLens keeps this");
         assert!(!catalog::can_tick(&leaf_view(&state, 4)));
         let _ = std::fs::remove_file(&state.prefs_path);
     }

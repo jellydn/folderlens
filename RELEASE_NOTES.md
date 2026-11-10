@@ -1,3 +1,14 @@
+## FolderLens — Unreleased rename
+
+Shelf is now named FolderLens in source builds, the app, its bundle, agent reader contracts and future release assets. Published 0.2.0 and earlier releases remain Shelf; their names and assets below are unchanged. A future release needs a new version/tag and matching release heading; do not republish v0.2.0.
+
+- Import legacy Shelf settings once when FolderLens settings are absent, preserving exclusions, recent-change holds, provider/model choices and permissions. Existing FolderLens settings win; originals and saved conversations are not removed. Folder sizes are remeasured.
+- Ship the existing unlettered icon under the new asset names. Align Pi's reader environment, tool and helper names with its provider, and align publisher signing with FolderLens release filenames. Keep the existing publisher key.
+- The first rename upgrade is manual: the shipped Shelf updater cannot accept FolderLens-named archives. See [migration instructions](docs/guide.md#migrating-from-shelf) for direct-download and Homebrew users. The current `folderlens` cask installs the immutable Shelf 0.2.0 asset, not an unreleased FolderLens app.
+- The new bundle ID may need a new macOS Full Disk Access grant. Old Shelf launchers retain their original executable and controls. No cleanup/delete path, automatic replacement or Gatekeeper bypass is added.
+
+Native install/restart, existing-user permission migration, real model/tool turns and native Terminal continuation remain unverified. Headless renders, harmless provider stubs and updater fixtures do not prove these flows. Builds remain ad-hoc signed, not notarized. The known Settings→tray report is not fixed by this rename.
+
 ## Shelf 0.2.0 — Quick review
 
 **Stable release for Apple Silicon, macOS 14+.** Review folder selections, reasons and exclusions from the menu bar. **Record choice saves a selection in memory; it never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
