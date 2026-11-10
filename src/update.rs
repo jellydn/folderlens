@@ -68,7 +68,9 @@ mod tests {
         assert!(helper(Path::new("/tmp/folderlens")).is_none());
         assert!(helper(Path::new("/tmp/FolderLens.app/Other/FolderLens")).is_none());
         assert_eq!(
-            helper(Path::new("/Applications/FolderLens.app/Contents/MacOS/FolderLens")),
+            helper(Path::new(
+                "/Applications/FolderLens.app/Contents/MacOS/FolderLens"
+            )),
             Some((
                 PathBuf::from("/Applications/FolderLens.app/Contents/MacOS/FolderLensUpdater"),
                 PathBuf::from("/Applications/FolderLens.app")

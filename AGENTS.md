@@ -10,6 +10,7 @@ The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codeba
 
 - `cargo run --release` — live app (menu-bar archivebox icon).
 - `cargo test --locked` — full tests, including one live disk/gauge check (headless; no display needed).
+- `node --test tests/pi-reader.mjs` — Pi reader launch/model boundary with a harmless helper, no SDK or model request.
 - `cargo test --locked untick_holds` — one test by name filter.
 - `cargo fmt --check && cargo clippy --locked --all-targets` — format check and lint, also run in CI.
 - `sh scripts/bundle.sh` — build `target/release/FolderLens.app` with stable ID `io.github.jellydn.folderlens` and `LSUIElement`.
@@ -40,6 +41,7 @@ Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-advance
 - Tests live in `#[cfg(test)] mod tests` at the bottom of each file. UI tests drive Rune's headless `Runtime` against `catalog::fixture()`. Provider tests use generated `/bin/sh` stubs; never call a real CLI or the network in tests.
 - `catalog::load_live()` scans `$HOME` and caches sizes at `~/Library/Application Support/FolderLens/sizes.tsv`. Delete that file to force a remeasure. First `cargo run`/`--snap` is slow.
 - `prefs::path_for_state()` returns a unique temp file under `cfg(test)`. Tests must not read or write the real `~/Library/Application Support/FolderLens/settings.txt`.
+- Absent FolderLens settings import legacy Shelf settings once; existing FolderLens files win. Keep legacy settings and conversations intact. The first rename upgrade is manual; see [migration](docs/guide.md#migrating-from-shelf).
 - Settings and the panel are never visible together: opening Settings calls `status::conceal()`, and a status-item click hides Settings.
 - Quick review starts at 720×718 points, resizes from 360 to 960 points wide, and has a 280-point minimum height so recording/readings remain visible. Below 620 points, Agent help precedes the folders in one scroll body. The header, Record choice and system readings stay fixed. Settings supports 360×420 points with a scrolling body and fixed Apply model action; advanced commands start collapsed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
 
@@ -81,6 +83,7 @@ Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-advance
 - `sh scripts/release.sh` creates an ad-hoc signed Apple Silicon DMG, ZIP, and `SHA256SUMS` under `target/release/assets`.
 - `assets/FolderLens.icns` is the app icon; `assets/favicon.svg` and raster sizes are for documentation sites, not the monochrome menu-bar symbol. Regenerate with `uv run --with pillow scripts/icons.py` on macOS; ordinary builds only copy committed assets.
 - Push a `v*` tag matching `Cargo.toml` to publish those assets. Update `RELEASE_NOTES.md` before tagging. Builds are not notarized.
+- Published 0.2.0 assets/bundle remain Shelf. Do not republish that tag or rewrite historical notes. The rename needs a new version and matching release heading before publication; this PR only ships source changes.
 - Branch/PR builds package test apps without requiring a release tag; tag builds must validate their version. Do not try to override GitHub's reserved `GITHUB_*` variables.
 - Release assets are `FolderLens-<version>-macos-arm64.dmg`, `FolderLens-<version>-macos-arm64.zip`, and `SHA256SUMS`. Minimum macOS is 14. Verify extracted/mounted bundle signatures and architecture, then re-download published assets and compare their digests. Ad-hoc signing is not Developer ID signing or notarization.
 - The Homebrew cask is `Casks/folderlens.rb` in `jellydn/homebrew-tap`, installed with `brew install --cask jellydn/tap/folderlens`. Its updater reads stable published releases, verifies the downloaded DMG against GitHub's digest, and updates only this cask. The tap workflow checks every six hours and supports manual dispatch; it needs no cross-repository secret.

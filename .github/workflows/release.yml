@@ -22,6 +22,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets
       - run: cargo test --locked
+      - run: node --test tests/pi-reader.mjs
       - name: Build signed bundle, DMG, ZIP, and checksums
         run: sh scripts/release.sh
       - name: Sign update metadata and assets (dedicated FolderLens key)
@@ -42,7 +43,7 @@ jobs:
         run: |
           awk -v tag="$GITHUB_REF_NAME" '
             NR == 1 && index($0, "## FolderLens " substr(tag, 2) " — ") != 1 { exit 1 }
-            /^## FolderLens / && ++sections > 1 { exit }
+            /^## (FolderLens|Shelf) / && ++sections > 1 { exit }
             { print }
           ' RELEASE_NOTES.md > target/release/notes.md
       - name: Publish release

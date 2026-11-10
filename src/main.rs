@@ -755,8 +755,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             row()
                 .w_full()
                 .h(56.0)
-                .px(18.0)
-                .gap(6.0)
+                .px(if compact { 12.0 } else { 18.0 })
+                .gap(if compact { 4.0 } else { 6.0 })
                 .center_y()
                 .window_drag()
                 .child(

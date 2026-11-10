@@ -72,7 +72,8 @@ impl Launch {
     ) -> Result<Self, String> {
         let provider = Provider::for_bin(bin)?;
         provider.validate_model(model)?;
-        let exe = std::env::current_exe().map_err(|_| "Cannot locate FolderLens reader executable")?;
+        let exe =
+            std::env::current_exe().map_err(|_| "Cannot locate FolderLens reader executable")?;
         let mut common = Vec::<String>::new();
         let mut env = Vec::<(&str, PathBuf)>::new();
         let mut unset = Vec::new();
@@ -318,7 +319,9 @@ impl super::Session {
                 options.iter().any(|option| {
                     option["id"] == "mode"
                         && option["options"].as_array().is_some_and(|modes| {
-                            modes.iter().any(|mode| mode["value"] == "folderlens-readonly")
+                            modes
+                                .iter()
+                                .any(|mode| mode["value"] == "folderlens-readonly")
                         })
                 })
             })

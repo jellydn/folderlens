@@ -97,7 +97,8 @@ pub fn path_for_state() -> PathBuf {
     {
         static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return std::env::temp_dir().join(format!("folderlens-prefs-{}-{n}.txt", std::process::id()));
+        return std::env::temp_dir()
+            .join(format!("folderlens-prefs-{}-{n}.txt", std::process::id()));
     }
     #[cfg(not(test))]
     {
@@ -106,7 +107,41 @@ pub fn path_for_state() -> PathBuf {
 }
 
 pub fn load_from(path: &Path) -> Prefs {
-    let Ok(text) = std::fs::read_to_string(path) else {
+    let text = std::fs::read_to_string(path).or_else(|error| {
+        if error.kind() != std::io::ErrorKind::NotFound
+            || !path.ends_with("FolderLens/settings.txt")
+        {
+            return Err(error);
+        }
+        let parent = path.parent().unwrap();
+        let legacy = parent.parent().unwrap().join("Shelf/settings.txt");
+        let text = std::fs::read_to_string(legacy)?;
+        // Publish a complete copy without overwriting settings from another process.
+        // If persistence fails, still apply the legacy exclusions for this session.
+        if std::fs::create_dir_all(parent).is_ok() {
+            let temporary = path.with_extension(format!("import-{}.tmp", std::process::id()));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            if let Ok(mut file) = options.open(&temporary) {
+                use std::io::Write;
+                let result = file.write_all(text.as_bytes()).and_then(|_| {
+                    file.sync_all()?;
+                    std::fs::hard_link(&temporary, path)
+                });
+                let _ = std::fs::remove_file(&temporary);
+                if result.is_err_and(|error| error.kind() == std::io::ErrorKind::AlreadyExists) {
+                    return std::fs::read_to_string(path);
+                }
+            }
+        }
+        Ok(text)
+    });
+    let Ok(text) = text else {
         return Prefs::default();
     };
     let mut prefs = Prefs::default();
@@ -406,8 +441,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_settings_are_imported_once_without_changing_the_original() {
+        let root = path_for_state().with_extension("migration");
+        let path = root.join("FolderLens/settings.txt");
+        let legacy = root.join("Shelf/settings.txt");
+        let prefs = Prefs {
+            agent_id: "pi".into(),
+            models: BTreeMap::from([("pi".into(), "provider/exact-model".into())]),
+            keep_hours: 72,
+            kept: vec!["/work/important".into()],
+            update_checks: false,
+            ..Prefs::default()
+        };
+        save_to(&legacy, &prefs);
+        let original = std::fs::read(&legacy).unwrap();
+        assert_eq!(load_from(&path), prefs);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read(&legacy).unwrap(), original);
+
+        save_to(&legacy, &Prefs::default());
+        assert_eq!(load_from(&path), prefs);
+        save_to(&path, &Prefs::default());
+        save_to(&legacy, &prefs);
+        assert_eq!(load_from(&path), Prefs::default());
+        // An empty new file is authoritative too; do not revive old grants.
+        std::fs::write(&path, "").unwrap();
+        assert_eq!(load_from(&path), Prefs::default());
+        assert_eq!(
+            load_from(&root.join("Other/settings.txt")),
+            Prefs::default()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn a_round_trip_keeps_the_agent_and_the_grant() {
-        let path = std::env::temp_dir().join(format!("folderlens-prefs-round-{}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("folderlens-prefs-round-{}", std::process::id()));
         let prefs = Prefs {
             agent_id: "claude".into(),
             agent_bin: "/usr/local/bin/claude".into(),
@@ -515,7 +585,8 @@ mod tests {
 
     #[test]
     fn an_old_file_leaves_the_hour_hold_off() {
-        let path = std::env::temp_dir().join(format!("folderlens-prefs-old-{}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("folderlens-prefs-old-{}", std::process::id()));
         std::fs::write(&path, "agent_id=grok\nkeep_hours=nope\n").unwrap();
         let prefs = load_from(&path);
         assert_eq!(prefs.agent_id, "grok");

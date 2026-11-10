@@ -668,7 +668,10 @@ mod macos {
             }
             assert!(is_visible(), "The next tray session must reopen FolderLens");
             conceal();
-            assert!(!is_visible(), "Explicit dismissal must still hide FolderLens");
+            assert!(
+                !is_visible(),
+                "Explicit dismissal must still hide FolderLens"
+            );
             unsafe {
                 end(
                     std::ptr::null_mut(),
@@ -677,7 +680,10 @@ mod macos {
                     0,
                 );
             }
-            assert!(!is_visible(), "A late popup callback must not reopen FolderLens");
+            assert!(
+                !is_visible(),
+                "A late popup callback must not reopen FolderLens"
+            );
             unsafe {
                 click(
                     std::ptr::null_mut(),
@@ -685,7 +691,10 @@ mod macos {
                     std::ptr::null_mut(),
                 );
             }
-            assert!(is_visible(), "The explicit tray callback still opens FolderLens");
+            assert!(
+                is_visible(),
+                "The explicit tray callback still opens FolderLens"
+            );
             unsafe {
                 click(
                     std::ptr::null_mut(),

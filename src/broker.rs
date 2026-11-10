@@ -57,7 +57,9 @@ impl Reader {
             .canonicalize()
             .map_err(|_| "Path is unavailable")?;
         if !self.allows(&path) {
-            return Err("FolderLens permits only currently selected, shared, unprotected paths.".into());
+            return Err(
+                "FolderLens permits only currently selected, shared, unprotected paths.".into(),
+            );
         }
         // Check the opened object, not only a pathname that can change between check and open.
         let file = File::options()
@@ -500,6 +502,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(error["result"]["isError"], true);
-        assert_eq!(error["result"]["content"][0]["text"], "FolderLens is closed");
+        assert_eq!(
+            error["result"]["content"][0]["text"],
+            "FolderLens is closed"
+        );
     }
 }
