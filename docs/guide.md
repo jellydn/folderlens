@@ -8,13 +8,13 @@ Detailed implementation, usage and verification notes. Start with the [short REA
 
 ## Current status
 
-FolderLens is the new, unreleased name of Shelf. The published **0.2.0** stable release is still Shelf, not a cleanup engine. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory; FolderLens does not delete the selected files.** Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
+FolderLens is the new name of Shelf, starting with **0.2.1**. It is not a cleanup engine. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory; FolderLens does not delete the selected files.** Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
 
 The app includes manual Ask Agent adapters, per-agent model settings, a bounded selected-folder reader, saved-session launchers and signed-update checks. Protocol stubs, headless UI tests and limited native metadata/download checks exercise these implementations. They do **not** establish end-to-end native model analysis, tool routing during a model turn, Terminal continuation, tray event routing, or actual update installation/restart and Gatekeeper behavior. Earlier screenshots, releases and history remain available; they are not evidence of completed safety review.
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.2.0)
+## Quick review (0.2.1)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
@@ -134,9 +134,9 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the Shelf-named DMG or ZIP containing `Shelf.app` from the [0.2.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.0). Check `SHA256SUMS`. Existing releases and assets are not replaced. FolderLens-named bundles are currently source builds only.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.2.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.1). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
-Or install the stable release through Homebrew. The `folderlens` cask currently installs `Shelf.app` from 0.2.0. It checks for new stable versions every six hours and can lag behind publication:
+Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 
 ```sh
 brew install --cask jellydn/tap/folderlens
@@ -159,10 +159,10 @@ Copy `target/release/FolderLens.app` to Applications if you want to keep it ther
 
 ### Migrating from Shelf
 
-The published Shelf 0.2.0 updater accepts only Shelf-named ZIPs. It cannot be changed by installing this source update and will reject a future FolderLens-named manifest before showing migration guidance. Use the release page or the source-build steps above, not the old in-app updater, for the first FolderLens installation. No automatic replacement is enabled.
+The published Shelf 0.2.0 updater accepts only Shelf-named ZIPs. It cannot be changed by the new release and rejects FolderLens-named manifests before showing migration guidance. Use the release page or the source-build steps above, not the old in-app updater, for the first FolderLens installation. No automatic replacement is enabled.
 
 - Quit Shelf before opening FolderLens. For a direct download, verify the new release and install `FolderLens.app` manually alongside the old app first. After checking your settings, you can remove the old app yourself; FolderLens never removes it.
-- For Homebrew, run `brew update`, then `brew upgrade --cask jellydn/tap/folderlens` once a FolderLens stable release is published. The current 0.2.0 cask still installs Shelf. If Homebrew still records the old `shelf` token, inspect `brew list --cask` and use Homebrew's cask migration/reinstall path; do not overwrite a Homebrew-managed app manually. Keep a backup of settings and chats and do not use `--zap`.
+- For Homebrew, run `brew update`, then `brew upgrade --cask jellydn/tap/folderlens`. Confirm the cask reports 0.2.1 or later; 0.2.0 still installs Shelf. If Homebrew still records the old `shelf` token, inspect `brew list --cask` and use Homebrew's cask migration/reinstall path; do not overwrite a Homebrew-managed app manually. Keep a backup of settings and chats and do not use `--zap`.
 - On first load, absent `FolderLens/settings.txt` settings are imported from `~/Library/Application Support/Shelf/settings.txt`, including exclusions, the recent-change hold, provider/model choices and permissions. An existing FolderLens file always wins. The legacy file is left intact; if the new file cannot be saved, legacy settings still apply for that session.
 - Saved conversations stay in `~/Library/Application Support/Shelf/Runs/`; they are not moved, deleted or silently rewritten. Old launchers refer to the old executable and provider controls. Keep Shelf if you need them, or read the saved context/analysis directly. Start a new FolderLens review for new live-read grants; old grants never revive.
 - Folder sizes are remeasured into the new cache. Downloaded Shelf updates stay in the old `Updates/` folder. The new bundle ID is `io.github.jellydn.folderlens`, not `io.github.jellydn.shelf`; macOS may require a new Full Disk Access grant and normal Gatekeeper approval. Publisher-key continuity is retained, not rotated. Install/restart and permission migration have not been verified on an existing user installation.

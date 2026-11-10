@@ -1,13 +1,15 @@
-## FolderLens — Unreleased rename
+## FolderLens 0.2.1 — First FolderLens release
 
-Shelf is now named FolderLens in source builds, the app, its bundle, agent reader contracts and future release assets. Published 0.2.0 and earlier releases remain Shelf; their names and assets below are unchanged. A future release needs a new version/tag and matching release heading; do not republish v0.2.0.
+**Stable release for Apple Silicon, macOS 14+.** The DMG and ZIP contain `FolderLens.app` with bundle ID `io.github.jellydn.folderlens`. Shelf is now named FolderLens in the app, agent reader contracts and release assets. Published 0.2.0 and earlier releases remain Shelf; their names and assets below are unchanged. **Record choice never deletes files or runs cleanup.**
 
 - Import legacy Shelf settings once when FolderLens settings are absent, preserving exclusions, recent-change holds, provider/model choices and permissions. Existing FolderLens settings win; originals and saved conversations are not removed. Folder sizes are remeasured.
 - Ship the existing unlettered icon under the new asset names. Align Pi's reader environment, tool and helper names with its provider, and align publisher signing with FolderLens release filenames. Keep the existing publisher key.
-- The first rename upgrade is manual: the shipped Shelf updater cannot accept FolderLens-named archives. See [migration instructions](docs/guide.md#migrating-from-shelf) for direct-download and Homebrew users. The current `folderlens` cask installs the immutable Shelf 0.2.0 asset, not an unreleased FolderLens app.
+- The first rename upgrade is manual: the shipped Shelf updater cannot accept FolderLens-named archives. See [migration instructions](https://github.com/jellydn/folderlens/blob/v0.2.1/docs/guide.md#migrating-from-shelf) for direct-download and Homebrew users. After the tap updates, `brew update` and `brew upgrade --cask jellydn/tap/folderlens` install `FolderLens.app`. Back up settings/chats; do not use `--zap`. Direct-download users can install alongside Shelf and remove the old app themselves after checking migration.
 - The new bundle ID may need a new macOS Full Disk Access grant. Old Shelf launchers retain their original executable and controls. No cleanup/delete path, automatic replacement or Gatekeeper bypass is added.
 
-Native install/restart, existing-user permission migration, real model/tool turns and native Terminal continuation remain unverified. Headless renders, harmless provider stubs and updater fixtures do not prove these flows. Builds remain ad-hoc signed, not notarized. The known Settings→tray report is not fixed by this rename.
+Release checks cover formatting, Clippy, the full macOS Rust suite, the Pi reader regression, updater self-tests, arm64 bundle signatures and DMG/ZIP packaging. Published metadata, ZIP and DMG must verify with the unchanged Ed25519 publisher key; re-download and check `SHA256SUMS` and GitHub asset digests.
+
+Existing-user migration, native update replacement/restart, Gatekeeper approval, real model/tool turns and native Terminal continuation remain unverified. An isolated cask installation checks package placement, not these flows. Headless renders, harmless provider stubs and updater fixtures do not prove them. Builds remain **ad-hoc signed, not Developer ID signed or notarized**. All installations remain manual-update-only. The known Settings→tray report is not fixed by this rename.
 
 ## Shelf 0.2.0 — Quick review
 

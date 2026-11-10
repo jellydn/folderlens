@@ -6,15 +6,15 @@ A macOS menu-bar app for reviewing folder selections, reasons and exclusions, wi
 
 **Record choice records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
 
-FolderLens is the new name for Shelf. The published **0.2.0** release is still Shelf; the rename is unreleased. Quick review, folder protections, manual agent help and publisher-verified update checks remain available. The [codebase map](.planning/codebase/ARCHITECTURE.md) documents the pre-rename source.
+FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, folder protections, manual agent help and publisher-verified update checks remain available. The [codebase map](.planning/codebase/ARCHITECTURE.md) documents the pre-rename source.
 
 ![Quick review preview with synthetic example data](shots/review-ledger.png)
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the Shelf-named DMG or ZIP containing `Shelf.app` from the [0.2.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.2.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.1) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
-Or install the stable release through Homebrew. The renamed `folderlens` cask currently installs `Shelf.app` from 0.2.0. The cask checks for new stable versions every six hours, so it can lag behind a new release.
+Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
 ```sh
 brew install --cask jellydn/tap/folderlens
