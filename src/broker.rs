@@ -57,7 +57,7 @@ impl Reader {
             .canonicalize()
             .map_err(|_| "Path is unavailable")?;
         if !self.allows(&path) {
-            return Err("Shelf permits only currently selected, shared, unprotected paths.".into());
+            return Err("FolderLens permits only currently selected, shared, unprotected paths.".into());
         }
         // Check the opened object, not only a pathname that can change between check and open.
         let file = File::options()
@@ -95,7 +95,7 @@ impl Reader {
             }
             names.sort();
             if !self.allows(&opened_path(&file)?) || *self.current.lock().unwrap() != access {
-                return Err("Shelf read access was revoked.".into());
+                return Err("FolderLens read access was revoked.".into());
             }
             return Ok(format!(
                 "Directory entries (up to 1024):\n{}",
@@ -111,10 +111,10 @@ impl Reader {
             .read_to_end(&mut bytes)
             .map_err(|_| "Cannot read file")?;
         if bytes.len() > 524_288 {
-            return Err("File exceeds Shelf's 512 KiB read limit.".into());
+            return Err("File exceeds FolderLens's 512 KiB read limit.".into());
         }
         if !self.allows(&opened_path(&file)?) {
-            return Err("Shelf read access was revoked.".into());
+            return Err("FolderLens read access was revoked.".into());
         }
         let text = String::from_utf8(bytes).map_err(|_| "Only UTF-8 text can be inspected")?;
         let first = params["line"].as_u64().unwrap_or(1).saturating_sub(1) as usize;
@@ -192,7 +192,7 @@ impl Broker {
             .as_nanos();
         // macOS limits Unix socket paths to 104 bytes. Run-folder paths can exceed that.
         let dir = PathBuf::from(format!(
-            "/tmp/shelf-read-{}-{stamp}-{sequence}",
+            "/tmp/folderlens-read-{}-{stamp}-{sequence}",
             std::process::id()
         ));
         std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
@@ -230,7 +230,7 @@ impl Broker {
                             packet(&mut BufReader::new(&mut stream)).and_then(|p| reader.read(&p));
                         // Revocation/closing never grants access through another provider's tools.
                         let response = if stop.load(Ordering::Relaxed) {
-                            Err("Shelf reader is closed.".into())
+                            Err("FolderLens reader is closed.".into())
                         } else {
                             response
                         };
@@ -295,7 +295,7 @@ fn packet(input: &mut impl BufRead) -> Result<Value, String> {
 fn forward(socket: &Path, params: &Value) -> Value {
     let result = (|| -> Result<Value, String> {
         let mut stream = UnixStream::connect(socket).map_err(|_| {
-            "Folder tools require Shelf to remain open. Saved chat context is still available."
+            "Folder tools require FolderLens to remain open. Saved chat context is still available."
         })?;
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -307,11 +307,11 @@ fn forward(socket: &Path, params: &Value) -> Value {
         let mut text = String::new();
         BufReader::new(stream.take(4_194_305))
             .read_line(&mut text)
-            .map_err(|_| "Shelf reader did not answer")?;
+            .map_err(|_| "FolderLens reader did not answer")?;
         if text.len() > 4_194_304 {
-            return Err("Shelf reader response exceeds its limit".into());
+            return Err("FolderLens reader response exceeds its limit".into());
         }
-        serde_json::from_str(&text).map_err(|_| "Invalid Shelf reader response".into())
+        serde_json::from_str(&text).map_err(|_| "Invalid FolderLens reader response".into())
     })();
     result.unwrap_or_else(|error| json!({"error": error}))
 }
@@ -320,14 +320,14 @@ fn forward(socket: &Path, params: &Value) -> Value {
 pub(super) fn helper() -> Option<i32> {
     let args: Vec<_> = std::env::args_os().collect();
     let mode = args.get(1)?.to_str()?;
-    if !matches!(mode, "--shelf-reader" | "--shelf-read") {
+    if !matches!(mode, "--folderlens-reader" | "--folderlens-read") {
         return None;
     }
     let Some(socket) = args.get(2) else {
         return Some(2);
     };
     let socket = Path::new(socket);
-    if mode == "--shelf-read" {
+    if mode == "--folderlens-read" {
         let response = packet(&mut std::io::stdin().lock())
             .map(|p| forward(socket, &p))
             .unwrap_or_else(|error| json!({"error":error}));
@@ -349,11 +349,11 @@ fn mcp_response(message: &Value, read: impl FnOnce(&Value) -> Value) -> Option<V
     let id = message.get("id")?;
     let result = match message["method"].as_str().unwrap_or("") {
         "initialize" => {
-            json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"shelf-reader","version":env!("CARGO_PKG_VERSION")}})
+            json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"folderlens-reader","version":env!("CARGO_PKG_VERSION")}})
         }
         "ping" => json!({}),
         "tools/list" => {
-            json!({"tools":[{"name":"read_selected","description":"Read bounded UTF-8 text or list an eligible selected directory through Shelf. Requires Shelf running. Never writes or executes commands.","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":2000}},"required":["path"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}]})
+            json!({"tools":[{"name":"read_selected","description":"Read bounded UTF-8 text or list an eligible selected directory through FolderLens. Requires FolderLens running. Never writes or executes commands.","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":2000}},"required":["path"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}]})
         }
         "tools/call" if message["params"]["name"] == "read_selected" => {
             let value = read(&message["params"]["arguments"]);
@@ -362,7 +362,7 @@ fn mcp_response(message: &Value, read: impl FnOnce(&Value) -> Value) -> Option<V
         }
         _ => {
             return Some(
-                json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"Shelf exposes only read_selected."}}),
+                json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"FolderLens exposes only read_selected."}}),
             )
         }
     };
@@ -478,7 +478,7 @@ mod tests {
         assert!(closed["error"]
             .as_str()
             .unwrap()
-            .contains("Shelf to remain open"));
+            .contains("FolderLens to remain open"));
         assert!(!socket.exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -496,10 +496,10 @@ mod tests {
         assert_eq!(denied["error"]["code"], -32601);
         let error = mcp_response(
             &json!({"id":3,"method":"tools/call","params":{"name":"read_selected","arguments":{}}}),
-            |_| json!({"error":"Shelf is closed"}),
+            |_| json!({"error":"FolderLens is closed"}),
         )
         .unwrap();
         assert_eq!(error["result"]["isError"], true);
-        assert_eq!(error["result"]["content"][0]["text"], "Shelf is closed");
+        assert_eq!(error["result"]["content"][0]["text"], "FolderLens is closed");
     }
 }

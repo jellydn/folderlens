@@ -1,4 +1,4 @@
-## Shelf 0.2.0 — Quick review
+## FolderLens 0.2.0 — Quick review
 
 **Stable release for Apple Silicon, macOS 14+.** Review folder selections, reasons and exclusions from the menu bar. **Record choice saves a selection in memory; it never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
 
@@ -10,11 +10,11 @@
 
 ### Verification and known limits
 
-Release checks cover formatting, Clippy, the full macOS Rust suite, native updater self-tests, packaging, arm64 architecture and code signatures. Dedicated Shelf Ed25519 signatures protect the metadata and archives. Published assets must also be downloaded again and verified against `SHA256SUMS`, GitHub asset digests and the committed publisher public key.
+Release checks cover formatting, Clippy, the full macOS Rust suite, native updater self-tests, packaging, arm64 architecture and code signatures. Dedicated FolderLens Ed25519 signatures protect the metadata and archives. Published assets must also be downloaded again and verified against `SHA256SUMS`, GitHub asset digests and the committed publisher public key.
 
 **Settings→tray reopening remains an unresolved native report.** Its cause and a native fix are not verified. Headless layouts and callback tests do not establish full native tray behavior. Real model/tool turns, native Terminal continuation and actual install/restart/Gatekeeper behavior remain unverified. Provider controls are not an OS sandbox. No real model request, installed-app replacement or cleanup is part of release verification.
 
-Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal macOS approval if required; Shelf does not bypass Gatekeeper. The stable label does not remove these limits.
+Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal macOS approval if required; FolderLens does not bypass Gatekeeper. The stable label does not remove these limits.
 
 ### Manual test checklist
 
@@ -23,7 +23,7 @@ Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal m
 3. Check compact/wide layouts, keyboard focus/Space, model Apply and explicit request/path-sharing permissions. No agent starts automatically.
 4. Only with separate provider cost/data consent, test analysis, Cancel, errors/Retry and saved-chat continuation. Stubs do not establish native model-turn coverage.
 
-## Shelf 0.2.0-beta.6 — Fresh source map and bounded agent transport
+## FolderLens 0.2.0-beta.6 — Fresh source map and bounded agent transport
 
 **Experimental prerelease, not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** This release uses current main after PR #13 merged. Stable/Homebrew and earlier release assets are unchanged.
 
@@ -34,11 +34,11 @@ Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal m
 
 ### Verification and limits
 
-Release checks cover formatting, Clippy, the full macOS Rust suite, native updater self-tests, packaging, architecture and code signatures. Publication requires dedicated Shelf Ed25519 signatures; published assets must also be downloaded again and checked against `SHA256SUMS` and the committed publisher public key.
+Release checks cover formatting, Clippy, the full macOS Rust suite, native updater self-tests, packaging, architecture and code signatures. Publication requires dedicated FolderLens Ed25519 signatures; published assets must also be downloaded again and checked against `SHA256SUMS` and the committed publisher public key.
 
 **Settings→tray reopening remains an unresolved native report.** Its cause is not established; this release does not claim a fix. Headless layouts and callback tests are not complete native tray proof. Real model/tool turns, native Terminal continuation and actual install/restart/Gatekeeper behavior remain unverified. No paid model prompt, installed-app replacement or cleanup is part of release verification.
 
-All current installs remain **manual-update-only**. Publisher-verified checks and opt-in downloads remain available; Homebrew installs use Homebrew. Apple Silicon, macOS 14+. Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal macOS approval if required; Shelf does not bypass Gatekeeper.
+All current installs remain **manual-update-only**. Publisher-verified checks and opt-in downloads remain available; Homebrew installs use Homebrew. Apple Silicon, macOS 14+. Builds are **ad-hoc signed, not Developer ID signed or notarized**. Use normal macOS approval if required; FolderLens does not bypass Gatekeeper.
 
 ### Manual test checklist
 
@@ -47,9 +47,9 @@ All current installs remain **manual-update-only**. Publisher-verified checks an
 3. Check compact/wide review and Settings, keyboard focus/Space, model Apply and request/path-sharing permissions. No agent starts automatically.
 4. Only with separate provider cost/data consent, request analysis and test Cancel, errors/Retry and successful saved-chat continuation. Protocol stubs do not establish native model-turn coverage.
 
-[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original presentation. Shelf is unaffiliated and not endorsed. Retained history and attribution do not establish cleanup safety. Earlier release notes follow unchanged.
+[Levo](https://omggg.wtf/levo/) was the direct reference for FolderLens's original presentation. FolderLens is unaffiliated and not endorsed. Retained history and attribution do not establish cleanup safety. Earlier release notes follow unchanged.
 
-## Shelf 0.2.0-beta.5 — Persistent Quick review
+## FolderLens 0.2.0-beta.5 — Persistent Quick review
 
 **Experimental prerelease, not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** PR #13 remains unmerged. Stable/Homebrew and earlier releases are unchanged.
 
@@ -61,7 +61,7 @@ All current installs remain **manual-update-only**. Publisher-verified checks an
 
 ### Manual test checklist
 
-1. Open Shelf, then click another app. Shelf should stay open. Close an update notice: Shelf should stay visible and usable. Test Close, Escape and the tray toggle separately; Escape closes Actions first. Do not install an update to test its notice.
+1. Open FolderLens, then click another app. FolderLens should stay open. Close an update notice: FolderLens should stay visible and usable. Test Close, Escape and the tray toggle separately; Escape closes Actions first. Do not install an update to test its notice.
 2. Open Settings and close it, then click the tray. **Settings→tray reopening is a separate unresolved issue**; report exact steps and macOS version if it fails. This release does not claim to fix it.
 3. Resize compact/wide, scroll and use keyboard Actions. Record choice and readings should stay reachable. Record an eligible selection, then change it: the recorded indicator clears and no files are deleted.
 4. Check Settings → Agent / Access: your provider/model, Apply, advanced setup, request and selected-path permissions. Switches save immediately; model edits need Apply. No request starts automatically.
@@ -69,9 +69,9 @@ All current installs remain **manual-update-only**. Publisher-verified checks an
 
 Apple Silicon, macOS 14+. Verify `SHA256SUMS` and publisher signatures. DMG/ZIP contain an **ad-hoc signed app, not Developer ID signed or notarized**; normal macOS approval may be required. All current installs remain manual-update-only. Real install/restart/Gatekeeper behavior is unverified. No installed app, preferences, model account or cleanup was changed during verification.
 
-[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original presentation. Please support Levo. Shelf is unaffiliated and not endorsed; retained attribution/history do not establish equivalent cleanup safety. Earlier release notes follow.
+[Levo](https://omggg.wtf/levo/) was the direct reference for FolderLens's original presentation. Please support Levo. FolderLens is unaffiliated and not endorsed; retained attribution/history do not establish equivalent cleanup safety. Earlier release notes follow.
 
-## Shelf 0.2.0-beta.4 — Quick review preview
+## FolderLens 0.2.0-beta.4 — Quick review preview
 
 **Experimental WIP, prerelease/not latest. Record choice saves a selection in memory; it never deletes files or runs cleanup.** Estimates are not reclaimed space. PR #13 remains unmerged; the stable Homebrew tap and earlier releases are unchanged.
 
@@ -83,7 +83,7 @@ Apple Silicon, macOS 14+. Verify `SHA256SUMS` and publisher signatures. DMG/ZIP 
 
 ### Manual test checklist
 
-1. Open Shelf from the tray, then Settings → tray. If reopening fails, report the steps and macOS version; this is a known issue, not a passing check.
+1. Open FolderLens from the tray, then Settings → tray. If reopening fails, report the steps and macOS version; this is a known issue, not a passing check.
 2. Resize compact/wide and scroll. Record choice and system readings should remain visible; Actions supports keyboard navigation.
 3. In Agent settings, choose your configured provider/model and Apply. Check that the model persists, invalid flags show an error, and nothing starts automatically. Keep path sharing off unless you choose otherwise.
 4. Select eligible folders and Record choice. Nothing is deleted. Change the selection: the recorded indicator must clear. Protected folders stay excluded.
@@ -91,11 +91,11 @@ Apple Silicon, macOS 14+. Verify `SHA256SUMS` and publisher signatures. DMG/ZIP 
 
 ### Download, credit and limits
 
-Apple Silicon, macOS 14+. DMG/ZIP contain an ad-hoc signed app, **not Developer ID signed or notarized**. Verify `SHA256SUMS`; metadata and both archives carry signatures checked against Shelf's pinned Ed25519 publisher key. Normal macOS approval may be required; no Gatekeeper bypass is provided.
+Apple Silicon, macOS 14+. DMG/ZIP contain an ad-hoc signed app, **not Developer ID signed or notarized**. Verify `SHA256SUMS`; metadata and both archives carry signatures checked against FolderLens's pinned Ed25519 publisher key. Normal macOS approval may be required; no Gatekeeper bypass is provided.
 
-[Levo](https://omggg.wtf/levo/) was the direct reference for Shelf's original UI/layout/interactions. Please support Levo through its official site. Shelf is not affiliated with or endorsed by Levo; attribution does not resolve the earlier presentation concern or establish equivalent cleanup safety. Historical assets and release notes remain below.
+[Levo](https://omggg.wtf/levo/) was the direct reference for FolderLens's original UI/layout/interactions. Please support Levo through its official site. FolderLens is not affiliated with or endorsed by Levo; attribution does not resolve the earlier presentation concern or establish equivalent cleanup safety. Historical assets and release notes remain below.
 
-## Shelf 0.2.0-beta.3 — Review ledger preview
+## FolderLens 0.2.0-beta.3 — Review ledger preview
 
 **Experimental WIP PoC. Record choice (formerly Confirm) records a selection in memory; it does not delete files or run cleanup.** Footprints are estimates, not reclaimed space or proof of cleanup safety.
 
@@ -106,25 +106,25 @@ Apple Silicon, macOS 14+. DMG/ZIP contain an ad-hoc signed app, **not Developer 
 
 ### Credit and scope
 
-[Levo](https://omggg.wtf/levo/) was the direct UI/layout/interaction reference for Shelf's original presentation in beta.2 and earlier. Please support or buy Levo through its official site. Shelf is not affiliated with or endorsed by Levo. Attribution neither resolves the earlier copied-presentation concern nor establishes equivalent cleanup safety; original assets/history are preserved.
+[Levo](https://omggg.wtf/levo/) was the direct UI/layout/interaction reference for FolderLens's original presentation in beta.2 and earlier. Please support or buy Levo through its official site. FolderLens is not affiliated with or endorsed by Levo. Attribution neither resolves the earlier copied-presentation concern nor establishes equivalent cleanup safety; original assets/history are preserved.
 
 This is the specifically authorized beta from the latest PR's exact verified commit, **prerelease and not latest stable**, not a main merge. Existing tags/assets and the stable Homebrew tap are unchanged. Promotion and later releases remain paused.
 
 ### Assets and verification limits
 
-Apple Silicon, macOS 14+. DMG and ZIP contain the same ad-hoc signed app. Check `SHA256SUMS`; signed update metadata, ZIP and DMG are verified with Shelf's pinned Ed25519 publisher key. Builds are **not Developer ID signed or notarized**. Use normal macOS approval if required; no quarantine removal or Gatekeeper bypass is provided.
+Apple Silicon, macOS 14+. DMG and ZIP contain the same ad-hoc signed app. Check `SHA256SUMS`; signed update metadata, ZIP and DMG are verified with FolderLens's pinned Ed25519 publisher key. Builds are **not Developer ID signed or notarized**. Use normal macOS approval if required; no quarantine removal or Gatekeeper bypass is provided.
 
 Rust tests, GPU-rendered headless UI, updater self-tests and package/signature checks cover the implementation. Native tray callbacks, real model/tool/Terminal turns and actual installation/restart/Gatekeeper behavior remain unverified. Agent access is manual/opt-in; provider costs/data policies apply, and provider controls are not an independent OS sandbox. No real cleanup, paid model prompt or installed-app replacement was performed for this preview.
 
-## Shelf 0.2.0-beta.2 — current-state prerelease
+## FolderLens 0.2.0-beta.2 — current-state prerelease
 
 **Experimental WIP PoC, not a finished cleanup utility.** Cleanup levels preview selections and estimated space. **Confirm records a choice in memory and does not delete files or run cleanup.**
 
 ### Levo credit and presentation status
 
-[Levo](https://omggg.wtf/levo/) was the direct UI, layout and interaction-behavior reference for Shelf's current presentation. Please support Levo and consider buying it through its official site. Shelf is not affiliated with or endorsed by Levo. This attribution does not resolve the copied-presentation concern or establish Levo-equivalent cleanup safety.
+[Levo](https://omggg.wtf/levo/) was the direct UI, layout and interaction-behavior reference for FolderLens's current presentation. Please support Levo and consider buying it through its official site. FolderLens is not affiliated with or endorsed by Levo. This attribution does not resolve the copied-presentation concern or establish Levo-equivalent cleanup safety.
 
-An independent Shelf presentation is **not complete** and is not included in this release. This is the one authorized current-state prerelease, **not latest stable**. Promotion and subsequent releases remain paused. Existing beta.1 assets and provenance are unchanged; the stable Homebrew tap remains on its stable channel.
+An independent FolderLens presentation is **not complete** and is not included in this release. This is the one authorized current-state prerelease, **not latest stable**. Promotion and subsequent releases remain paused. Existing beta.1 assets and provenance are unchanged; the stable Homebrew tap remains on its stable channel.
 
 ### Changes and update ownership
 
@@ -132,16 +132,16 @@ An independent Shelf presentation is **not complete** and is not included in thi
 - Pointer exit no longer dismisses the panel. Outside-click policy, second-click toggle, Escape and macOS 27 delegate callbacks are retained. Policy tests pass; native tray interaction remains unverified.
 - Bounded native archive download, explicit quarantine, atomic bundle exchange and disposable rollback checks. No real app replacement/restart or Gatekeeper approval was exercised.
 - Cancellation-aware prompt/version writes/reads, exact OpenCode continuation version check, post-mode model validation, Pi continuation model guard and stronger broker revocation/shutdown.
-- Unknown installation origin is now **manual-update-only**, including custom-prefix Homebrew apps launched without `HOMEBREW_PREFIX`, moved cask apps and aliases. Current packages provide no reliable positive direct-install provenance, so native replacement is disabled for all current installations, even with approval. Verified checks and opt-in downloads remain available; a manual check gives guidance. If Homebrew installed Shelf, use `brew upgrade --cask jellydn/tap/shelf`; otherwise install the verified ZIP or DMG manually.
+- Unknown installation origin is now **manual-update-only**, including custom-prefix Homebrew apps launched without `HOMEBREW_PREFIX`, moved cask apps and aliases. Current packages provide no reliable positive direct-install provenance, so native replacement is disabled for all current installations, even with approval. Verified checks and opt-in downloads remain available; a manual check gives guidance. If Homebrew installed FolderLens, use `brew upgrade --cask jellydn/tap/folderlens`; otherwise install the verified ZIP or DMG manually.
 - Non-blocking preview limits: no persistent download-ready indicator, first-100 release discovery and retained old rollback copies. No real backups were pruned.
 
 ### Installation, signatures and verification limits
 
-Apple Silicon, macOS 14 or later. Download the beta.2 DMG or ZIP explicitly and check `SHA256SUMS`. Metadata, ZIP and DMG carry signatures verified against Shelf's pinned dedicated Ed25519 publisher key. This is distinct from Apple trust: builds are **ad-hoc signed, not Developer ID signed or notarized**. macOS may require **Privacy & Security → Open Anyway**. No Apple Developer account, quarantine removal or Gatekeeper bypass is used.
+Apple Silicon, macOS 14 or later. Download the beta.2 DMG or ZIP explicitly and check `SHA256SUMS`. Metadata, ZIP and DMG carry signatures verified against FolderLens's pinned dedicated Ed25519 publisher key. This is distinct from Apple trust: builds are **ad-hoc signed, not Developer ID signed or notarized**. macOS may require **Privacy & Security → Open Anyway**. No Apple Developer account, quarantine removal or Gatekeeper bypass is used.
 
 Provider/model settings, bounded selected-folder tools and exact-session launchers are implemented, but protocol stubs and metadata probes do not verify native model turns, tool routing during a model turn or Terminal continuation. Tray event routing, actual replacement/restart, Gatekeeper approval and recovery from a post-launch crash remain unverified. Native replacement is blocked by the ownership gate, not advertised as a verified install path. Publisher verification, download fixtures and rollback fixtures are separate checks, not end-to-end proof of those paths.
 
-## Shelf 0.2.0-beta.1 — prerelease
+## FolderLens 0.2.0-beta.1 — prerelease
 
 Preview of provider/model support and publisher-verified updates for Apple Silicon Macs, macOS 14 or later. This release is **not latest stable** and is not installed by the stable Homebrew cask.
 
@@ -150,13 +150,13 @@ Preview of provider/model support and publisher-verified updates for Apple Silic
 - Ask Agent adapters for GitHub Copilot CLI, Pi and OpenCode, alongside Grok/Antigravity. OpenCode requires verified version 2.0.23.
 - Per-agent model choices in Settings, exact saved-session launchers, current-selection read broker, inline error recovery and privacy/account/cost notes. Free-model access can require an account/key and has limits; blank defaults can be paid. There are no automatic agent requests.
 - Settings → Updates: daily checks, opt-in downloads, stable default and opt-in prereleases. Installation/restart always requires separate confirmation; nothing installs on quit. Homebrew installations use `brew upgrade` and are never self-replaced.
-- Dedicated pinned Ed25519 publisher signatures on update metadata/assets, using Oak's signing-tool/Actions-secret pattern with a separate Shelf key. No unsigned fallback; metadata expires one year after signing.
+- Dedicated pinned Ed25519 publisher signatures on update metadata/assets, using Oak's signing-tool/Actions-secret pattern with a separate FolderLens key. No unsigned fallback; metadata expires one year after signing.
 
-**Confirm only records a choice. Shelf never deletes files or runs cleanup.**
+**Confirm only records a choice. FolderLens never deletes files or runs cleanup.**
 
 ### Install and security
 
-Download the DMG or ZIP explicitly from this prerelease. The app is ad-hoc signed, **not Developer ID signed or notarized**; no Apple Developer account was used. Publisher update signatures authenticate releases but do not replace Apple's trust decisions. macOS may require **System Settings → Privacy & Security → Open Anyway**. Shelf never removes quarantine or disables Gatekeeper. Intel builds are not provided.
+Download the DMG or ZIP explicitly from this prerelease. The app is ad-hoc signed, **not Developer ID signed or notarized**; no Apple Developer account was used. Publisher update signatures authenticate releases but do not replace Apple's trust decisions. macOS may require **System Settings → Privacy & Security → Open Anyway**. FolderLens never removes quarantine or disables Gatekeeper. Intel builds are not provided.
 
 Signed metadata and ZIP size/SHA-256 are checked before installation, followed by bundle identity/version/key continuity and strict code-signature validation. Installation requires a writable non-translocated app location. A previous app copy is retained for rollback; settings/chats are preserved.
 
@@ -168,25 +168,25 @@ Updater tests cover signature/metadata/archive rejection, versions/channels, Hom
 
 ---
 
-## Shelf 0.1.0
+## FolderLens 0.1.0
 
 First public release for Apple Silicon Macs running macOS 14 or later.
 
 - Menu-bar cleanup review with live memory, CPU, GPU, and disk-space readings.
 - Background disk scans and pointer-outside panel dismissal, including macOS 27 expanded-interface support.
-- Stable Shelf.app bundle, Settings, protected paths, manual selection, and Quit Shelf.
+- Stable FolderLens.app bundle, Settings, protected paths, manual selection, and Quit FolderLens.
 - Manual Ask Agent analysis for configured Grok and Antigravity CLI, saved selection context, progress/cancellation, inline error recovery, and exact-session Terminal launchers.
 - Optional read-only selected-folder callbacks; errors and analysis never change your selection.
 
-**Confirm only records your choice. Shelf does not delete files or run cleanup.** There are no automatic paid agent requests.
+**Confirm only records your choice. FolderLens does not delete files or run cleanup.** There are no automatic paid agent requests.
 
 ### Install
 
-Download the DMG, open it, and drag Shelf.app to Applications. The ZIP contains the same app. Verify downloads against SHA256SUMS.
+Download the DMG, open it, and drag FolderLens.app to Applications. The ZIP contains the same app. Verify downloads against SHA256SUMS.
 
-Homebrew: `brew install --cask jellydn/tap/shelf`.
+Homebrew: `brew install --cask jellydn/tap/folderlens`.
 
-If Homebrew requires third-party cask trust, review the tap and run `brew trust --cask jellydn/tap/shelf` before retrying. This trusts only Shelf, not the whole tap.
+If Homebrew requires third-party cask trust, review the tap and run `brew trust --cask jellydn/tap/folderlens` before retrying. This trusts only FolderLens, not the whole tap.
 
 These builds are ad-hoc signed, not Developer ID signed or notarized. macOS may require **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. Intel builds are not included.
 
@@ -194,4 +194,4 @@ These builds are ad-hoc signed, not Developer ID signed or notarized. macOS may 
 
 Only Grok and Antigravity CLI have in-app adapters; unsupported providers fail explicitly. Harmless stubs verify protocol handling, selection/privacy gates, read-only callbacks, failures, and saved-session launch arguments. Antigravity initialization/session creation was checked without a model prompt. Real model analysis, native folder-tool routing, and native chat continuation have not been verified end to end.
 
-On the development Mac, Grok refuses its read-only sandbox because a runtime socket symlink resolves outside its deny list. Shelf reports this error instead of disabling the sandbox. Terminal continuation uses the CLI's own plan/sandbox controls, not Shelf's ACP read filter. Destructive work always needs separate approval.
+On the development Mac, Grok refuses its read-only sandbox because a runtime socket symlink resolves outside its deny list. FolderLens reports this error instead of disabling the sandbox. Terminal continuation uses the CLI's own plan/sandbox controls, not FolderLens's ACP read filter. Destructive work always needs separate approval.
