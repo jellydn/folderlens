@@ -14,14 +14,19 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.0)
+## Quick review (0.3.1)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
 ### Notch and local checks
 
-The default surface is an Oak-style notch: 360×36 points collapsed, 480×230
-expanded, centered below the camera/menu-bar area on the primary display. It
+Starting with 0.3.1, FolderLens uses an Oak-style notch: 300×36
+points collapsed, 480×230 expanded. Version 0.3.0 used 360×36. It stays centered
+on the primary display and leaves the top 33-point row below the camera/menu-bar
+area plus an 8-point gap for Oak. Expansion grows downwards without entering that
+row. **Settings → General → Leave top row for Oak** is on by default, including for
+existing settings; turn it off to use the top row alone. This is a fixed placement,
+not automatic detection or collision handling for arbitrary windows. It
 repositions after expansion and display changes without covering camera hardware.
 It also works on displays without a physical notch. The compact view uses one
 line: folder (eligible candidate estimate), disk (free/total), CPU and memory icons with values, and
@@ -30,6 +35,13 @@ the exact scan state and the disk reading for its full label. CPU and memory pre
 apply to both surfaces. Missing readings
 show as unavailable, not zero. Expand for the same local scan controls as Review; **Review / AI**
 opens the full folder list and manual agent controls. No second scanner runs.
+
+**Quit** is visible in the expanded notch and in Review's fixed readings footer
+(including the tray fallback). Actions → Quit FolderLens and Command-Q remain
+available. Quit exits the whole app, stops interval scheduling, disconnects the
+scan-request channel and cancels any manual agent job/reader. In-process scan and
+gauge workers end with the process; there is no background scan service. Close and
+Use tray only hide windows. Relaunch starts interval scans paused.
 
 **Use tray** or Escape from the collapsed notch hides it; the archivebox is the
 fallback to open Review. Close Review or Settings to return to the notch. Opening
@@ -179,7 +191,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.0). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.1). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 

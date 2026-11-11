@@ -70,6 +70,12 @@ pub struct Job {
 impl Drop for Job {
     fn drop(&mut self) {
         self.cancel();
+        // The worker sends only after Session has killed/reaped its provider.
+        // Give its 100 ms cancellation poll and bounded stderr drain time to finish
+        // before app exit, without letting an unresponsive worker block Quit forever.
+        if let Some(receiver) = self.receiver.take() {
+            let _ = receiver.recv_timeout(Duration::from_secs(2));
+        }
     }
 }
 
@@ -927,6 +933,46 @@ done"#, "empty output"),
             }
             std::fs::remove_dir_all(root).unwrap();
         }
+    }
+
+    #[test]
+    fn dropping_a_job_reaps_a_provider_that_ignores_stdin_eof() {
+        let root = prefs::path_for_state().with_extension("quit-provider");
+        std::fs::create_dir(&root).unwrap();
+        let bin = root.join("grok");
+        std::fs::write(
+            &bin,
+            "#!/bin/sh\necho $$ > \"${0%/*}/provider.pid\"\nexec /bin/sleep 30\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let job = Job::start_in(
+            &root.join("Runs"),
+            bin.to_str().unwrap(),
+            "Grok",
+            "",
+            "Saved context",
+            Access::default(),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !root.join("provider.pid").exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let pid: i32 = std::fs::read_to_string(root.join("provider.pid"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        let start = Instant::now();
+        drop(job);
+        let alive = unsafe { libc::kill(pid, 0) } == 0;
+        if alive {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
+        }
+        assert!(!alive, "Quit must reap the provider before returning");
+        assert!(start.elapsed() < Duration::from_secs(2));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

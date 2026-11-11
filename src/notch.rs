@@ -8,7 +8,7 @@ use rune::{col, el, icon, row, text, AppHandle, AppSpec, Cx, El, Icon, Key, Tx};
 
 use crate::{button, catalog, paint, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
 
-pub const COMPACT: (f32, f32) = (360.0, 36.0);
+pub const COMPACT: (f32, f32) = (300.0, 36.0);
 pub const EXPANDED: (f32, f32) = (480.0, 230.0);
 
 const FOLDER: Icon = Icon {
@@ -84,8 +84,8 @@ impl Readings {
             } else {
                 format!(
                     "{}/{}",
-                    catalog::format_bytes(s.catalog.disk_free).replace(' ', ""),
-                    catalog::format_bytes(s.catalog.disk_total).replace(' ', "")
+                    compact_bytes(s.catalog.disk_free),
+                    compact_bytes(s.catalog.disk_total)
                 )
             },
             scanning: s.scanning,
@@ -109,6 +109,7 @@ pub fn install(handle: AppHandle<Notch>, review: AppHandle<crate::State>) {
 }
 
 pub fn sync(s: &crate::State) {
+    crate::status::set_notch_below(s.prefs.notch_below);
     if let Some(handle) = HANDLE.get() {
         let readings = Readings::from_review(s);
         handle.update_if(move |state, tx| {
@@ -163,6 +164,8 @@ pub fn spec() -> AppSpec<Notch> {
             ("scanning-example", |s| {
                 s.expanded = true;
                 s.readings.scanning = true;
+                s.readings.cpu = Some("CPU 100%".into());
+                s.readings.memory = Some("Memory 100%".into());
             }),
         ],
         poll: Some(|_, _, tx| {
@@ -213,6 +216,14 @@ fn label(value: impl Into<String>, size: f32, color: &str) -> El {
         .color(paint(color))
 }
 
+fn compact_bytes(bytes: u64) -> String {
+    if bytes >= 1_000_000_000_000 {
+        format!("{:.1}TB", bytes as f64 / 1_000_000_000_000.0)
+    } else {
+        catalog::format_bytes(bytes).replace(' ', "")
+    }
+}
+
 fn compact_reading(
     symbol: &'static Icon,
     value: String,
@@ -224,7 +235,7 @@ fn compact_reading(
         .center_y()
         .help(description.clone())
         .child(icon(symbol, 13.0).color(paint(MUTED)).a11y_hidden())
-        .child(label(value, 11.0, INK).key(key).label(description))
+        .child(label(value, 10.0, INK).key(key).label(description))
 }
 
 fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
@@ -240,7 +251,7 @@ fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
         .w_full()
         .h(36.0)
         .px(if s.expanded { 12.0 } else { 8.0 })
-        .gap(if s.expanded { 8.0 } else { 6.0 })
+        .gap(if s.expanded { 8.0 } else { 4.0 })
         .center_y()
         .child(
             el().size(6.0, 6.0)
@@ -306,7 +317,7 @@ fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
             } else {
                 "Expand notch"
             })
-            .size(28.0, 28.0)
+            .size(if s.expanded { 28.0 } else { 22.0 }, 28.0)
             .center()
             .radius(6.0)
             .fill(paint(TRACK))
@@ -433,6 +444,12 @@ fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
                         button("Use tray", ButtonStyle::Quiet)
                             .key("notch-tray")
                             .on_press(|_: &mut Notch| hide()),
+                    )
+                    .child(
+                        button("Quit", ButtonStyle::Quiet)
+                            .key("notch-quit")
+                            .help("Quit FolderLens · ⌘Q")
+                            .on_press_tx(|_: &mut Notch, tx| tx.quit()),
                     ),
             )
             .child(label(
@@ -483,7 +500,6 @@ mod tests {
             assert_eq!(element.rect[1] + element.rect[3] * 0.5, 18.0);
         }
         let mut busy = crate::fixture_state();
-        busy.catalog.disk_free = 84_900_000;
         busy.catalog.cpu = 100;
         busy.catalog.memory = 100;
         busy.scanning = true;
@@ -492,7 +508,7 @@ mod tests {
         let mut right = 0.0;
         for (key, expected) in [
             ("notch-candidates", "27.2GB"),
-            ("notch-disk", "85MB/494.4GB"),
+            ("notch-disk", "84.9GB/494.4GB"),
             ("notch-cpu", "100%"),
             ("notch-memory", "100%"),
         ] {
@@ -505,6 +521,22 @@ mod tests {
             assert!(element.rect[0] >= right && element.rect[0] + element.rect[2] <= COMPACT.0);
             right = element.rect[0] + element.rect[2];
         }
+        let mut mixed = crate::fixture_state();
+        mixed.catalog.disk_free = 84_900_000;
+        mixed.catalog.disk_total = 4_000_000_000_000;
+        mixed.catalog.cpu = 100;
+        mixed.catalog.memory = 100;
+        rt.update(move |s, _| s.readings = Readings::from_review(&mixed));
+        rt.frame(0.0);
+        let disk = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("notch-disk"))
+            .unwrap();
+        assert_eq!(disk.text.as_deref(), Some("85MB/4.0TB"));
+        assert!(disk.rect[0] + disk.rect[2] < COMPACT.0);
+        rt.update(|s, _| s.readings.scanning = true);
+        rt.frame(0.0);
         let status = rt
             .elements()
             .into_iter()
@@ -524,6 +556,7 @@ mod tests {
             "notch-scan",
             "notch-review",
             "notch-tray",
+            "notch-quit",
         ] {
             let rect = rt
                 .presented(key)
@@ -574,5 +607,15 @@ mod tests {
                 .unwrap();
             assert_eq!(element.text.as_deref(), Some(expected));
         }
+        let (x, y) = rt.find("notch-expand").unwrap();
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.set_viewport(EXPANDED, 2.0);
+        rt.frame(0.0);
+        let (x, y) = rt.find("notch-quit").unwrap();
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(rt.shell_request, Some(rune::Shell::Quit));
     }
 }

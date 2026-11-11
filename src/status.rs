@@ -4,7 +4,15 @@
 //! unit test leave the panel where it is. The coordinate helper is pure so the
 //! position can be checked without AppKit.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+
+// Native frame callbacks have no Rune state. Review polling publishes this preference.
+static NOTCH_BELOW: AtomicBool = AtomicBool::new(true);
+
+pub fn set_notch_below(below: bool) {
+    NOTCH_BELOW.store(below, Ordering::Relaxed);
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Rect {
@@ -97,11 +105,11 @@ pub fn reveal() {
     macos::apply(true);
 }
 
-/// Below the camera/menu-bar area, centered on the primary display in AppKit points.
-fn notch_origin(visible: Rect, width: f64, height: f64) -> (f64, f64) {
+/// Reserve Oak's 33-point top row plus an 8-point gap; expansion grows downwards.
+fn notch_origin(visible: Rect, width: f64, height: f64, below: bool) -> (f64, f64) {
     (
         visible.x + (visible.w - width) * 0.5,
-        visible.y + visible.h - height,
+        visible.y + visible.h - height - if below { 41.0 } else { 0.0 },
     )
 }
 
@@ -207,6 +215,7 @@ mod macos {
                 },
                 frame.size.w,
                 frame.size.h,
+                super::NOTCH_BELOW.load(Ordering::Relaxed),
             );
             if (frame.origin.x - x).abs() > 0.5 || (frame.origin.y - y).abs() > 0.5 {
                 unsafe {
@@ -806,6 +815,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn default_notch_leaves_oaks_top_row_clear() {
+        let visible = Rect {
+            x: -1440.0,
+            y: 80.0,
+            w: 1440.0,
+            h: 790.0,
+        };
+        // Oak stays centered and 33 points tall, even when expanded.
+        let oak_bottom = visible.y + visible.h - 33.0;
+        for (width, height) in [crate::notch::COMPACT, crate::notch::EXPANDED] {
+            let (x, y) = notch_origin(
+                visible,
+                width.into(),
+                height.into(),
+                crate::prefs::Prefs::default().notch_below,
+            );
+            assert!(y + f64::from(height) <= oak_bottom - 8.0);
+            assert!(x >= visible.x && x + f64::from(width) <= visible.x + visible.w);
+        }
+        assert!(crate::notch::COMPACT.0 <= 300.0);
+    }
+
+    #[test]
     fn notch_expansion_keeps_center_and_clears_camera_on_offset_displays() {
         let visible = Rect {
             x: -1440.0,
@@ -815,10 +847,10 @@ mod tests {
         };
         let (width, height) = crate::notch::COMPACT;
         assert_eq!(
-            notch_origin(visible, width.into(), height.into()),
-            (-900.0, 834.0)
+            notch_origin(visible, width.into(), height.into(), false),
+            (-870.0, 834.0)
         );
-        assert_eq!(notch_origin(visible, 480.0, 230.0), (-960.0, 640.0));
+        assert_eq!(notch_origin(visible, 480.0, 230.0, false), (-960.0, 640.0));
         assert_eq!(
             notch_origin(
                 Rect {
@@ -828,9 +860,10 @@ mod tests {
                     h: 770.0
                 },
                 width.into(),
-                height.into()
+                height.into(),
+                false
             ),
-            (460.0, 734.0)
+            (490.0, 734.0)
         );
     }
 

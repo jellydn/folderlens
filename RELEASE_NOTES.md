@@ -1,3 +1,16 @@
+## FolderLens 0.3.1 — Smaller notch, Oak coexistence and visible Quit
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI remains optional and manual through the existing CLI adapters.
+
+- Reduce the compact notch from 360×36 to 300×36 points while keeping candidate estimates, disk free/total and CPU/memory readings. Tighten spacing and the expand button; use TB for large compact disk readings.
+- Leave Oak's 33-point top row plus an 8-point gap clear by default, including with existing settings. Expansion grows downwards. General → Leave top row for Oak can restore the top row when running alone. This is fixed placement, not app detection or automatic collision handling for arbitrary windows.
+- Add visible Quit controls to the expanded notch and Review's fixed readings footer, accessible through the tray fallback. Actions → Quit FolderLens and Command-Q remain available. The native quit hook stops interval scheduling, disconnects scan requests and drops the manual agent job/reader, waiting up to two seconds for provider kill/reap completion. In-process scan/gauge workers end with the app, not a background service. Close and Use tray still only hide windows.
+- Update the README, guide and current screenshots. No deletion path, automatic AI request, direct AI API or paid fallback is added.
+
+Checks cover the full macOS Rust/Pi suites, formatting, Clippy, compact/expanded and minimum-size UI bounds, both visible Quit actions, timer/request-channel shutdown, updater fixtures, ad-hoc bundle signatures, arm64 architecture and DMG/ZIP packaging. The overlap regression failed against 0.3.0 geometry. Actual Oak 0.5.55 and FolderLens ran together with an 8-point gap; the top-row opt-out reproduced overlap, and restoring the setting removed it without restarting.
+
+Native pointer/keyboard routing, physical-notch and multi-display behavior, real AI turns/Terminal continuation and actual install/restart/Gatekeeper behavior remain unverified. Native screen recording and event posting are unavailable on the verification Mac; headless button/layout tests are not native click proof. All current installations remain manual-update-only. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.0 — Notch and local checks
 
 **Stable release for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** Candidate sizes are review estimates, not reclaimed space.

@@ -373,6 +373,15 @@ fn general(state: &Settings) -> El {
         .gap(14.0)
         .child(heading("Only the readings you need"))
         .child(text("Choose the readings shown with your selection. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(section("Notch placement"))
+        .child(card(setting_row(
+            "Leave top row for Oak",
+            toggle("notch-below", state.prefs.notch_below, |state| {
+                state.prefs.notch_below = !state.prefs.notch_below;
+                persist(state);
+            }),
+        )))
+        .child(text("On by default: place FolderLens below the other notch app, with a gap. Turn off to use the top row alone.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Readings and shortcuts"))
         .child(card(
             col()
@@ -908,7 +917,29 @@ mod tests {
         let loaded = prefs::load_from(&state.path);
         assert!(!loaded.gauge_cpu);
         assert!(loaded.gauge_memory);
-        let _ = std::fs::remove_file(&state.path);
+        let path = state.path.clone();
+        let mut rt = rune::Runtime::new(
+            state,
+            view,
+            (760.0, 560.0),
+            rune::Env {
+                system_dark: true,
+                scale: 2.0,
+            },
+        );
+        rt.set_system_reduced_motion(true);
+        rt.frame(0.0);
+        for below in [false, true] {
+            let (x, y) = rt.find("notch-below").unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            let saved = prefs::load_from(&path);
+            assert_eq!(saved.notch_below, below);
+            assert!(!saved.gauge_cpu);
+            assert!(!saved.allow_start && !saved.send_paths);
+        }
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

@@ -200,6 +200,14 @@ fn scan_if_due(s: &mut State, now: Instant) -> bool {
     false
 }
 
+fn shutdown(s: &mut State, _: &mut Tx) {
+    s.scans_running = false;
+    s.next_scan = None;
+    s.scan_requests = None;
+    // Drop closes the reader and waits briefly for the provider to be reaped.
+    s.agent = None;
+}
+
 fn finish_scan(s: &mut State, catalog: Catalog, now: Instant) {
     s.scanning = false;
     schedule_scan(s, now);
@@ -911,14 +919,27 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         .child(rule())
         .child(record_choice(s))
         .child(
-            text(system_readings(s))
-                .key("system-readings")
-                .font(type_::LABEL)
-                .color(paint(MUTED))
+            row()
+                .w_full()
+                .gap(8.0)
+                .center_y()
                 .px(18.0)
                 .py(10.0)
-                .wrap()
-                .w_full(),
+                .child(
+                    text(system_readings(s))
+                        .key("system-readings")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .min_w(0.0)
+                        .grow(1.0),
+                )
+                .child(
+                    button("Quit", ButtonStyle::Quiet)
+                        .key("quit-app")
+                        .help("Quit FolderLens · ⌘Q")
+                        .on_press_tx(|_: &mut State, tx| tx.quit()),
+                ),
         )
 }
 
@@ -1463,23 +1484,26 @@ fn main() {
         on_key: Some(on_key),
         ..AppSpec::new("FolderLens", size, live_state, view)
     };
-    let mut app = App::new(spec).accessory().configured_options(
-        WindowOptions {
-            transparent: true,
-            borderless: true,
-            always_on_top: true,
-            resizable: true,
-            min_size: Some((360.0, MIN_PANEL_HEIGHT)),
-            max_size: Some((960.0, 1000.0)),
-            ..WindowOptions::default()
-        }
-        .macos(
-            MacWindowOptions::default()
-                .corner_radius(14.0)
-                .shadow(true)
-                .level(3),
-        ),
-    );
+    let mut app = App::new(spec)
+        .accessory()
+        .on_quit(shutdown)
+        .configured_options(
+            WindowOptions {
+                transparent: true,
+                borderless: true,
+                always_on_top: true,
+                resizable: true,
+                min_size: Some((360.0, MIN_PANEL_HEIGHT)),
+                max_size: Some((960.0, 1000.0)),
+                ..WindowOptions::default()
+            }
+            .macos(
+                MacWindowOptions::default()
+                    .corner_radius(14.0)
+                    .shadow(true)
+                    .level(3),
+            ),
+        );
     let settings = WindowSpec::new("settings", settings::spec()).options(WindowOptions {
         visible: false,
         resizable: true,
@@ -1667,6 +1691,15 @@ mod tests {
         assert!(rt.state.agent.is_none());
         assert_eq!(rt.state.catalog.leaves.len(), 7);
         assert!(!rt.state.confirmed);
+        rt.update(shutdown);
+        assert!(!scan_if_due(
+            &mut rt.state,
+            deadline + Duration::from_secs(10000)
+        ));
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Disconnected)
+        ));
     }
 
     #[test]
@@ -2229,6 +2262,16 @@ mod tests {
 
     #[test]
     fn quit_requests_app_exit_from_actions_and_the_keyboard() {
+        for width in [360.0, 720.0] {
+            let mut rt = runtime();
+            rt.set_viewport((width, 280.0), 2.0);
+            rt.frame(0.0);
+            let rect = rt.presented("quit-app").expect("visible Quit").0;
+            assert!(rect[0] >= 0.0 && rect[0] + rect[2] <= width);
+            assert!(rect[1] >= 0.0 && rect[1] + rect[3] <= 280.0);
+            click(&mut rt, "quit-app");
+            assert_eq!(rt.shell_request, Some(rune::Shell::Quit));
+        }
         let mut rt = runtime();
         click(&mut rt, "actions");
         click(&mut rt, "action-quit");

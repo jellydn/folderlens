@@ -33,6 +33,7 @@ pub struct Prefs {
     pub gauge_cpu: bool,
     pub gauge_gpu: bool,
     pub shortcut_hints: bool,
+    pub notch_below: bool,
     pub update_checks: bool,
     pub update_downloads: bool,
     pub update_prereleases: bool,
@@ -53,6 +54,7 @@ impl Default for Prefs {
             gauge_cpu: true,
             gauge_gpu: true,
             shortcut_hints: true,
+            notch_below: true,
             update_checks: true,
             update_downloads: false,
             update_prereleases: false,
@@ -160,6 +162,7 @@ pub fn load_from(path: &Path) -> Prefs {
             "gauge_cpu" => prefs.gauge_cpu = value == "1",
             "gauge_gpu" => prefs.gauge_gpu = value == "1",
             "shortcut_hints" => prefs.shortcut_hints = value == "1",
+            "notch_below" => prefs.notch_below = value == "1",
             "update_checks" => prefs.update_checks = value == "1",
             "update_downloads" => prefs.update_downloads = value == "1",
             "update_prereleases" => prefs.update_prereleases = value == "1",
@@ -191,6 +194,7 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
     text.push_str(&format!("gauge_cpu={}\n", flag(prefs.gauge_cpu)));
     text.push_str(&format!("gauge_gpu={}\n", flag(prefs.gauge_gpu)));
     text.push_str(&format!("shortcut_hints={}\n", flag(prefs.shortcut_hints)));
+    text.push_str(&format!("notch_below={}\n", flag(prefs.notch_below)));
     text.push_str(&format!("update_checks={}\n", flag(prefs.update_checks)));
     text.push_str(&format!(
         "update_downloads={}\n",
@@ -487,6 +491,7 @@ mod tests {
             ]),
             allow_start: true,
             send_paths: true,
+            notch_below: false,
             keep_hours: 36,
             kept: vec!["/tmp/keep".into()],
             ..Prefs::default()
@@ -592,6 +597,7 @@ mod tests {
         assert_eq!(prefs.agent_id, "grok");
         assert_eq!(prefs.keep_hours, 0);
         assert!(prefs.gauge_cpu);
+        assert!(prefs.notch_below, "existing settings leave Oak's row clear");
         let _ = std::fs::remove_file(&path);
     }
 

@@ -12,7 +12,7 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.1) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -31,13 +31,23 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 ### Notch and local checks
 
 The app starts with an Oak-style notch, centered below the primary display's
-camera/menu-bar area. The single-line 360×36 compact view uses icons for candidate estimates, disk
+camera/menu-bar area. Starting with **0.3.1**, the compact view is
+300×36 points (down from 360×36 in 0.3.0). It leaves Oak's 33-point top row plus an
+8-point gap clear, even when FolderLens expands. Turn off **Settings → General →
+Leave top row for Oak** to use the top row when running alone. Placement is fixed,
+not automatic app detection. The single-line compact view uses icons for candidate estimates, disk
 free/total space, CPU and memory usage, plus a scan-status dot. Expand it for Scan now,
 30-minute/1-hour checks and Run/Pause. CPU and memory follow General settings.
 **Review / AI** opens the full folder review; closing Review returns to the notch.
 **Use tray** hides the notch. The archivebox remains available as a fallback to
 open Review, including while Settings is open. Escape collapses the notch first,
 then hides it. Closing Settings returns to the notch.
+
+To quit, expand the notch and choose **Quit**, or open Review from the tray and
+choose **Quit** in the fixed readings footer. **Actions → Quit FolderLens** and
+**Command-Q** also quit. **Close** and **Use tray** only hide a surface; scans
+continue while the app is open. Quitting stops interval checks and the scan worker;
+no scan daemon or scheduled task remains. Relaunch starts intervals paused.
 
 ![Compact notch, synthetic example](shots/notch-compact.png)
 ![Expanded notch, synthetic example](shots/notch-expanded.png)

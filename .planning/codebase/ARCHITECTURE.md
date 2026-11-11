@@ -29,7 +29,7 @@
 - Its private `src/broker.rs` owns descriptor-checked reads, a Unix socket, JSON forwarding and MCP. `src/pi-reader.mjs` exposes only that reader to Pi.
 
 **Native integration:**
-- `src/status.rs` owns retained AppKit status-item callbacks, explicit show/hide state and primary-display notch placement below the visible frame's top edge. Review hides the notch; closing Review restores it. Settings hides both; a tray open hides Settings. The tray remains the fallback.
+- `src/status.rs` owns retained AppKit status-item callbacks, explicit show/hide state and primary-display notch placement. By default it reserves Oak's 33-point top row plus an 8-point gap; General settings can restore the top row. Review polling publishes that placement preference for native frame callbacks. Review hides the notch; closing Review restores it. Settings hides both; a tray open hides Settings. The tray remains the fallback.
 - `src/update.rs` launches `native/Updater.swift` on a worker. The helper owns HTTP, publisher verification, download policy and the blocked native-install entry points.
 
 ## Data Flow
