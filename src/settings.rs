@@ -8,7 +8,7 @@ use rune::{
     col, el, row, text, text_input, AppHandle, AppSpec, Color, Cx, El, ScrollSpec, TextEdit, Tx,
 };
 
-use crate::prefs::{self, Agent, Prefs};
+use crate::prefs::{self, Agent, NotchPosition, Prefs};
 use crate::{button, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
 
 #[path = "settings_updates.rs"]
@@ -368,20 +368,55 @@ fn toggle(key: &'static str, on: bool, press: impl Fn(&mut Settings) + 'static) 
 }
 
 fn general(state: &Settings) -> El {
+    let mut placement = col().w_full().gap(8.0);
+    for choices in [
+        [
+            ("Top left", NotchPosition::Left),
+            ("Top right", NotchPosition::Right),
+        ],
+        [
+            ("Top center", NotchPosition::Center),
+            ("Lower center", NotchPosition::Below),
+        ],
+    ] {
+        let mut options = row().w_full().gap(8.0);
+        for (label, position) in choices {
+            options = options.child(
+                button(
+                    label,
+                    if state.prefs.notch_position == position {
+                        ButtonStyle::Primary
+                    } else {
+                        ButtonStyle::Secondary
+                    },
+                )
+                .key(format!("notch-position-{}", position.as_str()))
+                .label(format!(
+                    "Notch position: {label}{}",
+                    if state.prefs.notch_position == position {
+                        ", selected"
+                    } else {
+                        ""
+                    }
+                ))
+                .grow(1.0)
+                .min_w(0.0)
+                .on_press(move |state: &mut Settings| {
+                    state.prefs.notch_position = position;
+                    persist(state);
+                }),
+            );
+        }
+        placement = placement.child(options);
+    }
     col()
         .w_full()
         .gap(14.0)
         .child(heading("Only the readings you need"))
         .child(text("Choose the readings shown with your selection. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Notch placement"))
-        .child(card(setting_row(
-            "Leave top row for Oak",
-            toggle("notch-below", state.prefs.notch_below, |state| {
-                state.prefs.notch_below = !state.prefs.notch_below;
-                persist(state);
-            }),
-        )))
-        .child(text("On by default: place FolderLens below the other notch app, with a gap. Turn off to use the top row alone.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(placement)
+        .child(text("Choose a screen position to suit your setup. Lower center leaves extra space above. Positions stay within the work area; other apps are not detected. The tray stays available.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Readings and shortcuts"))
         .child(card(
             col()
@@ -929,15 +964,28 @@ mod tests {
         );
         rt.set_system_reduced_motion(true);
         rt.frame(0.0);
-        for below in [false, true] {
-            let (x, y) = rt.find("notch-below").unwrap();
-            rt.pointer_down(x, y);
-            rt.pointer_up(x, y);
+        for (width, height) in [(760.0, 560.0), (360.0, 420.0)] {
+            rt.set_viewport((width, height), 2.0);
             rt.frame(0.0);
-            let saved = prefs::load_from(&path);
-            assert_eq!(saved.notch_below, below);
-            assert!(!saved.gauge_cpu);
-            assert!(!saved.allow_start && !saved.send_paths);
+            for position in [
+                NotchPosition::Left,
+                NotchPosition::Right,
+                NotchPosition::Center,
+                NotchPosition::Below,
+            ] {
+                let key = format!("notch-position-{}", position.as_str());
+                let (rect, _) = rt.presented(&key).expect("visible position choice");
+                assert!(rect[0] >= 0.0 && rect[0] + rect[2] <= width);
+                assert!(rect[1] >= 0.0 && rect[1] + rect[3] <= height);
+                let (x, y) = rt.find(&key).unwrap();
+                rt.pointer_down(x, y);
+                rt.pointer_up(x, y);
+                rt.frame(0.0);
+                let saved = prefs::load_from(&path);
+                assert_eq!(saved.notch_position, position);
+                assert!(!saved.gauge_cpu);
+                assert!(!saved.allow_start && !saved.send_paths);
+            }
         }
         let _ = std::fs::remove_file(path);
     }

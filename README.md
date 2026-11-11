@@ -12,7 +12,7 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.1) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.2 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.2) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -32,10 +32,19 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 
 The app starts with an Oak-style notch, centered below the primary display's
 camera/menu-bar area. Starting with **0.3.1**, the compact view is
-300×36 points (down from 360×36 in 0.3.0). It leaves Oak's 33-point top row plus an
-8-point gap clear, even when FolderLens expands. Turn off **Settings → General →
-Leave top row for Oak** to use the top row when running alone. Placement is fixed,
-not automatic app detection. The single-line compact view uses icons for candidate estimates, disk
+300×36 points (down from 360×36 in 0.3.0).
+
+**Position controls in 0.3.2:** **Settings → General → Notch placement** offers
+**Top left**, **Top center**, **Top right** and **Lower center** (default).
+These are screen positions, not presets for another app. Left/Right sit near the
+visible work area's edges; both panel sizes remain within that area. Lower center
+keeps the existing extra space above. Placement follows the primary display and
+updates after expansion or display changes. If the expanded panel cannot fit, it
+collapses; if compact cannot fit, it hides in favor of the tray. Choose a different position if another
+app overlaps; FolderLens does not detect apps or reserve their assumed sizes.
+The old 0.3.1 switch migrates to Lower center when on, Top center when off.
+
+The single-line compact view uses icons for candidate estimates, disk
 free/total space, CPU and memory usage, plus a scan-status dot. Expand it for Scan now,
 30-minute/1-hour checks and Run/Pause. CPU and memory follow General settings.
 **Review / AI** opens the full folder review; closing Review returns to the notch.

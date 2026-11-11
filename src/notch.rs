@@ -109,7 +109,7 @@ pub fn install(handle: AppHandle<Notch>, review: AppHandle<crate::State>) {
 }
 
 pub fn sync(s: &crate::State) {
-    crate::status::set_notch_below(s.prefs.notch_below);
+    crate::status::set_notch_position(s.prefs.notch_position);
     if let Some(handle) = HANDLE.get() {
         let readings = Readings::from_review(s);
         handle.update_if(move |state, tx| {
@@ -142,6 +142,27 @@ pub fn show() {
 pub fn hide() {
     if let Some(handle) = HANDLE.get() {
         handle.hide();
+    }
+}
+
+/// Native placement cannot clamp a window larger than the work area.
+pub fn fit_work_area(area: (f32, f32)) {
+    if area.0 < COMPACT.0 || area.1 < COMPACT.1 {
+        if let Some(handle) = HANDLE.get() {
+            if handle.is_visible() {
+                handle.hide();
+            }
+        }
+        return;
+    }
+    if let Some(handle) = HANDLE.get() {
+        handle.update_if(|state, tx| {
+            if !state.expanded {
+                return false;
+            }
+            expand(state, tx);
+            true
+        });
     }
 }
 

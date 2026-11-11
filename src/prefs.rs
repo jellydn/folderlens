@@ -22,6 +22,36 @@ pub const ALWAYS: &[(&str, &str)] = &[
     ("Kubernetes", "~/.kube"),
 ];
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NotchPosition {
+    #[default]
+    Below,
+    Left,
+    Right,
+    Center,
+}
+
+impl NotchPosition {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Below => "below",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Center => "center",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "below" => Some(Self::Below),
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            "center" => Some(Self::Center),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prefs {
     pub agent_id: String,
@@ -33,7 +63,7 @@ pub struct Prefs {
     pub gauge_cpu: bool,
     pub gauge_gpu: bool,
     pub shortcut_hints: bool,
-    pub notch_below: bool,
+    pub notch_position: NotchPosition,
     pub update_checks: bool,
     pub update_downloads: bool,
     pub update_prereleases: bool,
@@ -54,7 +84,7 @@ impl Default for Prefs {
             gauge_cpu: true,
             gauge_gpu: true,
             shortcut_hints: true,
-            notch_below: true,
+            notch_position: NotchPosition::Below,
             update_checks: true,
             update_downloads: false,
             update_prereleases: false,
@@ -148,6 +178,7 @@ pub fn load_from(path: &Path) -> Prefs {
     };
     let mut prefs = Prefs::default();
     prefs.kept.clear();
+    let mut position = None;
     for line in text.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -162,7 +193,14 @@ pub fn load_from(path: &Path) -> Prefs {
             "gauge_cpu" => prefs.gauge_cpu = value == "1",
             "gauge_gpu" => prefs.gauge_gpu = value == "1",
             "shortcut_hints" => prefs.shortcut_hints = value == "1",
-            "notch_below" => prefs.notch_below = value == "1",
+            "notch_below" => {
+                prefs.notch_position = if value == "1" {
+                    NotchPosition::Below
+                } else {
+                    NotchPosition::Center
+                }
+            }
+            "notch_position" => position = NotchPosition::parse(value),
             "update_checks" => prefs.update_checks = value == "1",
             "update_downloads" => prefs.update_downloads = value == "1",
             "update_prereleases" => prefs.update_prereleases = value == "1",
@@ -172,6 +210,9 @@ pub fn load_from(path: &Path) -> Prefs {
             "kept" if !value.is_empty() => prefs.kept.push(value.to_string()),
             _ => {}
         }
+    }
+    if let Some(position) = position {
+        prefs.notch_position = position;
     }
     prefs
 }
@@ -194,7 +235,10 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
     text.push_str(&format!("gauge_cpu={}\n", flag(prefs.gauge_cpu)));
     text.push_str(&format!("gauge_gpu={}\n", flag(prefs.gauge_gpu)));
     text.push_str(&format!("shortcut_hints={}\n", flag(prefs.shortcut_hints)));
-    text.push_str(&format!("notch_below={}\n", flag(prefs.notch_below)));
+    text.push_str(&format!(
+        "notch_position={}\n",
+        prefs.notch_position.as_str()
+    ));
     text.push_str(&format!("update_checks={}\n", flag(prefs.update_checks)));
     text.push_str(&format!(
         "update_downloads={}\n",
@@ -491,7 +535,7 @@ mod tests {
             ]),
             allow_start: true,
             send_paths: true,
-            notch_below: false,
+            notch_position: NotchPosition::Right,
             keep_hours: 36,
             kept: vec!["/tmp/keep".into()],
             ..Prefs::default()
@@ -597,7 +641,28 @@ mod tests {
         assert_eq!(prefs.agent_id, "grok");
         assert_eq!(prefs.keep_hours, 0);
         assert!(prefs.gauge_cpu);
-        assert!(prefs.notch_below, "existing settings leave Oak's row clear");
+        assert_eq!(prefs.notch_position, NotchPosition::Below);
+        for (text, expected) in [
+            ("notch_below=0\n", NotchPosition::Center),
+            ("notch_below=1\n", NotchPosition::Below),
+            (
+                "notch_below=1\nnotch_position=right\n",
+                NotchPosition::Right,
+            ),
+            ("notch_position=left\nnotch_below=0\n", NotchPosition::Left),
+            ("notch_position=unknown\n", NotchPosition::Below),
+            (
+                "notch_below=0\nnotch_position=unknown\n",
+                NotchPosition::Center,
+            ),
+        ] {
+            std::fs::write(&path, text).unwrap();
+            let loaded = load_from(&path);
+            assert_eq!(loaded.notch_position, expected);
+            assert!(!loaded.allow_start && !loaded.send_paths);
+            save_to(&path, &loaded);
+            assert_eq!(load_from(&path), loaded);
+        }
         let _ = std::fs::remove_file(&path);
     }
 

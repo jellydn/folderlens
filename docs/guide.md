@@ -14,21 +14,37 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.1)
+## Quick review (0.3.2)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
 ### Notch and local checks
 
 Starting with 0.3.1, FolderLens uses an Oak-style notch: 300×36
-points collapsed, 480×230 expanded. Version 0.3.0 used 360×36. It stays centered
-on the primary display and leaves the top 33-point row below the camera/menu-bar
-area plus an 8-point gap for Oak. Expansion grows downwards without entering that
-row. **Settings → General → Leave top row for Oak** is on by default, including for
-existing settings; turn it off to use the top row alone. This is a fixed placement,
-not automatic detection or collision handling for arbitrary windows. It
-repositions after expansion and display changes without covering camera hardware.
-It also works on displays without a physical notch. The compact view uses one
+points collapsed, 480×230 expanded. Version 0.3.0 used 360×36.
+
+**Starting with 0.3.2:** **Settings → General → Notch placement** has four choices:
+
+- **Top left / Top right:** 8 points from the visible work area's side, below the
+  camera/menu bar. Expansion keeps the same edge anchor.
+- **Top center:** centered on the primary display, just below the camera/menu bar.
+- **Lower center:** the default, with the existing 41-point extra top inset.
+
+Both panel sizes have origins clamped to the visible work area. Center positions
+use the full display's center, not the Dock-reduced area's center. Placement updates
+after expansion and display changes, including screens without physical notches.
+If the expanded panel cannot fit, it collapses. If even the compact panel cannot
+fit, the notch hides and the tray remains available.
+These controls are independent of other apps: no app detection, assumed app sizes,
+reserved center slot, dragging, display selection or automatic collision handling.
+Choose another position if a different app overlaps.
+
+Old `notch_below=1` settings become Lower center; `notch_below=0` becomes Top center.
+An explicit `notch_position` wins over the legacy
+key in either order. Missing/unknown positions keep the legacy choice or default
+to Lower center. The archivebox fallback always remains available for Review and Settings.
+
+The compact view uses one
 line: folder (eligible candidate estimate), disk (free/total), CPU and memory icons with values, and
 a status dot (blue while running/scanning, gray while paused). Hover the dot for
 the exact scan state and the disk reading for its full label. CPU and memory preferences
@@ -191,7 +207,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.1). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.2 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.2). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 

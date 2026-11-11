@@ -4,14 +4,15 @@
 //! unit test leave the panel where it is. The coordinate helper is pure so the
 //! position can be checked without AppKit.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+
+use crate::prefs::NotchPosition;
 
 // Native frame callbacks have no Rune state. Review polling publishes this preference.
-static NOTCH_BELOW: AtomicBool = AtomicBool::new(true);
+static NOTCH_POSITION: Mutex<NotchPosition> = Mutex::new(NotchPosition::Below);
 
-pub fn set_notch_below(below: bool) {
-    NOTCH_BELOW.store(below, Ordering::Relaxed);
+pub fn set_notch_position(position: NotchPosition) {
+    *NOTCH_POSITION.lock().unwrap() = position;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -105,12 +106,34 @@ pub fn reveal() {
     macos::apply(true);
 }
 
-/// Reserve Oak's 33-point top row plus an 8-point gap; expansion grows downwards.
-fn notch_origin(visible: Rect, width: f64, height: f64, below: bool) -> (f64, f64) {
-    (
-        visible.x + (visible.w - width) * 0.5,
-        visible.y + visible.h - height - if below { 41.0 } else { 0.0 },
-    )
+/// Screen-relative placement, independent of other apps and their window sizes.
+fn notch_origin(
+    visible: Rect,
+    center: f64,
+    width: f64,
+    height: f64,
+    position: NotchPosition,
+) -> Option<(f64, f64)> {
+    if width > visible.w || height > visible.h {
+        return None;
+    }
+    let centered = center - width * 0.5;
+    let x = match position {
+        NotchPosition::Left => visible.x + 8.0,
+        NotchPosition::Right => visible.x + visible.w - width - 8.0,
+        _ => centered,
+    };
+    // Preserve the lower-row spacing of existing 0.3.1 settings.
+    let inset = if position == NotchPosition::Below {
+        41.0
+    } else {
+        0.0
+    };
+    let y = visible.y + visible.h - height - inset;
+    Some((
+        x.clamp(visible.x, visible.x + visible.w - width),
+        y.clamp(visible.y, visible.y + visible.h - height),
+    ))
 }
 
 pub fn position_notch() {
@@ -192,6 +215,7 @@ mod macos {
             return;
         }
         let area = msg_rect(screen, sel(c"visibleFrame"));
+        let display = msg_rect(screen, sel(c"frame"));
         let windows = msg0(
             msg0(class(c"NSApplication"), sel(c"sharedApplication")),
             sel(c"windows"),
@@ -206,17 +230,21 @@ mod macos {
                 continue;
             }
             let frame = msg_rect(window, sel(c"frame"));
-            let (x, y) = super::notch_origin(
+            let Some((x, y)) = super::notch_origin(
                 Rect {
                     x: area.origin.x,
                     y: area.origin.y,
                     w: area.size.w,
                     h: area.size.h,
                 },
+                display.origin.x + display.size.w * 0.5,
                 frame.size.w,
                 frame.size.h,
-                super::NOTCH_BELOW.load(Ordering::Relaxed),
-            );
+                *super::NOTCH_POSITION.lock().unwrap(),
+            ) else {
+                crate::notch::fit_work_area((area.size.w as f32, area.size.h as f32));
+                break;
+            };
             if (frame.origin.x - x).abs() > 0.5 || (frame.origin.y - y).abs() > 0.5 {
                 unsafe {
                     let set: unsafe extern "C" fn(*mut c_void, *mut c_void, NsPoint) =
@@ -815,23 +843,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_notch_leaves_oaks_top_row_clear() {
+    fn default_notch_preserves_lower_center_placement() {
         let visible = Rect {
             x: -1440.0,
             y: 80.0,
             w: 1440.0,
             h: 790.0,
         };
-        // Oak stays centered and 33 points tall, even when expanded.
-        let oak_bottom = visible.y + visible.h - 33.0;
         for (width, height) in [crate::notch::COMPACT, crate::notch::EXPANDED] {
             let (x, y) = notch_origin(
                 visible,
+                -720.0,
                 width.into(),
                 height.into(),
-                crate::prefs::Prefs::default().notch_below,
-            );
-            assert!(y + f64::from(height) <= oak_bottom - 8.0);
+                crate::prefs::Prefs::default().notch_position,
+            )
+            .unwrap();
+            assert_eq!(y + f64::from(height), 829.0);
             assert!(x >= visible.x && x + f64::from(width) <= visible.x + visible.w);
         }
         assert!(crate::notch::COMPACT.0 <= 300.0);
@@ -847,10 +875,19 @@ mod tests {
         };
         let (width, height) = crate::notch::COMPACT;
         assert_eq!(
-            notch_origin(visible, width.into(), height.into(), false),
-            (-870.0, 834.0)
+            notch_origin(
+                visible,
+                -720.0,
+                width.into(),
+                height.into(),
+                NotchPosition::Center
+            ),
+            Some((-870.0, 834.0))
         );
-        assert_eq!(notch_origin(visible, 480.0, 230.0, false), (-960.0, 640.0));
+        assert_eq!(
+            notch_origin(visible, -720.0, 480.0, 230.0, NotchPosition::Center),
+            Some((-960.0, 640.0))
+        );
         assert_eq!(
             notch_origin(
                 Rect {
@@ -859,12 +896,105 @@ mod tests {
                     w: 1280.0,
                     h: 770.0
                 },
+                640.0,
                 width.into(),
                 height.into(),
-                false
+                NotchPosition::Center
             ),
-            (490.0, 734.0)
+            Some((490.0, 734.0))
         );
+    }
+
+    #[test]
+    fn positions_fit_compact_and_expanded_on_offset_and_tight_screens() {
+        for (width, height) in [(300.0, 36.0), (480.0, 230.0)] {
+            for screen_width in [width, width + 15.0, 640.0, 1920.0] {
+                let visible = Rect {
+                    x: -1730.0,
+                    y: 45.0,
+                    w: screen_width,
+                    h: 900.0,
+                };
+                let center = visible.x + visible.w * 0.5;
+                for position in [
+                    NotchPosition::Left,
+                    NotchPosition::Right,
+                    NotchPosition::Center,
+                    NotchPosition::Below,
+                ] {
+                    let (x, y) = notch_origin(visible, center, width, height, position).unwrap();
+                    assert!(x >= visible.x && x + width <= visible.x + visible.w);
+                    assert!(y >= visible.y && y + height <= visible.y + visible.h);
+                    assert_eq!(
+                        y + height,
+                        if position == NotchPosition::Below {
+                            904.0
+                        } else {
+                            945.0
+                        }
+                    );
+                    if screen_width >= width + 16.0 {
+                        match position {
+                            NotchPosition::Left => assert_eq!(x, visible.x + 8.0),
+                            NotchPosition::Right => {
+                                assert_eq!(x + width, visible.x + visible.w - 8.0)
+                            }
+                            _ => assert_eq!(x + width * 0.5, center),
+                        }
+                    }
+                }
+            }
+        }
+        // A left Dock changes edge positions, not the full display's center anchor.
+        let dock_area = Rect {
+            x: 80.0,
+            y: 0.0,
+            w: 1520.0,
+            h: 900.0,
+        };
+        assert_eq!(
+            notch_origin(dock_area, 800.0, 480.0, 230.0, NotchPosition::Right),
+            Some((1112.0, 670.0))
+        );
+        assert_eq!(
+            notch_origin(dock_area, 800.0, 480.0, 230.0, NotchPosition::Left),
+            Some((88.0, 670.0))
+        );
+        assert_eq!(
+            notch_origin(dock_area, 800.0, 480.0, 230.0, NotchPosition::Center),
+            Some((560.0, 670.0))
+        );
+        assert_eq!(
+            notch_origin(
+                Rect {
+                    x: 0.0,
+                    y: 50.0,
+                    w: 480.0,
+                    h: 230.0
+                },
+                240.0,
+                480.0,
+                230.0,
+                NotchPosition::Below
+            ),
+            Some((0.0, 50.0))
+        );
+        for (w, h) in [(479.0, 230.0), (480.0, 229.0), (299.0, 36.0), (300.0, 35.0)] {
+            let area = Rect {
+                x: -800.0,
+                y: 40.0,
+                w,
+                h,
+            };
+            assert_eq!(
+                notch_origin(area, -560.0, 480.0, 230.0, NotchPosition::Right),
+                None
+            );
+            assert_eq!(
+                notch_origin(area, -560.0, 300.0, 36.0, NotchPosition::Right).is_some(),
+                w >= 300.0 && h >= 36.0
+            );
+        }
     }
 
     #[test]

@@ -1,3 +1,16 @@
+## FolderLens 0.3.2 — Screen position choices
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Add Settings → General → Notch placement choices: Top left, Top center, Top right and Lower center. These positions are independent of Oak or any other app: no app detection, assumed window widths, reserved center slot or automatic collision handling.
+- Anchor edge positions 8 points from the visible work area's side. Center positions use the full primary display's center, with origins clamped to the work area. Both compact and expanded sizes reposition after expansion or display changes. Collapse if the expanded panel cannot fit; hide the notch and keep the tray fallback if compact cannot fit.
+- Preserve the existing default Lower center and its 41-point top inset. Old `notch_below=1` settings migrate to Lower center, `0` to Top center; an explicit valid `notch_position` wins regardless of legacy-key order. Unknown values retain the legacy choice or default. Existing agent settings and permissions are unchanged.
+- Keep the 300×36 compact readings, visible Quit, scan-only intervals and manual agent adapters. Update README, guide and the General screenshot. No deletion path, direct AI API or automatic paid request is added.
+
+Verification covers the full macOS Rust/Pi suites, migration/round-trip cases, all four Settings choices at 760×560 and 360×420, compact/expanded geometry on offset, Dock-reduced, exact-fit and undersized work areas, formatting, Clippy, updater fixtures and ad-hoc arm64 DMG/ZIP packaging. Actual compact Top left and Top right shared a row with Oak 0.5.55 without overlap on the verification display; Top center reproduced overlap and restoring Top right cleared it without restarting. This does not promise non-overlap with arbitrary windows.
+
+Native pointer/keyboard routing, automatic collapse/tray fallback during live display shrinkage, native expansion, physical-notch and multi-display hardware, real AI turns/Terminal continuation and actual installation/restart/Gatekeeper behavior remain unverified. Screen recording and event posting were unavailable for coexistence checks. All current installations remain manual-update-only. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.1 — Smaller notch, Oak coexistence and visible Quit
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI remains optional and manual through the existing CLI adapters.
