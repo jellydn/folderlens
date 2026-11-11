@@ -1,6 +1,6 @@
 //! Notch-first controls. The review window remains the sole owner of scans and AI jobs.
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use rune::tok::TextStyle;
@@ -104,6 +104,31 @@ pub struct Notch {
 
 static HANDLE: OnceLock<AppHandle<Notch>> = OnceLock::new();
 static REVIEW: OnceLock<AppHandle<crate::State>> = OnceLock::new();
+// Explicit hiding (tray, Settings, Review or Escape) must cancel automatic restoration.
+static VISIBILITY: Mutex<Visibility> = Mutex::new(Visibility::Visible);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Visibility {
+    Visible,
+    Hidden,
+    SpaceHidden,
+}
+
+impl Visibility {
+    fn fit(&mut self, fits: bool) -> Option<bool> {
+        match (*self, fits) {
+            (Self::Visible, false) => {
+                *self = Self::SpaceHidden;
+                Some(false)
+            }
+            (Self::SpaceHidden, true) => {
+                *self = Self::Visible;
+                Some(true)
+            }
+            _ => None,
+        }
+    }
+}
 
 pub fn install(handle: AppHandle<Notch>, review: AppHandle<crate::State>) {
     let _ = HANDLE.set(handle);
@@ -111,7 +136,7 @@ pub fn install(handle: AppHandle<Notch>, review: AppHandle<crate::State>) {
 }
 
 pub fn sync(s: &crate::State) {
-    crate::status::set_notch_position(s.prefs.notch_position);
+    crate::status::set_notch_placement(s.prefs.notch_position, s.prefs.notch_display.as_deref());
     if let Some(handle) = HANDLE.get() {
         let readings = Readings::from_review(s);
         handle.update_if(move |state, tx| {
@@ -136,22 +161,33 @@ fn send(action: impl FnOnce(&mut crate::State) + Send + 'static) {
 }
 
 pub fn show() {
+    *VISIBILITY.lock().unwrap() = Visibility::Visible;
     if let Some(handle) = HANDLE.get() {
         handle.show();
     }
 }
 
 pub fn hide() {
+    *VISIBILITY.lock().unwrap() = Visibility::Hidden;
     if let Some(handle) = HANDLE.get() {
         handle.hide();
+    }
+}
+
+/// Restore only a notch hidden by insufficient space, never an explicit dismissal.
+pub fn restore_work_area() {
+    if VISIBILITY.lock().unwrap().fit(true) == Some(true) {
+        if let Some(handle) = HANDLE.get() {
+            handle.show();
+        }
     }
 }
 
 /// Native placement cannot clamp a window larger than the work area.
 pub fn fit_work_area(area: (f32, f32)) {
     if area.0 < COMPACT.0 || area.1 < COMPACT.1 {
-        if let Some(handle) = HANDLE.get() {
-            if handle.is_visible() {
+        if VISIBILITY.lock().unwrap().fit(false) == Some(false) {
+            if let Some(handle) = HANDLE.get() {
                 handle.hide();
             }
         }
@@ -488,6 +524,25 @@ fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reconnect_restores_space_hidden_notches_but_not_explicitly_hidden_ones() {
+        let mut visibility = Visibility::Visible;
+        // Disconnect onto a work area too small for compact. Repeated polls stay quiet.
+        assert_eq!(visibility.fit(false), Some(false));
+        assert_eq!(visibility.fit(false), None);
+        assert_eq!(visibility.fit(true), Some(true));
+        assert_eq!(visibility.fit(true), None);
+        // Opening Settings/Review or choosing tray while space-hidden cancels restore.
+        assert_eq!(visibility.fit(false), Some(false));
+        visibility = Visibility::Hidden;
+        assert_eq!(visibility.fit(false), None);
+        assert_eq!(visibility.fit(true), None);
+        // An explicit show permits normal work-area handling again.
+        visibility = Visibility::Visible;
+        assert_eq!(visibility.fit(false), Some(false));
+        assert_eq!(visibility.fit(true), Some(true));
+    }
 
     #[test]
     fn notch_controls_fit_expand_collapse_and_disable_an_active_scan() {

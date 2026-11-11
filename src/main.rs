@@ -293,6 +293,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
         // Appearance changes do not invalidate an otherwise unchanged selection.
         let mut previous = s.prefs.clone();
         previous.theme = prefs.theme;
+        previous.notch_display.clone_from(&prefs.notch_display);
         if previous != prefs {
             s.confirmed = false;
         }
@@ -1600,7 +1601,7 @@ mod tests {
     }
 
     #[test]
-    fn theme_changes_preserve_a_recorded_choice_but_exclusions_clear_it() {
+    fn appearance_changes_preserve_a_recorded_choice_but_exclusions_clear_it() {
         let mut rt = runtime();
         rt.update(|s, _| apply_level(s, Level::Balanced));
         rt.frame(0.0);
@@ -1622,8 +1623,21 @@ mod tests {
             assert_eq!(ticked_ids(&rt.state), selection);
             assert_eq!(format!("{:?}", rt.state.catalog), catalog);
         }
+        for display in [Some("external-display".into()), None] {
+            let mut prefs = rt.state.prefs.clone();
+            prefs.notch_display = display.clone();
+            prefs::save_to(&path, &prefs);
+            rt.update(|s, tx| {
+                poll(s, 0.0, tx);
+            });
+            assert_eq!(rt.state.prefs.notch_display, display);
+            assert!(rt.state.confirmed);
+            assert_eq!(ticked_ids(&rt.state), selection);
+            assert_eq!(format!("{:?}", rt.state.catalog), catalog);
+        }
         let mut prefs = rt.state.prefs.clone();
         prefs.theme = theme::Theme::Default;
+        prefs.notch_display = Some("external-display".into());
         prefs.kept.push(rt.state.catalog.leaves[0].path.clone());
         prefs::save_to(&path, &prefs);
         rt.update(|s, tx| {

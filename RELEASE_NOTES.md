@@ -1,3 +1,16 @@
+## FolderLens 0.3.4 — Choose a notch display
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Add Settings → General → Notch display: follow the primary display automatically or choose a named connected display. The choice belongs to FolderLens, with no Oak process/settings dependency.
+- Save the display UUID independently of its name or list order. A disconnected choice falls back to primary without being forgotten, then returns when it reconnects. Settings explains the fallback; choosing Primary clears the saved choice. Old settings retain automatic primary placement. If macOS cannot provide a UUID, a session ID permits selection but may not survive reconnect/restart.
+- Apply all four positions and compact/expanded work-area checks to the chosen display. Keep automatic collapse when expanded cannot fit and the tray fallback if compact cannot fit. Restore space-hidden notches when a fitting display returns, without reopening explicit dismissals. Preserve saved themes, position and agent permissions; display-only changes preserve Record choice.
+- Refresh the README, guide and current General/theme screenshots; add connected/disconnected display examples. No cleanup, automatic AI or installer-policy change is added.
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy, UUID preference round trips and old-file defaults, same-name/reordered/disconnected/reconnected displays, offset and Dock-reduced screen geometry for both sizes and all positions, and accessible display controls at standard/minimum Settings sizes. Synthetic connected, missing-display, narrow and light-theme renders were inspected. A native isolated-HOME probe verifies compact bounds for explicit and missing display IDs on a single virtual display.
+
+Actual selection across physical displays, physical unplug/reconnect, mixed display scales, native expansion/pointer/keyboard routing and VoiceOver remain unverified. Tests and synthetic renders are not multi-display hardware proof. Real AI turns/Terminal continuation, Finder dialogs and actual manual app replacement/restart/Gatekeeper behavior also remain unverified. No owner's installed app is replaced during verification. All current installations remain manual-update-only; Homebrew users update through Homebrew. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.3 — Shorter notch, saved themes and verified update downloads
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.

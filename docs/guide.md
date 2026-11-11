@@ -14,7 +14,7 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.3)
+## Quick review (0.3.4)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
@@ -39,7 +39,7 @@ These are fixed palettes, not automatic system-appearance matching.
 
 - **Top left / Top right:** 8 points from the visible work area's side, below the
   camera/menu bar. Expansion keeps the same edge anchor.
-- **Top center:** centered on the primary display, just below the camera/menu bar.
+- **Top center:** centered on the selected display, just below the camera/menu bar.
 - **Lower center:** the default, with the existing 41-point extra top inset.
 
 Both panel sizes have origins clamped to the visible work area. Center positions
@@ -48,8 +48,27 @@ after expansion and display changes, including screens without physical notches.
 If the expanded panel cannot fit, it collapses. If even the compact panel cannot
 fit, the notch hides and the tray remains available.
 These controls are independent of other apps: no app detection, assumed app sizes,
-reserved center slot, dragging, display selection or automatic collision handling.
+reserved center slot, dragging or automatic collision handling.
 Choose another position if a different app overlaps.
+
+**Display selection (0.3.4):** **General → Notch display** offers
+**Primary display (automatic)** and each connected display's name. Numbered labels
+distinguish identical names; the saved choice uses the display UUID, not its list
+position. Position and size checks use that display's full frame and visible work
+area, including displays above or left of primary. If it disconnects, the notch
+falls back to primary without forgetting it, then returns when it reconnects.
+Settings explains the fallback. Choose Primary to clear the remembered choice.
+If insufficient space hid the notch, a fitting display restores it automatically;
+explicitly hiding it with Use tray, Escape, Review or Settings cancels that restore.
+The connected list refreshes while Settings is open. Existing files without
+`notch_display` retain automatic primary placement; theme, position, permissions
+and recorded selections are unchanged by display-only edits. If macOS cannot
+provide a UUID, the fallback session ID may not survive reconnect/restart.
+Physical multi-display unplug/reconnect and native pointer routing still need
+hardware verification; synthetic renders and geometry tests are not that proof.
+
+![Named connected displays, synthetic example](../shots/display-settings.png)
+![Disconnected saved display, synthetic example](../shots/display-missing.png)
 
 Old `notch_below=1` settings become Lower center; `notch_below=0` becomes Top center.
 An explicit `notch_position` wins over the legacy
@@ -219,7 +238,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.3 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.3). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.4 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.4). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 

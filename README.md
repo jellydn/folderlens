@@ -12,7 +12,7 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.3 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.3) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.4 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.4) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -30,7 +30,7 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 
 ### Notch and local checks
 
-The app starts with a compact notch, centered below the primary display's
+By default, the app starts with a compact notch below the primary display's
 camera/menu-bar area. **Version 0.3.3** reduces the compact view to
 **300×32 points**, keeping the metrics and 22×28-point expand control. Published
 0.3.1–0.3.2 use 300×36 points; 0.3.0 used 360×36.
@@ -49,11 +49,22 @@ keeps Record choice intact. These are fixed palettes, not automatic system match
 **Top left**, **Top center**, **Top right** and **Lower center** (default).
 These are screen positions, not presets for another app. Left/Right sit near the
 visible work area's edges; both panel sizes remain within that area. Lower center
-keeps the existing extra space above. Placement follows the primary display and
+keeps the existing extra space above. Placement follows the selected display and
 updates after expansion or display changes. If the expanded panel cannot fit, it
 collapses; if compact cannot fit, it hides in favor of the tray. Choose a different position if another
 app overlaps; FolderLens does not detect apps or reserve their assumed sizes.
 The old 0.3.1 switch migrates to Lower center when on, Top center when off.
+
+**Display selection in 0.3.4:** **Settings → General → Notch display** lists
+connected displays by name. Choose one, or leave **Primary display (automatic)**
+selected. FolderLens remembers the display independently of its name or list order.
+If it disconnects, the notch uses the primary display and returns when the saved
+display reconnects. Choose Primary to forget the saved choice. Existing settings
+keep the automatic primary behavior. Position and theme remain unchanged, and
+display-only changes preserve Record choice. Both notch sizes use the chosen
+display's visible work area; the tray remains the fallback if compact cannot fit.
+
+![Display selection with synthetic connected displays](shots/display-settings.png)
 
 The single-line compact view uses icons for candidate estimates, disk
 free/total space, CPU and memory usage, plus a scan-status dot. Expand it for Scan now,

@@ -28,6 +28,7 @@ pub enum Page {
 
 pub struct Settings {
     pub prefs: Prefs,
+    pub displays: Vec<crate::status::Display>,
     pub path: PathBuf,
     pub page: Page,
     pub custom: TextEdit,
@@ -41,6 +42,11 @@ pub fn spec() -> AppSpec<Settings> {
     AppSpec {
         scenes: &[
             ("general", |state| state.page = Page::General),
+            ("displays-example", preview_displays),
+            ("display-missing-example", |state| {
+                preview_displays(state);
+                state.displays.truncate(1);
+            }),
             ("agent", |state| state.page = Page::Agent),
             ("agent-copilot", |state| {
                 preview_agent(state, "copilot", "auto")
@@ -73,6 +79,18 @@ pub fn spec() -> AppSpec<Settings> {
                 state.prefs.update_prereleases = true;
             }),
         ],
+        poll: Some(|state, _, tx| {
+            tx.wake_after(std::time::Duration::from_secs(1));
+            if rune::is_headless() {
+                return false;
+            }
+            let displays = crate::status::displays();
+            if state.displays == displays {
+                return false;
+            }
+            state.displays = displays;
+            true
+        }),
         on_key: Some(|_, event, tx| {
             if event.is_command('q') {
                 tx.quit();
@@ -100,6 +118,7 @@ pub fn state() -> Settings {
     }
     let mut state = Settings {
         prefs,
+        displays: crate::status::displays(),
         path,
         page: Page::General,
         custom,
@@ -110,6 +129,33 @@ pub fn state() -> Settings {
     };
     load_model(&mut state);
     state
+}
+
+fn preview_displays(state: &mut Settings) {
+    state.page = Page::General;
+    state.displays = [
+        ("example-built-in", "Built-in Retina Display", 0.0),
+        ("example-external", "Studio Display", -2560.0),
+    ]
+    .into_iter()
+    .map(|(id, name, x)| crate::status::Display {
+        id: id.into(),
+        name: name.into(),
+        frame: crate::status::Rect {
+            x,
+            y: 0.0,
+            w: 2560.0,
+            h: 1440.0,
+        },
+        visible: crate::status::Rect {
+            x,
+            y: 40.0,
+            w: 2560.0,
+            h: 1375.0,
+        },
+    })
+    .collect();
+    state.prefs.notch_display = Some("example-external".into());
 }
 
 fn load_model(state: &mut Settings) {
@@ -365,6 +411,69 @@ fn toggle(key: &'static str, on: bool, press: impl Fn(&mut Settings) + 'static) 
         )
 }
 
+fn display_choices(state: &Settings) -> El {
+    let missing = state
+        .prefs
+        .notch_display
+        .as_ref()
+        .is_some_and(|id| !state.displays.iter().any(|display| &display.id == id));
+    let primary = state.prefs.notch_display.is_none() || missing;
+    let mut choices = col().w_full().gap(8.0).child(
+        button(
+            if missing {
+                "Primary display (fallback)"
+            } else {
+                "Primary display (automatic)"
+            },
+            if primary {
+                ButtonStyle::Primary
+            } else {
+                ButtonStyle::Secondary
+            },
+        )
+        .key("notch-display-primary")
+        .label(format!(
+            "Notch display: Primary{}",
+            if primary { ", selected" } else { "" }
+        ))
+        .w_full()
+        .on_press(|s: &mut Settings| {
+            s.prefs.notch_display = None;
+            persist(s);
+        }),
+    );
+    for (index, display) in state.displays.iter().enumerate() {
+        let selected = state.prefs.notch_display.as_ref() == Some(&display.id);
+        let id = display.id.clone();
+        let label = format!("{} (display {})", display.name, index + 1);
+        choices = choices.child(
+            button(
+                &label,
+                if selected {
+                    ButtonStyle::Primary
+                } else {
+                    ButtonStyle::Secondary
+                },
+            )
+            .key(format!("notch-display-{id}"))
+            .label(format!(
+                "Notch display: {label}{}",
+                if selected { ", selected" } else { "" }
+            ))
+            .w_full()
+            .on_press(move |s: &mut Settings| {
+                s.prefs.notch_display = Some(id.clone());
+                persist(s);
+            }),
+        );
+    }
+    choices.child(text(if missing {
+        "Saved display disconnected. Using primary until it reconnects. Choose Primary to forget the saved display. The tray remains available."
+    } else {
+        "Choose a connected display, or follow the primary display automatically. A disconnected choice falls back to primary and returns when reconnected."
+    }).key("notch-display-note").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+}
+
 fn general(state: &Settings) -> El {
     let mut themes = col().w_full().gap(8.0);
     for choices in crate::theme::Theme::ALL.chunks(2) {
@@ -445,6 +554,8 @@ fn general(state: &Settings) -> El {
         .gap(14.0)
         .child(heading("Only the readings you need"))
         .child(text("Choose the readings shown with your selection. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(section("Notch display"))
+        .child(display_choices(state))
         .child(section("Notch placement"))
         .child(placement)
         .child(text("Choose a screen position to suit your setup. Lower center leaves extra space above. Positions stay within the work area; other apps are not detected. The tray stays available.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
@@ -976,6 +1087,72 @@ mod tests {
     use super::*;
 
     #[test]
+    fn display_choices_persist_and_explain_disconnect_without_forgetting_the_choice() {
+        for size in [(760.0, 560.0), (360.0, 420.0)] {
+            let mut state = state();
+            preview_displays(&mut state);
+            state.prefs.notch_display = None;
+            state.prefs.notch_position = NotchPosition::Right;
+            state.prefs.theme = crate::theme::Theme::Lotus;
+            let path = state.path.clone();
+            let mut rt = rune::Runtime::new(
+                state,
+                view,
+                size,
+                rune::Env {
+                    system_dark: true,
+                    scale: 2.0,
+                },
+            );
+            rt.set_system_reduced_motion(true);
+            rt.frame(0.0);
+            let key = "notch-display-example-external";
+            rt.update(|_, tx| tx.scroll_into_view(key));
+            rt.frame(0.0);
+            let (rect, _) = rt.presented(key).unwrap();
+            assert!(rect[0] >= 0.0 && rect[0] + rect[2] <= size.0);
+            assert!(rect[1] >= 97.0 && rect[1] + rect[3] <= size.1 - 34.0);
+            let (x, y) = rt.find(key).unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            let saved = prefs::load_from(&path);
+            assert_eq!(saved.notch_display.as_deref(), Some("example-external"));
+            assert_eq!(saved.notch_position, NotchPosition::Right);
+            assert_eq!(saved.theme, crate::theme::Theme::Lotus);
+            assert!(!saved.allow_start && !saved.send_paths);
+            let connected = rt.state.displays.clone();
+            rt.update(|s, _| s.displays.truncate(1));
+            rt.frame(0.0);
+            assert!(rt
+                .elements()
+                .iter()
+                .any(|el| el.key.as_deref() == Some("notch-display-note")
+                    && el
+                        .text
+                        .as_deref()
+                        .is_some_and(|text| text.contains("disconnected"))));
+            assert_eq!(prefs::load_from(&path), saved);
+            rt.update(|s, _| s.displays = connected);
+            rt.frame(0.0);
+            let selected = rt
+                .elements()
+                .into_iter()
+                .find(|el| el.key.as_deref() == Some(key))
+                .unwrap();
+            assert!(selected.focusable && selected.label.unwrap().ends_with(", selected"));
+            rt.update(|_, tx| tx.scroll_into_view("notch-display-primary"));
+            rt.frame(0.0);
+            let (x, y) = rt.find("notch-display-primary").unwrap();
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            assert_eq!(prefs::load_from(&path).notch_display, None);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
     fn theme_choices_are_reachable_persist_and_preserve_position_and_permissions() {
         for size in [(760.0, 560.0), (360.0, 420.0)] {
             let mut state = state();
@@ -1100,9 +1277,11 @@ mod tests {
                 NotchPosition::Below,
             ] {
                 let key = format!("notch-position-{}", position.as_str());
+                rt.update(|_, tx| tx.scroll_into_view(&key));
+                rt.frame(0.0);
                 let (rect, _) = rt.presented(&key).expect("visible position choice");
                 assert!(rect[0] >= 0.0 && rect[0] + rect[2] <= width);
-                assert!(rect[1] >= 0.0 && rect[1] + rect[3] <= height);
+                assert!(rect[1] >= 97.0 && rect[1] + rect[3] <= height - 34.0);
                 let (x, y) = rt.find(&key).unwrap();
                 rt.pointer_down(x, y);
                 rt.pointer_up(x, y);

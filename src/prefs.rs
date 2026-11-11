@@ -64,6 +64,7 @@ pub struct Prefs {
     pub gauge_gpu: bool,
     pub shortcut_hints: bool,
     pub notch_position: NotchPosition,
+    pub notch_display: Option<String>,
     pub theme: crate::theme::Theme,
     pub update_checks: bool,
     pub update_downloads: bool,
@@ -86,6 +87,7 @@ impl Default for Prefs {
             gauge_gpu: true,
             shortcut_hints: true,
             notch_position: NotchPosition::Below,
+            notch_display: None,
             theme: crate::theme::Theme::Default,
             update_checks: true,
             update_downloads: false,
@@ -203,6 +205,7 @@ pub fn load_from(path: &Path) -> Prefs {
                 }
             }
             "notch_position" => position = NotchPosition::parse(value),
+            "notch_display" => prefs.notch_display = (!value.is_empty()).then(|| value.to_string()),
             "theme" => prefs.theme = crate::theme::Theme::parse(value),
             "update_checks" => prefs.update_checks = value == "1",
             "update_downloads" => prefs.update_downloads = value == "1",
@@ -241,6 +244,10 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
     text.push_str(&format!(
         "notch_position={}\n",
         prefs.notch_position.as_str()
+    ));
+    text.push_str(&format!(
+        "notch_display={}\n",
+        prefs.notch_display.as_deref().unwrap_or("")
     ));
     text.push_str(&format!("theme={}\n", prefs.theme.as_str()));
     text.push_str(&format!("update_checks={}\n", flag(prefs.update_checks)));
@@ -540,6 +547,8 @@ mod tests {
             allow_start: true,
             send_paths: true,
             notch_position: NotchPosition::Right,
+            notch_display: Some("AABBCCDD-1234-5678-ABCD-123456789ABC".into()),
+            theme: crate::theme::Theme::Lotus,
             keep_hours: 36,
             kept: vec!["/tmp/keep".into()],
             ..Prefs::default()
@@ -645,6 +654,7 @@ mod tests {
         assert_eq!(prefs.agent_id, "grok");
         assert_eq!(prefs.keep_hours, 0);
         assert!(prefs.gauge_cpu);
+        assert_eq!(prefs.notch_display, None);
         assert_eq!(prefs.theme, crate::theme::Theme::Default);
         std::fs::write(&path, "theme=unknown\nnotch_position=right\n").unwrap();
         let loaded = load_from(&path);

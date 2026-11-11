@@ -9,19 +9,43 @@ use std::sync::{Mutex, OnceLock};
 use crate::prefs::NotchPosition;
 
 // Native frame callbacks have no Rune state. Review polling publishes this preference.
-static NOTCH_POSITION: Mutex<NotchPosition> = Mutex::new(NotchPosition::Below);
+static NOTCH_PLACEMENT: Mutex<(NotchPosition, Option<String>)> =
+    Mutex::new((NotchPosition::Below, None));
 
-pub fn set_notch_position(position: NotchPosition) {
-    *NOTCH_POSITION.lock().unwrap() = position;
+pub fn set_notch_placement(position: NotchPosition, display: Option<&str>) {
+    *NOTCH_PLACEMENT.lock().unwrap() = (position, display.map(str::to_owned));
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,
     pub w: f64,
     /// Height in AppKit points.
     pub h: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Display {
+    pub id: String,
+    pub name: String,
+    pub frame: Rect,
+    pub visible: Rect,
+}
+
+/// NSScreen order starts with the menu-bar display, not the keyboard-focus display.
+fn selected_display<'a>(displays: &'a [Display], preferred: Option<&str>) -> Option<&'a Display> {
+    preferred
+        .and_then(|id| displays.iter().find(|display| display.id == id))
+        .or_else(|| displays.first())
+}
+
+pub fn displays() -> Vec<Display> {
+    #[cfg(all(target_os = "macos", not(test)))]
+    if !rune::is_headless() {
+        return macos::displays();
+    }
+    Vec::new()
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -204,18 +228,59 @@ mod macos {
         }
     }
 
-    pub(super) fn position_notch() {
-        // The first NSScreen owns the menu bar; mainScreen follows keyboard focus.
-        let screen = msg_index(
-            msg0(class(c"NSScreen"), sel(c"screens")),
-            sel(c"objectAtIndex:"),
-            0,
-        );
-        if screen.is_null() {
-            return;
+    pub(super) fn displays() -> Vec<super::Display> {
+        let screens = msg0(class(c"NSScreen"), sel(c"screens"));
+        let mut displays = Vec::new();
+        for index in 0..msg_usize(screens, sel(c"count")) {
+            let screen = msg_index(screens, sel(c"objectAtIndex:"), index);
+            let description = msg0(screen, sel(c"deviceDescription"));
+            let number = msg_ptr(
+                description,
+                sel(c"objectForKey:"),
+                ns_string("NSScreenNumber"),
+            );
+            let id = msg_usize(number, sel(c"unsignedIntegerValue")) as u32;
+            let uuid = unsafe { CGDisplayCreateUUIDFromDisplayID(id) };
+            let identifier = if uuid.is_null() {
+                // A session display ID still permits a visible choice if UUID lookup fails.
+                format!("display-{id}")
+            } else {
+                unsafe {
+                    let string = CFUUIDCreateString(std::ptr::null(), uuid);
+                    let identifier = string_value(string as *mut c_void);
+                    if !string.is_null() {
+                        CFRelease(string);
+                    }
+                    CFRelease(uuid);
+                    identifier
+                }
+            };
+            let rect = |selector| {
+                let frame = msg_rect(screen, selector);
+                Rect {
+                    x: frame.origin.x,
+                    y: frame.origin.y,
+                    w: frame.size.w,
+                    h: frame.size.h,
+                }
+            };
+            displays.push(super::Display {
+                id: identifier,
+                name: string_value(msg0(screen, sel(c"localizedName"))),
+                frame: rect(sel(c"frame")),
+                visible: rect(sel(c"visibleFrame")),
+            });
         }
-        let area = msg_rect(screen, sel(c"visibleFrame"));
-        let display = msg_rect(screen, sel(c"frame"));
+        displays
+    }
+
+    pub(super) fn position_notch() {
+        let displays = displays();
+        let (position, preferred) = super::NOTCH_PLACEMENT.lock().unwrap().clone();
+        let Some(display) = super::selected_display(&displays, preferred.as_deref()) else {
+            return;
+        };
+        let area = display.visible;
         let windows = msg0(
             msg0(class(c"NSApplication"), sel(c"sharedApplication")),
             sel(c"windows"),
@@ -231,18 +296,13 @@ mod macos {
             }
             let frame = msg_rect(window, sel(c"frame"));
             let Some((x, y)) = super::notch_origin(
-                Rect {
-                    x: area.origin.x,
-                    y: area.origin.y,
-                    w: area.size.w,
-                    h: area.size.h,
-                },
-                display.origin.x + display.size.w * 0.5,
+                area,
+                display.frame.x + display.frame.w * 0.5,
                 frame.size.w,
                 frame.size.h,
-                *super::NOTCH_POSITION.lock().unwrap(),
+                position,
             ) else {
-                crate::notch::fit_work_area((area.size.w as f32, area.size.h as f32));
+                crate::notch::fit_work_area((area.w as f32, area.h as f32));
                 break;
             };
             if (frame.origin.x - x).abs() > 0.5 || (frame.origin.y - y).abs() > 0.5 {
@@ -252,6 +312,7 @@ mod macos {
                     set(window, sel(c"setFrameOrigin:"), NsPoint { x, y });
                 }
             }
+            crate::notch::restore_work_area();
             break;
         }
     }
@@ -523,6 +584,18 @@ mod macos {
         )
     }
 
+    fn string_value(string: *mut c_void) -> String {
+        let bytes = msg0(string, sel(c"UTF8String")) as *const i8;
+        if bytes.is_null() {
+            return String::new();
+        }
+        unsafe {
+            std::ffi::CStr::from_ptr(bytes)
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
+
     fn class(name: &std::ffi::CStr) -> *mut c_void {
         unsafe { objc_getClass(name.as_ptr()) }
     }
@@ -541,6 +614,14 @@ mod macos {
                 unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void,
             >(objc_msgSend as *const () as usize);
             f(obj, sel)
+        }
+    }
+
+    fn msg_ptr(obj: *mut c_void, selector: *mut c_void, arg: *mut c_void) -> *mut c_void {
+        unsafe {
+            let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(obj, selector, arg)
         }
     }
 
@@ -813,6 +894,17 @@ mod macos {
         }
     }
 
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGDisplayCreateUUIDFromDisplayID(display: u32) -> *const c_void;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFUUIDCreateString(allocator: *const c_void, uuid: *const c_void) -> *const c_void;
+        fn CFRelease(value: *const c_void);
+    }
+
     #[link(name = "objc", kind = "dylib")]
     #[link(name = "AppKit", kind = "framework")]
     unsafe extern "C" {
@@ -841,6 +933,76 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chosen_display_survives_reordering_disconnect_and_reconnect() {
+        let primary = Display {
+            id: "built-in".into(),
+            name: "Same display name".into(),
+            frame: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 1512.0,
+                h: 982.0,
+            },
+            visible: Rect {
+                x: 0.0,
+                y: 25.0,
+                w: 1512.0,
+                h: 925.0,
+            },
+        };
+        let external = Display {
+            id: "external-uuid".into(),
+            name: primary.name.clone(),
+            frame: Rect {
+                x: -2560.0,
+                y: 240.0,
+                w: 2560.0,
+                h: 1440.0,
+            },
+            visible: Rect {
+                x: -2496.0,
+                y: 280.0,
+                w: 2496.0,
+                h: 1375.0,
+            },
+        };
+        let connected = vec![primary.clone(), external.clone()];
+        let preferred = Some("external-uuid");
+        assert_eq!(selected_display(&connected, None), Some(&primary));
+        assert_eq!(selected_display(&connected, preferred), Some(&external));
+        assert_eq!(selected_display(&connected[..1], preferred), Some(&primary));
+        let reordered = vec![external.clone(), primary];
+        assert_eq!(selected_display(&reordered, preferred), Some(&external));
+        assert_eq!(selected_display(&reordered, None), Some(&external));
+        assert_eq!(
+            selected_display(&connected, Some("missing")),
+            Some(&connected[0])
+        );
+        assert!(selected_display(&[], preferred).is_none());
+        for (width, height) in [crate::notch::COMPACT, crate::notch::EXPANDED] {
+            let (width, height) = (f64::from(width), f64::from(height));
+            for (position, expected_x, inset) in [
+                (NotchPosition::Left, -2488.0, 0.0),
+                (NotchPosition::Right, -width - 8.0, 0.0),
+                (NotchPosition::Center, -1280.0 - width / 2.0, 0.0),
+                (NotchPosition::Below, -1280.0 - width / 2.0, 41.0),
+            ] {
+                let display = selected_display(&connected, preferred).unwrap();
+                assert_eq!(
+                    notch_origin(
+                        display.visible,
+                        display.frame.x + display.frame.w / 2.0,
+                        width,
+                        height,
+                        position
+                    ),
+                    Some((expected_x, 1655.0 - height - inset))
+                );
+            }
+        }
+    }
 
     #[test]
     fn default_notch_preserves_lower_center_placement() {
