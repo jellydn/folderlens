@@ -1,9 +1,8 @@
-//! FolderLens is a menu-tray review of what a cleanup level would tick.
+//! FolderLens is a notch-first review of what a cleanup level would tick.
 //!
-//! Rune has no macOS status item, so FolderLens installs its own. The panel is an
-//! accessory window: no Dock icon. A click on the menu-bar item shows it under
-//! that item. The action list lives in the panel. Confirm records the choice
-//! and deletes nothing. Settings and the panel are never open together.
+//! The compact notch opens local controls and the full review. A native menu-bar
+//! item remains the fallback. Accessory windows have no Dock icon. Record choice
+//! deletes nothing. Settings, the notch and the review are never open together.
 //!
 //! The list, the free-space line, and the gauges come from this Mac.
 //! FolderLens ships its own hint catalog and measures the folders itself.
@@ -14,13 +13,14 @@
 mod agent;
 mod catalog;
 mod gpu;
+mod notch;
 mod palette;
 mod prefs;
 mod settings;
 mod status;
 mod update;
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use catalog::{Catalog, Level};
 use rune::tok::{type_, TextStyle};
@@ -29,13 +29,13 @@ use rune::{
     MacWindowOptions, ScrollSpec, Shape, Transition, Tx, WindowOptions, WindowSpec,
 };
 
-const PANEL: &str = "#17242b";
-const INK: &str = "#edf4f3";
-const MUTED: &str = "#a6bbc2";
+const PANEL: &str = "#010105";
+const INK: &str = "#ffffff";
+const MUTED: &str = "#aaaab8";
 const LINE: &str = "#ffffff";
-const BLUE: &str = "#79d8cb";
-const RED: &str = "#ff453a";
-const TRACK: &str = "#2b4049";
+const BLUE: &str = "#66a7ff";
+const RED: &str = "#ff666c";
+const TRACK: &str = "#1b1b23";
 const MIN_PANEL_HEIGHT: f32 = 280.0;
 
 struct State {
@@ -59,7 +59,11 @@ struct State {
     agent: Option<agent::Job>,
     agent_details: bool,
     access_details: bool,
-    paused_until: f64,
+    scan_requests: Option<std::sync::mpsc::Sender<()>>,
+    scanning: bool,
+    interval_minutes: u64,
+    scans_running: bool,
+    next_scan: Option<Instant>,
     /// Last height sent to the window. Arrow keys must not resize again.
     window_h: f32,
 }
@@ -90,7 +94,11 @@ fn state_from(catalog: Catalog) -> State {
         agent: None,
         agent_details: false,
         access_details: false,
-        paused_until: 0.0,
+        scan_requests: None,
+        scanning: false,
+        interval_minutes: 30,
+        scans_running: false,
+        next_scan: None,
         window_h: palette::TRAY_H,
     }
 }
@@ -116,19 +124,27 @@ fn live_state() -> State {
 
 /// Workers send results through Rune's UI queue, including while the panel is hidden.
 fn start_workers(handle: rune::AppHandle<State>) {
+    let (requests, receiver) = std::sync::mpsc::channel();
+    handle.update(move |s, tx| {
+        s.scan_requests = Some(requests);
+        request_scan(s);
+        tx.instant();
+    });
     let scan_handle = handle.clone();
     std::thread::spawn(move || {
-        let catalog = catalog::load_live();
-        scan_handle.update(move |s, tx| {
-            s.ticks = vec![None; catalog.leaves.len()];
-            s.open = vec![false; catalog.groups.len()];
-            if let Some(index) = catalog.groups.iter().position(|group| group.count > 1) {
-                s.open[index] = true;
-            }
-            s.catalog = catalog;
-            s.confirmed = false;
-            tx.instant();
-        });
+        let mut initial = true;
+        while receiver.recv().is_ok() {
+            let catalog = if initial {
+                catalog::load_live()
+            } else {
+                catalog::refresh_live()
+            };
+            initial = false;
+            scan_handle.update(move |s, tx| {
+                finish_scan(s, catalog, Instant::now());
+                tx.instant();
+            });
+        }
     });
     std::thread::spawn(move || {
         let mut before = catalog::cpu_ticks();
@@ -155,6 +171,95 @@ fn start_workers(handle: rune::AppHandle<State>) {
     });
 }
 
+fn request_scan(s: &mut State) {
+    if s.scanning {
+        return;
+    }
+    if s.scan_requests
+        .as_ref()
+        .is_some_and(|sender| sender.send(()).is_ok())
+    {
+        s.scanning = true;
+        s.next_scan = None;
+    }
+}
+
+fn schedule_scan(s: &mut State, now: Instant) {
+    s.next_scan = if s.scans_running && !s.scanning {
+        Some(now + Duration::from_secs(s.interval_minutes * 60))
+    } else {
+        None
+    };
+}
+
+fn scan_if_due(s: &mut State, now: Instant) -> bool {
+    if s.scans_running && s.next_scan.is_some_and(|next| now >= next) && !s.scanning {
+        request_scan(s);
+        return s.scanning;
+    }
+    false
+}
+
+fn finish_scan(s: &mut State, catalog: Catalog, now: Instant) {
+    s.scanning = false;
+    schedule_scan(s, now);
+    if catalog.missing {
+        s.note = "Scan unavailable. Previous results kept; try Scan now again.".into();
+        return;
+    }
+    // Keep explicit choices by path, never by row position after a rescan.
+    s.ticks = catalog
+        .leaves
+        .iter()
+        .map(|leaf| {
+            s.catalog
+                .leaves
+                .iter()
+                .position(|old| old.path == leaf.path)
+                .and_then(|index| s.ticks[index])
+        })
+        .collect();
+    s.open = catalog
+        .groups
+        .iter()
+        .map(|group| {
+            s.catalog
+                .groups
+                .iter()
+                .position(|old| old.id == group.id)
+                .is_some_and(|index| s.open[index])
+        })
+        .collect();
+    if s.catalog.missing {
+        if let Some(index) = catalog.groups.iter().position(|group| group.count > 1) {
+            s.open[index] = true;
+        }
+    }
+    s.target = match s.target {
+        Some(palette::Target::Leaf(index)) => s.catalog.leaves.get(index).and_then(|old| {
+            catalog
+                .leaves
+                .iter()
+                .position(|leaf| leaf.path == old.path)
+                .map(palette::Target::Leaf)
+        }),
+        Some(palette::Target::Group(index)) => s.catalog.groups.get(index).and_then(|old| {
+            catalog
+                .groups
+                .iter()
+                .position(|group| group.id == old.id)
+                .map(palette::Target::Group)
+        }),
+        None => None,
+    };
+    s.catalog = catalog;
+    s.confirmed = false;
+    s.note.clear();
+    if let Some(job) = &s.agent {
+        job.set_access(palette::ask_access(s));
+    }
+}
+
 #[cfg(test)]
 fn fixture_state() -> State {
     state_from(catalog::fixture())
@@ -167,13 +272,6 @@ fn apply_level(s: &mut State, level: Level) {
     s.note.clear();
 }
 
-fn unix_now() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
-}
-
 /// AppKit pointer tracking stays on the UI thread; system commands do not.
 fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     status::on_poll();
@@ -182,7 +280,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     } else {
         Duration::from_secs(1)
     });
-    let mut changed = false;
+    let mut changed = scan_if_due(s, Instant::now());
     let prefs = prefs::load_from(&s.prefs_path);
     if prefs != s.prefs {
         s.prefs = prefs;
@@ -198,11 +296,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     if let Some(job) = &mut s.agent {
         changed |= job.poll();
     }
-    if s.paused_until > 0.0 && unix_now() >= s.paused_until && s.note.starts_with("Alerts paused") {
-        s.paused_until = 0.0;
-        s.note.clear();
-        changed = true;
-    }
+    notch::sync(s);
     changed
 }
 
@@ -422,10 +516,10 @@ enum ButtonStyle {
 fn button(label: &str, style: ButtonStyle) -> El {
     let (ink, fill, border) = match style {
         ButtonStyle::Primary => (PANEL, BLUE, BLUE),
-        ButtonStyle::Secondary => (INK, TRACK, "#4a6069"),
+        ButtonStyle::Secondary => (INK, TRACK, "#454552"),
         ButtonStyle::Quiet => (MUTED, PANEL, PANEL),
         ButtonStyle::Destructive => ("#ffaca5", "#3b2a30", "#88504e"),
-        ButtonStyle::Disabled => (MUTED, "#23333b", "#23333b"),
+        ButtonStyle::Disabled => (MUTED, TRACK, TRACK),
     };
     let enabled = !matches!(style, ButtonStyle::Disabled);
     row()
@@ -804,6 +898,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .w_full()
                 .padding(18.0)
                 .gap(16.0)
+                .child(overview(s))
+                .child(scan_controls(s))
                 .child(status_line(s))
                 .child(workspace)
                 .scroll(ScrollSpec {
@@ -826,9 +922,220 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         )
 }
 
+fn overview(s: &State) -> El {
+    let candidates: u64 = (0..s.catalog.leaves.len())
+        .filter(|&index| catalog::can_tick(&leaf_view(s, index)))
+        .map(|index| s.catalog.leaves[index].bytes)
+        .sum();
+    let free = if s.catalog.disk_total == 0 {
+        "Disk space unavailable".into()
+    } else {
+        format!(
+            "{} free of {}",
+            catalog::format_bytes(s.catalog.disk_free),
+            catalog::format_bytes(s.catalog.disk_total)
+        )
+    };
+    row()
+        .w_full()
+        .gap(12.0)
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(5.0)
+                .child(
+                    text("Cleanup candidates")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                )
+                .child(
+                    text(if s.catalog.missing {
+                        "—".into()
+                    } else {
+                        catalog::format_bytes(candidates)
+                    })
+                    .key("candidate-estimate")
+                    .font(TextStyle::new(28.0, 600.0))
+                    .color(paint(INK)),
+                )
+                .child(
+                    text("Estimated · review only, not reclaimed")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                )
+                .child(
+                    text(free)
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                ),
+        )
+        .child(if s.prefs.gauge_cpu {
+            col()
+                .w(104.0)
+                .gap(8.0)
+                .padding(12.0)
+                .radius(12.0)
+                .fill(paint(TRACK))
+                .child(text("CPU").font(type_::LABEL).color(paint(MUTED)))
+                .child(
+                    text(if s.catalog.missing {
+                        "—".into()
+                    } else {
+                        format!("{}%", s.catalog.cpu)
+                    })
+                    .key("cpu-meter")
+                    .font(TextStyle::new(25.0, 600.0))
+                    .color(paint(INK)),
+                )
+                .child(
+                    el().w(80.0)
+                        .h(6.0)
+                        .radius(3.0)
+                        .fill(paint(INK).alpha(0.12))
+                        .child(
+                            el().w(s.catalog.cpu.min(100) as f32 * 0.8)
+                                .h(6.0)
+                                .radius(3.0)
+                                .fill(paint(BLUE)),
+                        ),
+                )
+                .child(
+                    text(if s.catalog.missing {
+                        "Waiting"
+                    } else {
+                        "Live usage"
+                    })
+                    .font(type_::LABEL)
+                    .color(paint(MUTED)),
+                )
+        } else {
+            el()
+        })
+}
+
+fn toggle_scans(s: &mut State) {
+    s.scans_running = !s.scans_running;
+    schedule_scan(s, Instant::now());
+}
+
+fn scan_controls(s: &State) -> El {
+    let mut presets = row().gap(6.0);
+    for (minutes, label, key) in [
+        (30, "30 min", "interval-half-hour"),
+        (60, "1 hour", "interval-hour"),
+    ] {
+        presets = presets.child(
+            button(
+                label,
+                if s.interval_minutes == minutes {
+                    ButtonStyle::Primary
+                } else {
+                    ButtonStyle::Secondary
+                },
+            )
+            .key(key)
+            .on_press(move |state: &mut State| {
+                state.interval_minutes = minutes;
+                schedule_scan(state, Instant::now());
+            }),
+        );
+    }
+    let status = if s.scanning {
+        if s.scans_running {
+            "Scanning · intervals running".into()
+        } else {
+            "Scanning · intervals paused".into()
+        }
+    } else if s.scans_running {
+        format!("Running · {} min between scans", s.interval_minutes)
+    } else {
+        "Paused · scan whenever you need".into()
+    };
+    col()
+        .key("scan-controls")
+        .w_full()
+        .gap(8.0)
+        .padding(12.0)
+        .radius(12.0)
+        .fill(paint(TRACK))
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    text("Local checks")
+                        .font(TextStyle::new(13.0, 600.0))
+                        .color(paint(INK))
+                        .grow(1.0),
+                )
+                .child(
+                    text(status)
+                        .key("scan-status")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .min_w(0.0),
+                ),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(6.0)
+                .center_y()
+                .child(presets.grow(1.0))
+                .child(
+                    button(
+                        if s.scans_running { "Pause" } else { "Run" },
+                        ButtonStyle::Secondary,
+                    )
+                    .key("scans-toggle")
+                    .on_press(toggle_scans),
+                )
+                .child({
+                    let scan = button(
+                        if s.scanning {
+                            "Scanning…"
+                        } else {
+                            "Scan now"
+                        },
+                        if s.scanning {
+                            ButtonStyle::Disabled
+                        } else {
+                            ButtonStyle::Secondary
+                        },
+                    )
+                    .key("scan-now");
+                    if s.scanning {
+                        scan
+                    } else {
+                        scan.on_press(request_scan)
+                    }
+                }),
+        )
+        .child(
+            text(if s.scanning && !s.scans_running {
+                "The active scan will finish. No AI runs automatically."
+            } else {
+                "Read-only · no AI needed · intervals pause when you quit"
+            })
+            .font(type_::LABEL)
+            .color(paint(MUTED))
+            .wrap()
+            .w_full(),
+        )
+}
+
 fn agent_help(s: &State) -> El {
     let can_ask = (0..s.catalog.leaves.len()).any(|i| is_ticked(s, i));
-    col().w_full().gap(10.0)
+    col().w_full().gap(10.0).padding(12.0).radius(12.0).fill(paint(TRACK))
         .child(text(if s.agent.is_some() { "Agent review" } else { "Agent help" }).font(TextStyle::new(14.0, 500.0)).color(paint(INK)))
         .child(text(if !s.prefs.allow_start { "Set up an agent to request a review." }
             else if s.prefs.send_paths { "Eligible selected folder paths may be shared." }
@@ -1081,6 +1388,19 @@ fn main() {
     let size = launch_size();
     let spec = AppSpec {
         scenes: &[
+            ("overview-example", |s: &mut State| {
+                s.note = "Example data · no disk scan or agent request".into();
+            }),
+            ("interval-example", |s| {
+                s.scans_running = true;
+                s.interval_minutes = 60;
+                schedule_scan(s, Instant::now());
+                s.note = "Example data · no disk scan or agent request".into();
+            }),
+            ("scanning-example", |s| {
+                s.scanning = true;
+                s.note = "Example data · active scan finishes even when paused".into();
+            }),
             ("ledger-example", |s: &mut State| {
                 apply_level(s, Level::Balanced);
                 s.note = "Example data · no disk scan or agent request".into();
@@ -1169,6 +1489,33 @@ fn main() {
     let panel = app.handle();
     let (handle, _) = app.window(settings);
     settings::install(handle);
+    let notch = WindowSpec::new("notch", notch::spec())
+        .on_frame_encoded(|_| {
+            // Keep expansion centered before presentation, not at the next polling tick.
+            if !rune::is_headless() {
+                status::position_notch();
+            }
+        })
+        .configured_options(
+            WindowOptions {
+                transparent: true,
+                borderless: true,
+                always_on_top: true,
+                visible: false,
+                resizable: false,
+                min_size: Some(notch::COMPACT),
+                ..WindowOptions::default()
+            }
+            .macos(
+                MacWindowOptions::default()
+                    .corner_radius(12.0)
+                    .shadow(false)
+                    .level(25)
+                    .nonactivating_panel(true),
+            ),
+        );
+    let (handle, _) = app.window(notch);
+    notch::install(handle, panel.clone());
     status::arm(panel.clone(), palette::WIDTH);
     let mut started = false;
     app = app.on_ready(move |_| {
@@ -1213,6 +1560,11 @@ mod tests {
     }
 
     fn click(rt: &mut Runtime<State>, key: &str) {
+        rt.update(|_, tx| {
+            tx.instant();
+            tx.scroll_into_view(key);
+        });
+        rt.frame(0.0);
         let (x, y) = rt.find(key).unwrap_or_else(|| panic!("missing {key}"));
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
@@ -1226,6 +1578,140 @@ mod tests {
             .iter()
             .position(|leaf| leaf.id == id)
             .unwrap()
+    }
+
+    #[test]
+    fn local_controls_fit_narrow_and_wide_panels_and_respect_cpu_preference() {
+        for width in [360.0, 619.0, 620.0, 960.0] {
+            let mut rt = runtime();
+            rt.set_viewport((width, 718.0), 2.0);
+            rt.frame(0.0);
+            for key in [
+                "candidate-estimate",
+                "cpu-meter",
+                "interval-half-hour",
+                "interval-hour",
+                "scans-toggle",
+                "scan-now",
+            ] {
+                let rect = rt.presented(key).unwrap().0;
+                assert!(
+                    rect[0] >= 0.0 && rect[0] + rect[2] <= width,
+                    "{width}: {key}: {rect:?}"
+                );
+            }
+            click(&mut rt, "interval-hour");
+            click(&mut rt, "scans-toggle");
+            assert!(rt.state.scans_running);
+            click(&mut rt, "scans-toggle");
+            assert!(!rt.state.scans_running);
+            rt.update(|s, _| s.prefs.gauge_cpu = false);
+            rt.frame(0.0);
+            assert!(rt.find("cpu-meter").is_none());
+        }
+    }
+
+    #[test]
+    fn local_scan_controls_work_without_an_agent() {
+        let mut rt = runtime();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        rt.state.scan_requests = Some(sender);
+        assert!(!rt.state.prefs.allow_start);
+        click(&mut rt, "interval-hour");
+        click(&mut rt, "scans-toggle");
+        assert!(rt.state.scans_running);
+        let deadline = rt.state.next_scan.unwrap();
+        assert!(deadline.duration_since(Instant::now()).as_secs() >= 3599);
+        assert!(!scan_if_due(
+            &mut rt.state,
+            deadline - Duration::from_secs(1)
+        ));
+        assert!(receiver.try_recv().is_err());
+        assert!(scan_if_due(&mut rt.state, deadline));
+        receiver.try_recv().unwrap();
+        assert!(!scan_if_due(
+            &mut rt.state,
+            deadline + Duration::from_secs(7200)
+        ));
+        assert!(
+            receiver.try_recv().is_err(),
+            "never overlap or catch up missed scans"
+        );
+        rt.frame(0.0);
+        click(&mut rt, "scans-toggle");
+        assert!(!rt.state.scans_running);
+        finish_scan(&mut rt.state, catalog::fixture(), deadline);
+        assert!(
+            rt.state.next_scan.is_none(),
+            "pause survives an active scan finishing"
+        );
+        rt.frame(0.0);
+        assert!(!rt.state.scans_running);
+        assert!(!scan_if_due(
+            &mut rt.state,
+            deadline + Duration::from_secs(10000)
+        ));
+        click(&mut rt, "interval-half-hour");
+        click(&mut rt, "scans-toggle");
+        let deadline = rt.state.next_scan.unwrap();
+        assert!((1799..=1800).contains(&deadline.duration_since(Instant::now()).as_secs()));
+        click(&mut rt, "scan-now");
+        receiver.try_recv().unwrap();
+        click(&mut rt, "scan-now");
+        assert!(receiver.try_recv().is_err(), "Scan now cannot overlap");
+        finish_scan(&mut rt.state, catalog::fixture(), deadline);
+        assert_eq!(
+            rt.state.next_scan,
+            Some(deadline + Duration::from_secs(1800))
+        );
+        assert!(rt.state.agent.is_none());
+        assert_eq!(rt.state.catalog.leaves.len(), 7);
+        assert!(!rt.state.confirmed);
+    }
+
+    #[test]
+    fn rescans_preserve_choices_by_path_and_reapply_protections() {
+        let mut s = fixture_state();
+        apply_level(&mut s, Level::Balanced);
+        let logs = leaf_at(&s, "logs");
+        toggle_leaf(&mut s, logs);
+        s.target = Some(palette::Target::Leaf(leaf_at(&s, "logs")));
+        s.confirmed = true;
+        let mut refreshed = catalog::fixture();
+        // Different order would transfer the explicit untick to the wrong row by index.
+        refreshed.leaves.swap(2, 4);
+        refreshed.groups.swap(2, 4);
+        refreshed.groups[2].first = 2;
+        refreshed.groups[4].first = 4;
+        refreshed
+            .leaves
+            .iter_mut()
+            .find(|leaf| leaf.id == "spotify")
+            .unwrap()
+            .locked = true;
+        finish_scan(&mut s, refreshed, Instant::now());
+        assert_eq!(s.target, Some(palette::Target::Leaf(leaf_at(&s, "logs"))));
+        assert!(!is_ticked(&s, leaf_at(&s, "logs")));
+        assert!(!is_ticked(&s, leaf_at(&s, "spotify")));
+        assert!(!s.confirmed);
+        assert!(s.agent.is_none());
+        assert_eq!(s.catalog.leaves.len(), 7);
+        let before: Vec<_> = s
+            .catalog
+            .leaves
+            .iter()
+            .map(|leaf| leaf.path.clone())
+            .collect();
+        finish_scan(&mut s, catalog::pending(), Instant::now());
+        assert_eq!(
+            s.catalog
+                .leaves
+                .iter()
+                .map(|leaf| leaf.path.clone())
+                .collect::<Vec<_>>(),
+            before
+        );
+        assert!(s.note.contains("Previous results kept"));
     }
 
     #[test]
@@ -1769,6 +2255,8 @@ mod tests {
     #[test]
     fn a_secondary_click_opens_that_rows_menu() {
         let mut rt = runtime();
+        rt.update(|_, tx| tx.scroll_into_view("row-caches"));
+        rt.frame(0.0);
         let (x, y) = rt.find("row-caches").expect("caches row");
         rt.secondary_down(x, y);
         rt.secondary_up(x, y);

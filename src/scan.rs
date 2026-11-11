@@ -312,6 +312,7 @@ pub(super) fn scan_root(
     home: &Path,
     min_bytes: u64,
     system_apps: bool,
+    use_cache: bool,
 ) -> (Vec<Row>, HashMap<String, Hint>) {
     let hints = hint_map();
     let mut hits: HashMap<PathBuf, Vec<String>> = HashMap::new();
@@ -327,7 +328,8 @@ pub(super) fn scan_root(
     let mut pending = Vec::new();
     let mut measured = Vec::new();
     for path in &paths {
-        if let Some((bytes, newest)) = cached_size(path, &cache) {
+        // Explicit and interval scans must notice changes inside nested folders.
+        if let Some((bytes, newest)) = use_cache.then(|| cached_size(path, &cache)).flatten() {
             measured.push((path.clone(), bytes, newest));
         } else {
             pending.push(path.clone());
@@ -774,7 +776,7 @@ mod tests {
             64,
         );
 
-        let (rows, _) = scan_root(&home, 1, false);
+        let (rows, _) = scan_root(&home, 1, false, true);
         let paths: Vec<&str> = rows.iter().map(|row| row.path.as_str()).collect();
         assert!(paths
             .iter()
@@ -792,6 +794,37 @@ mod tests {
         );
         assert!(paths.iter().any(|path| path.ends_with("com.gone.app")));
         assert!(paths.iter().all(|path| !path.ends_with("com.demo.app")));
+        let before = rows
+            .iter()
+            .find(|row| row.path.ends_with("src/app/node_modules"))
+            .unwrap()
+            .bytes;
+        write_file(&home.join("src/app/node_modules/pkg/index.js"), 1_048_576);
+        let (cached, _) = scan_root(&home, 1, false, true);
+        assert_eq!(
+            cached
+                .iter()
+                .find(|row| row.path.ends_with("src/app/node_modules"))
+                .unwrap()
+                .bytes,
+            before
+        );
+        let (fresh, _) = scan_root(&home, 1, false, false);
+        assert!(
+            fresh
+                .iter()
+                .find(|row| row.path.ends_with("src/app/node_modules"))
+                .unwrap()
+                .bytes
+                >= 1_048_576,
+            "interval scans must remeasure nested changes without deleting anything"
+        );
+        assert_eq!(
+            std::fs::metadata(home.join("src/app/node_modules/pkg/index.js"))
+                .unwrap()
+                .len(),
+            1_048_576
+        );
         let _ = std::fs::remove_dir_all(&home);
     }
 

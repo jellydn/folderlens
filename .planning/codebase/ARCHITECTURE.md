@@ -15,6 +15,7 @@
 
 **Presentation and state:**
 - `src/main.rs` owns `State`, selection/exclusion derivation, shared button styles, Quick review scenes and the app/window configuration.
+- `src/notch.rs` owns the default compact/expanded controls. Readings flow from the review state through Rune's UI queue; notch actions return to that same state and scan worker. It owns no scan or AI job.
 - `src/palette.rs` owns folder Actions, keyboard navigation, Ask context/access and Finder actions. Ask uses the eligible selection, not the target row.
 - `src/settings.rs` owns a separate `Settings` state/window; private `src/settings_updates.rs` owns its Updates page. Shared preferences pass through `src/prefs.rs`.
 
@@ -28,7 +29,7 @@
 - Its private `src/broker.rs` owns descriptor-checked reads, a Unix socket, JSON forwarding and MCP. `src/pi-reader.mjs` exposes only that reader to Pi.
 
 **Native integration:**
-- `src/status.rs` owns retained AppKit status-item callbacks and explicit show/hide state. Settings hides the panel; a tray open hides Settings.
+- `src/status.rs` owns retained AppKit status-item callbacks, explicit show/hide state and primary-display notch placement below the visible frame's top edge. Review hides the notch; closing Review restores it. Settings hides both; a tray open hides Settings. The tray remains the fallback.
 - `src/update.rs` launches `native/Updater.swift` on a worker. The helper owns HTTP, publisher verification, download policy and the blocked native-install entry points.
 
 ## Data Flow
@@ -36,6 +37,12 @@
 **Catalog and selection:**
 1. Live startup creates a pending catalog immediately (`src/main.rs::live_state`).
 2. `start_workers` loads the catalog and sends it through `AppHandle::update`; a second worker sends gauge deltas about once a second.
+   The scan worker accepts one request at a time. Scan now and the app-owned
+   30/60-minute interval controls reuse it; only the startup scan uses cached sizes.
+   UI polling dispatches due requests without doing scan work. Pause stops future
+   requests, not an active scan. Intervals are session-only, start paused and never
+   start an agent. Successful refreshes preserve overrides by path and open groups
+   by ID, remap action targets, clear the recorded choice and update reader access.
 3. `leaf_view` adds always-protected roots, kept roots, recent-change holds and session unlocks. `is_ticked` applies a manual override or preset only when eligible.
 4. Selection, exclusion or measurement changes clear the recorded flag. Recording never changes the catalog.
 

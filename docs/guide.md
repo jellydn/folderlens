@@ -14,9 +14,54 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.2.1)
+## Quick review (0.3.0)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
+
+### Notch and local checks
+
+The default surface is an Oak-style notch: 360×36 points collapsed, 480×230
+expanded, centered below the camera/menu-bar area on the primary display. It
+repositions after expansion and display changes without covering camera hardware.
+It also works on displays without a physical notch. The compact view uses one
+line: folder (eligible candidate estimate), disk (free/total), CPU and memory icons with values, and
+a status dot (blue while running/scanning, gray while paused). Hover the dot for
+the exact scan state and the disk reading for its full label. CPU and memory preferences
+apply to both surfaces. Missing readings
+show as unavailable, not zero. Expand for the same local scan controls as Review; **Review / AI**
+opens the full folder list and manual agent controls. No second scanner runs.
+
+**Use tray** or Escape from the collapsed notch hides it; the archivebox is the
+fallback to open Review. Close Review or Settings to return to the notch. Opening
+Review hides the notch; opening Settings hides both. Outside clicks do not dismiss
+these persistent surfaces. Tray event routing and physical-notch hardware still
+need native manual checks; headless renders alone do not establish those results.
+
+Render synthetic notch scenes with `--window notch --scene compact-example`, or
+`--window notch --scene expanded-example --size 480x230`, plus `--theme dark --snap`.
+`running-example` and `scanning-example` show the other expanded states.
+
+The panel uses Oak's near-black surfaces and blue selected controls. The overview
+shows the estimated footprint of eligible cleanup candidates, free disk space and
+a live CPU meter. The CPU reading option in General settings also controls this
+meter. Candidate estimates do not establish that deleting the folders is safe.
+
+**Scan now** refreshes folder measurements on a background worker. For repeated
+local checks, choose **30 min** or **1 hour**, then **Run**. The first interval
+starts when Run is pressed; each later interval starts after the previous scan
+finishes. **Pause** prevents future checks, but lets an active read-only scan
+finish. Resume and interval changes start a new full interval. Checks do not
+overlap or replay a backlog of missed intervals. They continue when the panel is
+hidden, require the app to stay open, and start paused at 30 minutes after relaunch.
+Command-P and the Actions menu control the same Run/Pause state.
+
+The startup scan can reuse the size cache. Explicit and interval scans remeasure
+nested contents. A successful refresh clears Record choice, preserves explicit
+ticks by folder path and open groups by identity, and reapplies current exclusions
+and live-reader scope. A failed refresh keeps the previous catalog. Scan controls
+need neither an AI provider nor agent-start permission. **Ask Agent** remains a
+separate manual action through the existing adapters; intervals never make model
+requests, paid or otherwise. No cleanup command or deletion path is added.
 
 The main actions use filled buttons: Record choice, Apply model and update checks. Secondary actions are outlined; navigation is quiet; removing an exclusion uses a warning style. A recorded choice becomes secondary. Empty-selection buttons are muted, do not take focus and have no press handler. Enabled buttons support Tab/Space, hover/press feedback and a visible focus ring. Agent protocol lines are capped before parsing, the message queue is bounded and newline bytes count toward the diagnostic log budget. Completed reports have a 256 KiB limit.
 
@@ -134,7 +179,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.2.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.1). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.0). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 

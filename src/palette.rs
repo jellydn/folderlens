@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use rune::tok::{type_, TextStyle};
 use rune::{col, row, text, El, Key, KeyEvent, ScrollSpec, Transition, Tx};
 
-use super::{leaf_view, paint, rule, unix_now, State, INK, MUTED, PANEL, TRACK};
+use super::{leaf_view, paint, rule, State, INK, MUTED, PANEL, TRACK};
 use crate::catalog;
 use crate::prefs;
 use crate::settings::{self, Page};
@@ -292,7 +292,16 @@ fn action_rows(s: &State) -> Vec<Row> {
         item("select", "Change selection", "›", s.target.is_some()),
         item("analyse", "Measure folder again", "⌘R", path),
         item("ask", "Ask Agent about eligible selection", "⌘J", true),
-        item("pause", "Pause alerts for 1 hour", "⌘P", true),
+        item(
+            "pause",
+            if s.scans_running {
+                "Pause interval scans"
+            } else {
+                "Run interval scans"
+            },
+            "⌘P",
+            true,
+        ),
         item("settings", "Settings…", "⌘,", true),
         item("close", "Close", "esc", true),
         item("quit", "Quit FolderLens", "⌘Q", true),
@@ -379,8 +388,7 @@ pub fn run(s: &mut State, id: &str) {
         "analyse" => analyse(s),
         "ask" => ask(s),
         "pause" => {
-            s.paused_until = unix_now() + 3600.0;
-            s.note = "Alerts paused for 1 hour.".to_string();
+            super::toggle_scans(s);
             close(s);
         }
         "settings" => {

@@ -91,6 +91,25 @@ pub fn conceal() {
     macos::conceal();
 }
 
+/// Opens the full review from the notch, with the tray position as fallback.
+pub fn reveal() {
+    #[cfg(target_os = "macos")]
+    macos::apply(true);
+}
+
+/// Below the camera/menu-bar area, centered on the primary display in AppKit points.
+fn notch_origin(visible: Rect, width: f64, height: f64) -> (f64, f64) {
+    (
+        visible.x + (visible.w - width) * 0.5,
+        visible.y + visible.h - height,
+    )
+}
+
+pub fn position_notch() {
+    #[cfg(target_os = "macos")]
+    macos::position_notch();
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use std::ffi::c_void;
@@ -107,14 +126,14 @@ mod macos {
     static APPLY: OnceLock<Box<dyn Fn(bool) + Send + Sync>> = OnceLock::new();
 
     pub fn install<S: 'static>(handle: rune::AppHandle<S>, window_w: f32) {
-        let installed = unsafe { install_item() };
-        if !installed {
-            return;
+        unsafe {
+            install_item();
         }
         let handle_for_click = handle.clone();
         let _ = APPLY.set(Box::new(move |show| {
             VISIBLE.store(show, Ordering::SeqCst);
             if show {
+                crate::notch::hide();
                 crate::settings::hide();
                 set_highlight(true);
                 if let Some(origin) = current_origin(window_w) {
@@ -125,10 +144,12 @@ mod macos {
             } else {
                 set_highlight(false);
                 handle_for_click.hide();
+                crate::notch::show();
             }
         }));
         VISIBLE.store(false, Ordering::SeqCst);
         handle.hide();
+        crate::notch::show();
     }
 
     pub(super) fn conceal() {
@@ -146,9 +167,55 @@ mod macos {
         VISIBLE.load(Ordering::Relaxed)
     }
 
-    fn apply(show: bool) {
+    pub(super) fn apply(show: bool) {
         if let Some(apply) = APPLY.get() {
             apply(show);
+        }
+    }
+
+    pub(super) fn position_notch() {
+        // The first NSScreen owns the menu bar; mainScreen follows keyboard focus.
+        let screen = msg_index(
+            msg0(class(c"NSScreen"), sel(c"screens")),
+            sel(c"objectAtIndex:"),
+            0,
+        );
+        if screen.is_null() {
+            return;
+        }
+        let area = msg_rect(screen, sel(c"visibleFrame"));
+        let windows = msg0(
+            msg0(class(c"NSApplication"), sel(c"sharedApplication")),
+            sel(c"windows"),
+        );
+        for index in 0..msg_usize(windows, sel(c"count")) {
+            let window = msg_index(windows, sel(c"objectAtIndex:"), index);
+            if !msg_ptr_bool(
+                msg0(window, sel(c"title")),
+                sel(c"isEqualToString:"),
+                ns_string("FolderLens Notch"),
+            ) {
+                continue;
+            }
+            let frame = msg_rect(window, sel(c"frame"));
+            let (x, y) = super::notch_origin(
+                Rect {
+                    x: area.origin.x,
+                    y: area.origin.y,
+                    w: area.size.w,
+                    h: area.size.h,
+                },
+                frame.size.w,
+                frame.size.h,
+            );
+            if (frame.origin.x - x).abs() > 0.5 || (frame.origin.y - y).abs() > 0.5 {
+                unsafe {
+                    let set: unsafe extern "C" fn(*mut c_void, *mut c_void, NsPoint) =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    set(window, sel(c"setFrameOrigin:"), NsPoint { x, y });
+                }
+            }
+            break;
         }
     }
 
@@ -737,6 +804,35 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notch_expansion_keeps_center_and_clears_camera_on_offset_displays() {
+        let visible = Rect {
+            x: -1440.0,
+            y: 80.0,
+            w: 1440.0,
+            h: 790.0,
+        };
+        let (width, height) = crate::notch::COMPACT;
+        assert_eq!(
+            notch_origin(visible, width.into(), height.into()),
+            (-900.0, 834.0)
+        );
+        assert_eq!(notch_origin(visible, 480.0, 230.0), (-960.0, 640.0));
+        assert_eq!(
+            notch_origin(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1280.0,
+                    h: 770.0
+                },
+                width.into(),
+                height.into()
+            ),
+            (460.0, 734.0)
+        );
+    }
 
     #[test]
     fn only_status_button_presses_dismiss_not_update_popup_clicks() {

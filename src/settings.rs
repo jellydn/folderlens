@@ -14,7 +14,7 @@ use crate::{button, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
 #[path = "settings_updates.rs"]
 mod updates;
 
-const CARD: &str = "#243740";
+const CARD: &str = "#111116";
 const GREEN: &str = BLUE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +80,7 @@ pub fn spec() -> AppSpec<Settings> {
             }
             if matches!(event.key, rune::Key::Escape) {
                 hide();
+                crate::notch::show();
                 return true;
             }
             false
@@ -159,6 +160,7 @@ pub fn open(page: Page) {
     };
     // The panel and this window are never on screen together.
     crate::status::conceal();
+    crate::notch::hide();
     handle.update(move |state, tx: &mut Tx| {
         tx.instant();
         state.page = page;
@@ -202,7 +204,10 @@ fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
                 .child(
                     button("Close", ButtonStyle::Quiet)
                         .key("close-settings")
-                        .on_press(|_: &mut Settings| hide()),
+                        .on_press(|_: &mut Settings| {
+                            hide();
+                            crate::notch::show();
+                        }),
                 ),
         )
         .child(navigation(state))

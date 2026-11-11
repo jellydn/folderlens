@@ -128,11 +128,19 @@ pub fn ready_bytes(leaves: &[Leaf]) -> u64 {
 }
 
 pub fn load_live() -> Catalog {
+    load_catalog(true)
+}
+
+pub fn refresh_live() -> Catalog {
+    load_catalog(false)
+}
+
+fn load_catalog(use_cache: bool) -> Catalog {
     let Some(home) = std::env::var_os("HOME") else {
         return missing("Home is unset.");
     };
     let home = PathBuf::from(home);
-    let (rows, hints) = scan::scan_root(&home, 1_000_000, true);
+    let (rows, hints) = scan::scan_root(&home, 1_000_000, true, use_cache);
     let updated = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs_f64())

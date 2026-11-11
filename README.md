@@ -2,7 +2,7 @@
 
 <img src="assets/folderlens-icon.png" width="96" height="96" alt="FolderLens app icon">
 
-A macOS menu-bar app for reviewing folder selections, reasons and exclusions, with optional agent analysis.
+A notch-first macOS app for reviewing cleanup candidates, disk space and system usage, with optional agent analysis and a menu-bar fallback.
 
 **Record choice records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
 
@@ -12,7 +12,7 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.2.1 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.2.1) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -24,9 +24,33 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 
 ## Use
 
-1. Click the menu-bar archivebox. Choose a preset or eligible folders; review reasons and exclusions.
+1. Expand the notch and choose **Review / AI**, or click the menu-bar archivebox. Choose a preset or eligible folders; review reasons and exclusions.
 2. **Record choice** records without deleting. Selection changes clear the record.
 3. For **Ask Agent**, configure **Settings → Agent / Access**. Requests are manual; provider costs and data policies apply.
+
+### Notch and local checks
+
+The app starts with an Oak-style notch, centered below the primary display's
+camera/menu-bar area. The single-line 360×36 compact view uses icons for candidate estimates, disk
+free/total space, CPU and memory usage, plus a scan-status dot. Expand it for Scan now,
+30-minute/1-hour checks and Run/Pause. CPU and memory follow General settings.
+**Review / AI** opens the full folder review; closing Review returns to the notch.
+**Use tray** hides the notch. The archivebox remains available as a fallback to
+open Review, including while Settings is open. Escape collapses the notch first,
+then hides it. Closing Settings returns to the notch.
+
+![Compact notch, synthetic example](shots/notch-compact.png)
+![Expanded notch, synthetic example](shots/notch-expanded.png)
+
+The review panel shows cleanup-candidate estimates, disk free space and a
+live CPU meter. Candidates are for review, not a promise of safely reclaimable space.
+No agent is needed to scan, select folders or record a choice.
+
+Use **Scan now** to refresh measurements. Select **30 min** or **1 hour**, then
+**Run** for repeated local scans. **Pause** stops future scans; an active scan
+finishes. Checks run only while FolderLens is open, never overlap, and start
+paused after a restart. Changing the interval or resuming starts a full interval.
+Intervals never launch AI or cleanup. These controls are available starting with 0.3.0.
 
 **Actions** opens folder controls and Settings. The panel stays open across outside clicks and update dialogs. Use **Close**, Escape or the menu-bar button to hide it; Escape closes Actions first.
 
