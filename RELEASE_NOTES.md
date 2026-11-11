@@ -1,3 +1,16 @@
+## FolderLens 0.3.0 — Notch and local checks
+
+**Stable release for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** Candidate sizes are review estimates, not reclaimed space.
+
+- Start with an Oak-style, single-line 360×36 notch below the primary display's camera/menu-bar area. Folder, disk, CPU and memory icons accompany candidate estimates, free/total disk space and live usage. Expand for controls; the menu-bar archivebox remains a fallback to full Review. CPU/memory visibility follows General settings.
+- Run local, non-AI scans every 30 minutes or 1 hour, or use Scan now. Intervals start paused after launch, never overlap or replay missed scans, and wait a full interval after completion. Pause stops future scans while an active scan finishes. Refresh remeasures nested changes, preserves explicit choices by folder identity, reapplies exclusions and live reader scope, and clears recorded choices. Failed scans retain previous results.
+- Keep AI optional and manual through existing CLI adapters. No direct AI API, automatic model call, paid fallback, cleanup or deletion path is added. Reader/session and publisher-update safety contracts remain unchanged.
+- Cache the pinned Rust toolchain and locked dependencies in fresh Amp orbs; resume performs no installation. Native verification still requires a Mac satellite.
+
+Verification covers the macOS Rust suite, Pi reader regression, formatting, Clippy, synthetic compact/expanded renders, updater fixtures, arm64 bundle signatures and DMG/ZIP packaging. Release publication independently verifies publisher signatures; downloaded assets must match their published digests.
+
+Native pointer/keyboard routing, physical-notch and multi-display behavior, tooltips, real model/tool turns, native Terminal continuation, and actual install/restart/Gatekeeper behavior remain unverified. Headless layout/callback checks do not establish these flows or resolve the earlier Settings→tray report. Builds are **ad-hoc signed, not Developer ID signed or notarized**. All installations remain manual-update-only; Homebrew users update through Homebrew.
+
 ## FolderLens 0.2.1 — First FolderLens release
 
 **Stable release for Apple Silicon, macOS 14+.** The DMG and ZIP contain `FolderLens.app` with bundle ID `io.github.jellydn.folderlens`. Shelf is now named FolderLens in the app, agent reader contracts and release assets. Published 0.2.0 and earlier releases remain Shelf; their names and assets below are unchanged. **Record choice never deletes files or runs cleanup.**
