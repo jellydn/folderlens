@@ -8,7 +8,7 @@ use rune::{col, el, icon, row, text, AppHandle, AppSpec, Cx, El, Icon, Key, Tx};
 
 use crate::{button, catalog, paint, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
 
-pub const COMPACT: (f32, f32) = (300.0, 36.0);
+pub const COMPACT: (f32, f32) = (300.0, 32.0);
 pub const EXPANDED: (f32, f32) = (480.0, 230.0);
 
 const FOLDER: Icon = Icon {
@@ -34,6 +34,7 @@ const MEMORY: Icon = Icon {
 
 #[derive(Clone, PartialEq, Eq)]
 struct Readings {
+    theme: crate::theme::Theme,
     candidates: String,
     free: String,
     compact_disk: String,
@@ -51,6 +52,7 @@ impl Readings {
             .map(|i| s.catalog.leaves[i].bytes)
             .sum();
         Self {
+            theme: s.prefs.theme,
             candidates: if s.catalog.missing {
                 "—".into()
             } else {
@@ -260,6 +262,7 @@ fn compact_reading(
 }
 
 fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
+    let _theme = crate::theme::scope(s.readings.theme);
     let r = &s.readings;
     let status = if r.scanning {
         "Scanning…"
@@ -270,7 +273,7 @@ fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
     };
     let mut header = row()
         .w_full()
-        .h(36.0)
+        .h(if s.expanded { 36.0 } else { COMPACT.1 })
         .px(if s.expanded { 12.0 } else { 8.0 })
         .gap(if s.expanded { 8.0 } else { 4.0 })
         .center_y()
@@ -503,6 +506,24 @@ mod tests {
         );
         rt.set_system_reduced_motion(true);
         rt.frame(0.0);
+        for (theme, background) in crate::theme::Theme::ALL.into_iter().zip([
+            "#010105", "#1f1f28", "#f2ecbc", "#282a36", "#fffbeb", "#222436", "#e1e2e7",
+        ]) {
+            rt.update(|s, tx| {
+                s.readings.theme = theme;
+                tx.instant();
+            });
+            rt.frame(0.0);
+            let root = rt
+                .elements()
+                .into_iter()
+                .find(|el| el.key.as_deref() == Some("notch"))
+                .unwrap();
+            assert_eq!(root.fill, rune::color::hex(background).unwrap());
+            let button = rt.presented("notch-expand").unwrap().0;
+            assert_eq!(button[2..], [22.0, 28.0]);
+            assert!(button[1] >= 0.0 && button[1] + button[3] <= 32.0);
+        }
         assert!(rt.find("notch-scan").is_none());
         for (key, expected) in [
             ("notch-candidates", "27.2GB"),
@@ -518,7 +539,7 @@ mod tests {
             assert_eq!(element.text.as_deref(), Some(expected));
             assert!(element.rect[0] >= 0.0 && element.rect[0] + element.rect[2] <= COMPACT.0);
             assert!(element.rect[1] >= 0.0 && element.rect[1] + element.rect[3] <= COMPACT.1);
-            assert_eq!(element.rect[1] + element.rect[3] * 0.5, 18.0);
+            assert_eq!(element.rect[1] + element.rect[3] * 0.5, 16.0);
         }
         let mut busy = crate::fixture_state();
         busy.catalog.cpu = 100;

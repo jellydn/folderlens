@@ -43,6 +43,20 @@ struct UpdateVersion: Comparable, Equatable {
   }
 }
 
+func availableRelease(
+  _ releases: [[String: Any]], current: UpdateVersion, prereleases: Bool
+) -> String? {
+  releases.compactMap { release -> (String, UpdateVersion)? in
+    guard release["draft"] as? Bool == false,
+      prereleases || release["prerelease"] as? Bool == false,
+      let tag = release["tag_name"] as? String, tag.hasPrefix("v"),
+      let version = try? UpdateVersion(String(tag.dropFirst())), version > current,
+      prereleases || version.prerelease.isEmpty
+    else { return nil }
+    return (tag, version)
+  }.max { $0.1 < $1.1 }?.0
+}
+
 enum UpdateError: Error, LocalizedError {
   case invalidVersion, invalidSignature, invalidMetadata, untrustedDownload, unsupportedInstall,
     unknownOrigin, download, process
@@ -351,16 +365,7 @@ struct Updater {
       max: 2_097_152)
     guard let releases = try JSONSerialization.jsonObject(with: releaseData) as? [[String: Any]]
     else { throw UpdateError.download }
-    let candidates = releases.compactMap { release -> (String, UpdateVersion)? in
-      guard release["draft"] as? Bool == false,
-        prereleases || release["prerelease"] as? Bool == false,
-        let tag = release["tag_name"] as? String, tag.hasPrefix("v"),
-        let version = try? UpdateVersion(String(tag.dropFirst())), version > current,
-        prereleases || version.prerelease.isEmpty
-      else { return nil }
-      return (tag, version)
-    }.sorted { $0.1 > $1.1 }
-    guard let (tag, _) = candidates.first else {
+    guard let tag = availableRelease(releases, current: current, prereleases: prereleases) else {
       if manual {
         _ = notice("FolderLens is up to date", "No newer release is available on the selected channel.")
       }
@@ -385,7 +390,7 @@ struct Updater {
         guard
           notice(
             "FolderLens \(manifest.version) is available",
-            "Download a publisher-verified update? Installation and restart need separate confirmation. This build is ad-hoc signed, not notarized.",
+            "Download and verify the update, then reveal the ZIP in Finder for manual installation? FolderLens will not replace your app or restart it. This build is ad-hoc signed, not notarized.",
             buttons: ["Download", "Later"]) == 0
         else { return }
       }
@@ -400,16 +405,25 @@ struct Updater {
       if fm.fileExists(atPath: archive.path) { try fm.removeItem(at: archive) }
       try fm.moveItem(at: temporary, to: archive)
     }
-    // An automatic download never grants installation, even when FolderLens later quits.
+    try presentArchive(archive, manifest: manifest)
+  }
+
+  func presentArchive(
+    _ archive: URL, manifest: Manifest,
+    prompt: @MainActor (String, String, [String]) -> Int = { notice($0, $1, buttons: $2) },
+    reveal: @MainActor (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
+  ) throws {
+    // Recheck at the presentation boundary, including an already-cached ZIP.
+    // Automatic downloads never open Finder or grant installation.
     guard manual else { return }
-    try requireDirectInstallation(bundle)
+    try verifyArchive(archive, manifest: manifest)
     guard
-      notice(
-        "Install FolderLens \(manifest.version)?",
-        "FolderLens will close and restart. Finish or cancel any agent review first. The downloaded archive is publisher-verified; macOS Gatekeeper may still require approval because the app is not notarized.",
-        buttons: ["Install and Restart", "Not Now"]) == 0
+      prompt(
+        "FolderLens \(manifest.version) is ready",
+        "The ZIP matches the signed publisher metadata. Reveal it in Finder, extract it, then quit FolderLens before replacing your app manually. Settings and chats are kept separately. If Homebrew manages your app, use brew upgrade --cask jellydn/tap/folderlens instead. macOS may require Privacy & Security → Open Anyway; this build is not notarized.",
+        ["Reveal in Finder", "Not Now"]) == 0
     else { return }
-    try await install(archive, manifest: manifest)
+    reveal(archive)
   }
 
   func install(_ archive: URL, manifest: Manifest) async throws {
@@ -528,6 +542,17 @@ func selfTest() async throws {
   require(try UpdateVersion("0.2.0") < UpdateVersion("0.10.0"))
   reject { _ = try UpdateVersion("../0.2.0") }
   reject { _ = try UpdateVersion("0.2.0-") }
+  let releases: [[String: Any]] = [
+    ["tag_name": "v0.3.3", "draft": false, "prerelease": false],
+    ["tag_name": "v0.3.5", "draft": true, "prerelease": false],
+    ["tag_name": "v0.4.0-beta.1", "draft": false, "prerelease": true],
+    ["tag_name": "v0.3.2", "draft": false, "prerelease": false],
+    ["tag_name": "v0.3.4", "draft": false, "prerelease": false],
+    ["tag_name": "../invalid", "draft": false, "prerelease": false],
+  ]
+  require(availableRelease(releases, current: try UpdateVersion("0.3.2"), prereleases: false) == "v0.3.4")
+  require(availableRelease(releases, current: try UpdateVersion("0.3.2"), prereleases: true) == "v0.4.0-beta.1")
+  require(availableRelease(releases, current: try UpdateVersion("0.3.4"), prereleases: false) == nil)
   let key = Curve25519.Signing.PrivateKey()
   let bytes = Data("harmless update fixture".utf8)
   let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
@@ -576,8 +601,28 @@ func selfTest() async throws {
   try verifyArchive(temporary, manifest: manifest)
   try quarantineDownload(temporary)
   try run("/usr/bin/xattr", ["-p", "com.apple.quarantine", temporary.path])
+  for manual in [false, true] {
+    let updater = Updater(bundle: temporary, prefsPath: temporary, manual: manual, parent: -1)
+    for choice in [1, 0] {
+      var prompts = 0
+      var reveals = 0
+      try updater.presentArchive(
+        temporary, manifest: manifest,
+        prompt: { _, _, _ in prompts += 1; return choice },
+        reveal: { archive in require(archive == temporary); reveals += 1 })
+      require(prompts == (manual ? 1 : 0))
+      require(reveals == (manual && choice == 0 ? 1 : 0))
+    }
+  }
   try (bytes + Data("tampered".utf8)).write(to: temporary)
   reject { try verifyArchive(temporary, manifest: manifest) }
+  let manualUpdater = Updater(bundle: temporary, prefsPath: temporary, manual: true, parent: -1)
+  reject {
+    try manualUpdater.presentArchive(
+      temporary, manifest: manifest,
+      prompt: { _, _, _ in preconditionFailure("Corrupt archive reached confirmation") },
+      reveal: { _ in preconditionFailure("Corrupt archive reached Finder") })
+  }
   require(isHomebrew(URL(fileURLWithPath: "/opt/homebrew/Caskroom/folderlens/0.1.0/FolderLens.app")))
   require(!isHomebrew(URL(fileURLWithPath: "/Applications/FolderLens.app"), caskrooms: []))
   let transaction = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

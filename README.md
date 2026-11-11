@@ -12,7 +12,7 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.2 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.2) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.3 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.3) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -30,9 +30,20 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 
 ### Notch and local checks
 
-The app starts with an Oak-style notch, centered below the primary display's
-camera/menu-bar area. Starting with **0.3.1**, the compact view is
-300×36 points (down from 360×36 in 0.3.0).
+The app starts with a compact notch, centered below the primary display's
+camera/menu-bar area. **Version 0.3.3** reduces the compact view to
+**300×32 points**, keeping the metrics and 22×28-point expand control. Published
+0.3.1–0.3.2 use 300×36 points; 0.3.0 used 360×36.
+
+**Themes in 0.3.3:** **Settings → General → Theme** applies to the notch,
+Review and Settings. Choose **Default**, **Kanagawa**, **Kanagawa Lotus**,
+**Dracula**, **Alucard (Light)**, **Tokyo Night** or **Tokyo Night Day**.
+Default preserves the original dark colors; Lotus, Alucard and Day are light.
+The choice saves automatically and survives restart. Missing or unknown values
+use Default. FolderLens owns its settings; it does not read or change Oak's.
+Settings changes without a color fade; Review and the notch pick up the saved
+theme on the next poll (up to about one second while hidden). A theme-only change
+keeps Record choice intact. These are fixed palettes, not automatic system matching.
 
 **Position controls in 0.3.2:** **Settings → General → Notch placement** offers
 **Top left**, **Top center**, **Top right** and **Lower center** (default).
@@ -60,6 +71,13 @@ no scan daemon or scheduled task remains. Relaunch starts intervals paused.
 
 ![Compact notch, synthetic example](shots/notch-compact.png)
 ![Expanded notch, synthetic example](shots/notch-expanded.png)
+![Kanagawa Lotus light theme settings](shots/theme-settings.png)
+
+Named palette families follow [Oak's theme choices](https://github.com/jellydn/oak/blob/main/Oak/Oak/Models/AppTheme.swift):
+[Kanagawa](https://github.com/rebelot/kanagawa.nvim),
+[Dracula/Alucard](https://github.com/dracula/dracula-theme) and
+[Tokyo Night](https://github.com/folke/tokyonight.nvim). Text, muted and warning/error
+colors and light accents are adjusted for compact-app contrast, not copied as editor defaults.
 
 The review panel shows cleanup-candidate estimates, disk free space and a
 live CPU meter. Candidates are for review, not a promise of safely reclaimable space.
@@ -81,10 +99,13 @@ These current Rune renders use example Agent states, not real model turns or nat
 | --- | --- |
 | ![Provider, model and explicit permissions](shots/quick-agent-settings.png) | ![Update controls and signing limits](shots/quick-updates.png) |
 
+## Updates
+
+**Settings → Updates → Check for Updates…** offers **Download → verify → Reveal in Finder**. Extract the verified ZIP, quit FolderLens, then replace the app manually. Preferences and chats are stored separately and are not removed. FolderLens never replaces or restarts the installed app; Homebrew users use `brew upgrade --cask jellydn/tap/folderlens` instead.
+
 ## Limits
 
 - Folder sharing is opt-in and selected-only. Context may leave your Mac and persists locally. Provider controls are not an OS sandbox.
-- All current installs are **manual-update-only**; verified checks/downloads remain available. Homebrew users update through Homebrew.
 - Tests/headless renders are not native end-to-end proof. Tray routing, model/tool turns, Terminal continuation and real install/restart/Gatekeeper behavior remain unverified. Cleanup safety is not established.
 - Settings→tray reopening remains a separate known issue; the popup changes do not establish a fix for it.
 

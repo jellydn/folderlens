@@ -64,6 +64,7 @@ pub struct Prefs {
     pub gauge_gpu: bool,
     pub shortcut_hints: bool,
     pub notch_position: NotchPosition,
+    pub theme: crate::theme::Theme,
     pub update_checks: bool,
     pub update_downloads: bool,
     pub update_prereleases: bool,
@@ -85,6 +86,7 @@ impl Default for Prefs {
             gauge_gpu: true,
             shortcut_hints: true,
             notch_position: NotchPosition::Below,
+            theme: crate::theme::Theme::Default,
             update_checks: true,
             update_downloads: false,
             update_prereleases: false,
@@ -201,6 +203,7 @@ pub fn load_from(path: &Path) -> Prefs {
                 }
             }
             "notch_position" => position = NotchPosition::parse(value),
+            "theme" => prefs.theme = crate::theme::Theme::parse(value),
             "update_checks" => prefs.update_checks = value == "1",
             "update_downloads" => prefs.update_downloads = value == "1",
             "update_prereleases" => prefs.update_prereleases = value == "1",
@@ -239,6 +242,7 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
         "notch_position={}\n",
         prefs.notch_position.as_str()
     ));
+    text.push_str(&format!("theme={}\n", prefs.theme.as_str()));
     text.push_str(&format!("update_checks={}\n", flag(prefs.update_checks)));
     text.push_str(&format!(
         "update_downloads={}\n",
@@ -641,6 +645,11 @@ mod tests {
         assert_eq!(prefs.agent_id, "grok");
         assert_eq!(prefs.keep_hours, 0);
         assert!(prefs.gauge_cpu);
+        assert_eq!(prefs.theme, crate::theme::Theme::Default);
+        std::fs::write(&path, "theme=unknown\nnotch_position=right\n").unwrap();
+        let loaded = load_from(&path);
+        assert_eq!(loaded.theme, crate::theme::Theme::Default);
+        assert_eq!(loaded.notch_position, NotchPosition::Right);
         assert_eq!(prefs.notch_position, NotchPosition::Below);
         for (text, expected) in [
             ("notch_below=0\n", NotchPosition::Center),

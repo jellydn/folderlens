@@ -882,7 +882,7 @@ mod tests {
                 height.into(),
                 NotchPosition::Center
             ),
-            Some((-870.0, 834.0))
+            Some((-870.0, 838.0))
         );
         assert_eq!(
             notch_origin(visible, -720.0, 480.0, 230.0, NotchPosition::Center),
@@ -901,13 +901,13 @@ mod tests {
                 height.into(),
                 NotchPosition::Center
             ),
-            Some((490.0, 734.0))
+            Some((490.0, 738.0))
         );
     }
 
     #[test]
     fn positions_fit_compact_and_expanded_on_offset_and_tight_screens() {
-        for (width, height) in [(300.0, 36.0), (480.0, 230.0)] {
+        for (width, height) in [(300.0, 32.0), (480.0, 230.0)] {
             for screen_width in [width, width + 15.0, 640.0, 1920.0] {
                 let visible = Rect {
                     x: -1730.0,
@@ -979,7 +979,7 @@ mod tests {
             ),
             Some((0.0, 50.0))
         );
-        for (w, h) in [(479.0, 230.0), (480.0, 229.0), (299.0, 36.0), (300.0, 35.0)] {
+        for (w, h) in [(479.0, 230.0), (480.0, 229.0), (299.0, 32.0), (300.0, 31.0)] {
             let area = Rect {
                 x: -800.0,
                 y: 40.0,
@@ -991,8 +991,8 @@ mod tests {
                 None
             );
             assert_eq!(
-                notch_origin(area, -560.0, 300.0, 36.0, NotchPosition::Right).is_some(),
-                w >= 300.0 && h >= 36.0
+                notch_origin(area, -560.0, 300.0, 32.0, NotchPosition::Right).is_some(),
+                w >= 300.0 && h >= 32.0
             );
         }
     }

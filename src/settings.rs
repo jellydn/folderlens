@@ -9,12 +9,12 @@ use rune::{
 };
 
 use crate::prefs::{self, Agent, NotchPosition, Prefs};
-use crate::{button, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
+use crate::theme::{CARD, CHECK_BORDER, TOGGLE_OFF, WARNING};
+use crate::{button, paint, ButtonStyle, BLUE, INK, MUTED, PANEL, TRACK};
 
 #[path = "settings_updates.rs"]
 mod updates;
 
-const CARD: &str = "#111116";
 const GREEN: &str = BLUE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -180,12 +180,10 @@ fn persist(state: &Settings) {
     prefs::save_to(&state.path, &state.prefs);
 }
 
-fn paint(hex: &str) -> Color {
-    rune::color::hex(hex).unwrap_or(Color::WHITE)
-}
-
 fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
+    let _theme = crate::theme::scope(state.prefs.theme);
     col()
+        .key("settings")
         .w_full()
         .h_full()
         .fill(paint(PANEL))
@@ -357,17 +355,50 @@ fn toggle(key: &'static str, on: bool, press: impl Fn(&mut Settings) + 'static) 
     el().key(key)
         .size(36.0, 22.0)
         .radius(11.0)
-        .fill(paint(if on { GREEN } else { "#3a3a3c" }))
+        .fill(paint(if on { GREEN } else { TOGGLE_OFF }))
         .on_press(press)
         .child(
             el().size(18.0, 18.0)
                 .radius(9.0)
-                .fill(if on { paint(PANEL) } else { Color::WHITE })
+                .fill(if on { paint(PANEL) } else { paint(INK) })
                 .absolute(knob, 2.0),
         )
 }
 
 fn general(state: &Settings) -> El {
+    let mut themes = col().w_full().gap(8.0);
+    for choices in crate::theme::Theme::ALL.chunks(2) {
+        let mut options = row().w_full().gap(8.0);
+        for &theme in choices {
+            let selected = state.prefs.theme == theme;
+            options = options.child(
+                button(
+                    theme.label(),
+                    if selected {
+                        ButtonStyle::Primary
+                    } else {
+                        ButtonStyle::Secondary
+                    },
+                )
+                .key(format!("theme-{}", theme.as_str()))
+                .label(format!(
+                    "Theme: {}{}",
+                    theme.label(),
+                    if selected { ", selected" } else { "" }
+                ))
+                .help("Changes colors throughout FolderLens")
+                .grow(1.0)
+                .min_w(0.0)
+                .on_press_tx(move |state: &mut Settings, tx: &mut Tx| {
+                    state.prefs.theme = theme;
+                    persist(state);
+                    // A light/dark crossfade briefly loses text contrast.
+                    tx.instant();
+                }),
+            );
+        }
+        themes = themes.child(options);
+    }
     let mut placement = col().w_full().gap(8.0);
     for choices in [
         [
@@ -417,6 +448,9 @@ fn general(state: &Settings) -> El {
         .child(section("Notch placement"))
         .child(placement)
         .child(text("Choose a screen position to suit your setup. Lower center leaves extra space above. Positions stay within the work area; other apps are not detected. The tray stays available.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(section("Theme"))
+        .child(themes)
+        .child(text("Saved for the notch, Review and Settings. Default keeps the original dark appearance; Lotus, Alucard and Tokyo Night Day are light.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Readings and shortcuts"))
         .child(card(
             col()
@@ -551,7 +585,7 @@ fn agent(state: &Settings) -> El {
                     text(state.model_error.clone())
                         .key("model-error")
                         .font(type_::LABEL)
-                        .color(paint("#ff9f0a"))
+                        .color(paint(WARNING))
                         .wrap()
                         .w_full()
                 }),
@@ -673,7 +707,7 @@ fn radio(on: bool) -> El {
     let mut mark = el()
         .size(16.0, 16.0)
         .radius(8.0)
-        .border(1.4, paint(if on { BLUE } else { "#636366" }));
+        .border(1.4, paint(if on { BLUE } else { CHECK_BORDER }));
     if on {
         mark = mark.child(
             el().size(8.0, 8.0)
@@ -940,6 +974,98 @@ fn access(state: &Settings) -> El {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn theme_choices_are_reachable_persist_and_preserve_position_and_permissions() {
+        for size in [(760.0, 560.0), (360.0, 420.0)] {
+            let mut state = state();
+            state.prefs.notch_position = NotchPosition::Right;
+            let path = state.path.clone();
+            let mut rt = rune::Runtime::new(
+                state,
+                view,
+                size,
+                rune::Env {
+                    system_dark: true,
+                    scale: 2.0,
+                },
+            );
+            rt.set_system_reduced_motion(true);
+            rt.frame(0.0);
+            for (theme, background) in crate::theme::Theme::ALL.into_iter().zip([
+                "#010105", "#1f1f28", "#f2ecbc", "#282a36", "#fffbeb", "#222436", "#e1e2e7",
+            ]) {
+                let key = format!("theme-{}", theme.as_str());
+                rt.update(|_, tx| tx.scroll_into_view(&key));
+                rt.frame(0.0);
+                let (rect, _) = rt.presented(&key).unwrap();
+                assert!(rect[0] >= 0.0 && rect[0] + rect[2] <= size.0);
+                assert!(
+                    rect[1] >= 97.0 && rect[1] + rect[3] <= size.1 - 34.0,
+                    "{size:?}: {key}: {rect:?}"
+                );
+                let (x, y) = rt.find(&key).unwrap();
+                rt.pointer_down(x, y);
+                rt.pointer_up(x, y);
+                rt.frame(0.0);
+                let saved = prefs::load_from(&path);
+                assert_eq!(saved.theme, theme);
+                assert_eq!(saved.notch_position, NotchPosition::Right);
+                assert!(!saved.allow_start && !saved.send_paths);
+                let root = rt
+                    .elements()
+                    .into_iter()
+                    .find(|el| el.key.as_deref() == Some("settings"))
+                    .unwrap();
+                assert_eq!(root.fill, rune::color::hex(background).unwrap());
+                let choices: Vec<_> = rt
+                    .elements()
+                    .into_iter()
+                    .filter(|el| {
+                        el.key
+                            .as_deref()
+                            .is_some_and(|key| key.starts_with("theme-"))
+                    })
+                    .collect();
+                assert_eq!(
+                    choices
+                        .iter()
+                        .filter(|el| el
+                            .label
+                            .as_deref()
+                            .is_some_and(|label| label.ends_with(", selected")))
+                        .count(),
+                    1
+                );
+                assert!(choices.iter().all(|el| el.focusable));
+            }
+            for _ in 0..40 {
+                if rt
+                    .elements()
+                    .iter()
+                    .any(|el| el.key.as_deref() == Some("theme-default") && el.focused)
+                {
+                    break;
+                }
+                rt.key(rune::KeyEvent {
+                    key: rune::Key::Tab,
+                    mods: rune::Mods::default(),
+                });
+                rt.frame(0.0);
+            }
+            assert!(rt
+                .elements()
+                .iter()
+                .any(|el| el.key.as_deref() == Some("theme-default") && el.focused));
+            rt.key(rune::KeyEvent {
+                key: rune::Key::Text(" ".into()),
+                mods: rune::Mods::default(),
+            });
+            rt.frame(0.0);
+            assert_eq!(prefs::load_from(&path).theme, crate::theme::Theme::Default);
+            std::fs::remove_file(path).unwrap();
+        }
+    }
 
     #[test]
     fn a_gauge_toggle_writes_the_temp_file() {

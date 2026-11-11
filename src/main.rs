@@ -18,6 +18,7 @@ mod palette;
 mod prefs;
 mod settings;
 mod status;
+mod theme;
 mod update;
 
 use std::time::{Duration, Instant};
@@ -28,14 +29,12 @@ use rune::{
     canvas, col, el, row, text, Align, App, AppSpec, Color, Cx, El, KeyEvent, LineCap,
     MacWindowOptions, ScrollSpec, Shape, Transition, Tx, WindowOptions, WindowSpec,
 };
+use theme::{
+    paint, BLUE, BORDER, CHECK_BORDER, CHECK_FILL, DANGER_BORDER, DANGER_FILL, DANGER_TEXT, INK,
+    MUTED, PANEL, RED, SECONDARY_TEXT, TRACK,
+};
 
-const PANEL: &str = "#010105";
-const INK: &str = "#ffffff";
-const MUTED: &str = "#aaaab8";
-const LINE: &str = "#ffffff";
-const BLUE: &str = "#66a7ff";
-const RED: &str = "#ff666c";
-const TRACK: &str = "#1b1b23";
+const LINE: &str = INK;
 const MIN_PANEL_HEIGHT: f32 = 280.0;
 
 struct State {
@@ -291,8 +290,16 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     let mut changed = scan_if_due(s, Instant::now());
     let prefs = prefs::load_from(&s.prefs_path);
     if prefs != s.prefs {
+        // Appearance changes do not invalidate an otherwise unchanged selection.
+        let mut previous = s.prefs.clone();
+        previous.theme = prefs.theme;
+        if previous != prefs {
+            s.confirmed = false;
+        }
+        if s.prefs.theme != prefs.theme {
+            tx.instant();
+        }
         s.prefs = prefs;
-        s.confirmed = false;
         changed = true;
     }
     if let Some(job) = &s.agent {
@@ -504,10 +511,6 @@ fn cleanup_line(s: &State) -> String {
     }
 }
 
-fn paint(s: &str) -> Color {
-    rune::color::hex(s).unwrap_or(Color::WHITE)
-}
-
 fn rule() -> El {
     el().w_full().h(1.0).fill(paint(LINE).alpha(0.08))
 }
@@ -524,9 +527,9 @@ enum ButtonStyle {
 fn button(label: &str, style: ButtonStyle) -> El {
     let (ink, fill, border) = match style {
         ButtonStyle::Primary => (PANEL, BLUE, BLUE),
-        ButtonStyle::Secondary => (INK, TRACK, "#454552"),
+        ButtonStyle::Secondary => (INK, TRACK, BORDER),
         ButtonStyle::Quiet => (MUTED, PANEL, PANEL),
-        ButtonStyle::Destructive => ("#ffaca5", "#3b2a30", "#88504e"),
+        ButtonStyle::Destructive => (DANGER_TEXT, DANGER_FILL, DANGER_BORDER),
         ButtonStyle::Disabled => (MUTED, TRACK, TRACK),
     };
     let enabled = !matches!(style, ButtonStyle::Disabled);
@@ -576,8 +579,8 @@ fn checkbox(key: String, on: bool, press: impl Fn(&mut State) + 'static) -> El {
         .key(key)
         .size(16.0, 16.0)
         .radius(4.0)
-        .border(1.2, if on { paint(BLUE) } else { paint("#636366") })
-        .fill(if on { paint(BLUE) } else { paint("#2a2a2c") })
+        .border(1.2, if on { paint(BLUE) } else { paint(CHECK_BORDER) })
+        .fill(if on { paint(BLUE) } else { paint(CHECK_FILL) })
         .on_press(press);
     if on {
         box_ = box_.child(canvas(check_mark()).size(16.0, 16.0).absolute(0.0, 0.0));
@@ -693,7 +696,7 @@ fn group_row(s: &State, index: usize) -> El {
                         .w_full(),
                 ),
         )
-        .child(text(size).font(type_::LABEL).color(paint("#d1d1d6")))
+        .child(text(size).font(type_::LABEL).color(paint(SECONDARY_TEXT)))
         .child(chevron_el)
         .on_secondary_press(move |state: &mut State, _, tx| {
             tx.instant();
@@ -741,7 +744,7 @@ fn child_row(s: &State, index: usize) -> El {
                     .w_full(),
             ),
     )
-    .child(text(size).font(type_::LABEL).color(paint("#d1d1d6")))
+    .child(text(size).font(type_::LABEL).color(paint(SECONDARY_TEXT)))
     .on_secondary_press(move |state: &mut State, _, tx| {
         tx.instant();
         palette::open(state, Some(palette::Target::Leaf(index)));
@@ -781,6 +784,7 @@ fn selection_reason(s: &State, index: usize) -> String {
 }
 
 fn view(s: &State, cx: &mut Cx<State>) -> El {
+    let _theme = theme::scope(s.prefs.theme);
     // Publish each rendered selection change without waiting for the next polling interval.
     if let Some(job) = &s.agent {
         job.set_access(palette::ask_access(s));
@@ -1593,6 +1597,40 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
+    }
+
+    #[test]
+    fn theme_changes_preserve_a_recorded_choice_but_exclusions_clear_it() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Balanced));
+        rt.frame(0.0);
+        click(&mut rt, "confirm");
+        assert!(rt.state.confirmed);
+        let selection = ticked_ids(&rt.state);
+        let catalog = format!("{:?}", rt.state.catalog);
+        let path = rt.state.prefs_path.clone();
+        for theme in theme::Theme::ALL {
+            let mut prefs = rt.state.prefs.clone();
+            prefs.theme = theme;
+            prefs::save_to(&path, &prefs);
+            rt.update(|s, tx| {
+                poll(s, 0.0, tx);
+            });
+            rt.frame(0.0);
+            assert_eq!(rt.state.prefs.theme, theme);
+            assert!(rt.state.confirmed);
+            assert_eq!(ticked_ids(&rt.state), selection);
+            assert_eq!(format!("{:?}", rt.state.catalog), catalog);
+        }
+        let mut prefs = rt.state.prefs.clone();
+        prefs.theme = theme::Theme::Default;
+        prefs.kept.push(rt.state.catalog.leaves[0].path.clone());
+        prefs::save_to(&path, &prefs);
+        rt.update(|s, tx| {
+            poll(s, 0.0, tx);
+        });
+        assert!(!rt.state.confirmed);
+        std::fs::remove_file(path).unwrap();
     }
 
     fn leaf_at(state: &State, id: &str) -> usize {

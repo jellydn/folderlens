@@ -1,3 +1,16 @@
+## FolderLens 0.3.3 — Shorter notch, saved themes and verified update downloads
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Reduce the compact notch from 300×36 to 300×32 points. Keep the metric fonts, 22×28 expand control, 480×230 expanded panel and four independent screen positions.
+- Add seven saved themes in Settings → General: Default, Kanagawa, Kanagawa Lotus, Dracula, Alucard (Light), Tokyo Night and Tokyo Night Day. Apply the app-local palette across the notch, Review, actions and Settings, without reading Oak settings. Missing or unknown themes use Default; existing placement and permissions remain unchanged. Theme-only changes preserve Record choice. Settings switches without a color fade; other windows reload on the next preference poll.
+- Complete the manual update route: Check for Updates → Download and verify → Reveal in Finder. Keep pinned publisher metadata and ZIP size/hash checks, quarantine, channel selection, Homebrew guidance and the existing installation-ownership gate. Final app replacement is manual; the app does not replace itself, restart itself or install on quit. Preferences and chats remain separate.
+- Update the README, guide and current notch, General, theme and Updates screenshots. No automatic AI, paid fallback or cleanup path is added.
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy, preference migration and theme round trips, recorded-choice preservation, compact metric/expand bounds, keyboard-accessible theme choices at standard/minimum Settings sizes, solid-palette text contrast, signed updater discovery/integrity/ownership and rollback fixtures, and ad-hoc arm64 DMG/ZIP packaging. All seven palettes have headless renders for compact/expanded notch, Review and Settings; representative light and running/scanning states were inspected.
+
+Native pointer/keyboard routing, VoiceOver, physical-notch/multi-display behavior, live light/dark interaction contrast, Finder dialog interaction, real AI turns/Terminal continuation and actual manual app replacement/restart/Gatekeeper behavior remain unverified. Headless checks are not native click proof; no owner's installed app is replaced during verification. All current installations remain manual-update-only. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.2 — Screen position choices
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.

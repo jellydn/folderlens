@@ -18,6 +18,7 @@
 - `src/notch.rs` owns the default compact/expanded controls. Readings flow from the review state through Rune's UI queue; notch actions return to that same state and scan worker. It owns no scan or AI job.
 - `src/palette.rs` owns folder Actions, keyboard navigation, Ask context/access and Finder actions. Ask uses the eligible selection, not the target row.
 - `src/settings.rs` owns a separate `Settings` state/window; private `src/settings_updates.rs` owns its Updates page. Shared preferences pass through `src/prefs.rs`.
+- `src/theme.rs` owns fixed palette choices and the shared paint adapter. Each root view scopes its saved theme for synchronous view construction, restoring the previous scope afterwards; no process-wide selection leaks between windows or parallel headless tests. Notch readings carry the Review theme through the existing UI queue.
 
 **Catalog and measurement:**
 - `src/catalog.rs` owns leaves, groups, selection gates, process-use locks and system readings. It privately includes `src/scan.rs` for rules, traversal, allocated-block measurement and cache storage.

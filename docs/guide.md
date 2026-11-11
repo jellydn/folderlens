@@ -14,14 +14,26 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.2)
+## Quick review (0.3.3)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
 ### Notch and local checks
 
-Starting with 0.3.1, FolderLens uses an Oak-style notch: 300×36
-points collapsed, 480×230 expanded. Version 0.3.0 used 360×36.
+Version 0.3.3 uses a **300×32-point** compact notch, reduced from
+300×36 in 0.3.1–0.3.2. The 22×28 expand target and metric font sizes are unchanged.
+The expanded view stays 480×230. Version 0.3.0 used 360×36.
+
+**Theme (0.3.3):** General has Default, Kanagawa, Kanagawa Lotus, Dracula,
+Alucard (Light), Tokyo Night and Tokyo Night Day. Lotus, Alucard and Day are light;
+the others are dark. Default retains the original colors.
+Selection applies across the notch, Review, actions and Settings and saves as
+`theme` in FolderLens's own preferences. Missing/unknown values use Default and
+leave the position and agent permissions unchanged. No Oak settings are read.
+Settings changes without a low-contrast light/dark crossfade. Review and the notch
+reload on the next preference poll (up to about one second while hidden).
+Theme-only changes preserve Record choice; selection/exclusion changes still clear it.
+These are fixed palettes, not automatic system-appearance matching.
 
 **Starting with 0.3.2:** **Settings → General → Notch placement** has four choices:
 
@@ -69,7 +81,7 @@ Render synthetic notch scenes with `--window notch --scene compact-example`, or
 `--window notch --scene expanded-example --size 480x230`, plus `--theme dark --snap`.
 `running-example` and `scanning-example` show the other expanded states.
 
-The panel uses Oak's near-black surfaces and blue selected controls. The overview
+The default panel uses near-black surfaces and blue selected controls. The overview
 shows the estimated footprint of eligible cleanup candidates, free disk space and
 a live CPU meter. The CPU reading option in General settings also controls this
 meter. Candidate estimates do not establish that deleting the folders is safe.
@@ -186,13 +198,13 @@ Agent-start permission still applies. Requests remain manual; there are no autom
 
 Settings → Updates checks GitHub releases daily while the bundled app runs. Stable releases are the default; **Include prereleases** is opt-in. **Download automatically** is off by default and requires daily checks to be enabled. Manual checks remain available. Updates send only an app/version request to GitHub, never scan results, selected paths, saved chats or agent credentials.
 
-FolderLens verifies signed `update.json` metadata against its pinned, dedicated Ed25519 public key, then verifies the ZIP's signed size and SHA-256 before extraction. Expired metadata, missing/wrong signatures, wrong channel/version, corrupted downloads and unverified bundles fail closed. Every **Install and Restart** action requires a separate native confirmation; a download or quitting FolderLens never authorizes installation. Finish agent reviews first. A previous app copy is kept next to the installation for rollback. App settings and chats are not removed.
+In 0.3.3, choose **Check for Updates… → Download → Reveal in Finder**. FolderLens verifies signed `update.json` metadata against its pinned, dedicated Ed25519 public key, then verifies the ZIP's signed size and SHA-256 before offering the Finder action. Expired metadata, missing/wrong signatures, wrong channel/version and corrupted downloads fail closed. Extract the ZIP, finish or cancel agent reviews, quit FolderLens, then replace the app manually. A download or quitting never installs anything. App settings and chats are stored separately and are not removed. Automatic downloads never open Finder; a later manual check can reveal the already-verified archive.
 
 Detected Homebrew installations are not self-replaced: use `brew upgrade --cask jellydn/tap/folderlens`. The stable tap does not follow prereleases. Source/debug binaries do not run an updater; use the bundled app.
 
 **Unknown installation origin is manual-update-only.** A missing cask receipt, a writable Applications path or a copied bundle marker is not proof of a direct installation. This also blocks native replacement for custom-prefix casks launched by Finder without `HOMEBREW_PREFIX`, moved cask apps and aliases. Current packages have no reliable direct-install provenance, so **native Install and Restart is unavailable for all current installations**, even with user approval. Only a future positively established eligible direct installation may reach the separate confirmation and tested installer; no preference bypass exists.
 
-Publisher-verified checks and opt-in downloads still work. After an automatic download, use **Check for Updates…** for manual-install guidance; verified ZIPs are in `~/Library/Application Support/FolderLens/Updates`. If Homebrew installed FolderLens, update through Homebrew rather than replacing the app manually. Otherwise install the verified ZIP or release DMG yourself, subject to normal macOS approval. Discovery currently examines the first 100 releases. There is no persistent download-ready indicator. Old rollback copies are retained rather than automatically deleted. These non-blocking preview limits are recorded in PR #10.
+Verified ZIPs are in `~/Library/Application Support/FolderLens/Updates`. If Homebrew installed FolderLens, update through Homebrew rather than replacing the app manually. Otherwise install the verified ZIP or release DMG yourself, subject to normal macOS approval. Discovery currently examines the first 100 releases. There is no persistent download-ready indicator. The retained installer/rollback fixtures do not enable native replacement. Earlier preview limits are recorded in PR #10.
 
 **Published beta.1 limitation:** its native archive transfer timed out during post-release verification. Use the release's DMG or ZIP for manual installation if an update download fails. PR #10 replaces the per-byte archive loop with a native file transfer; this fix is not in the published beta.1 assets. Signed-asset verification passed, but real app replacement/restart remains unverified.
 
@@ -207,7 +219,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.2 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.2). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.3 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.3). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 
