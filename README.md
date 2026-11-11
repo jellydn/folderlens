@@ -56,4 +56,17 @@ sh scripts/bundle.sh
 cargo test --locked
 ```
 
+### Amp orbs
+
+`.agents/setup` installs the pinned Rust toolchain with rustfmt and Clippy, then
+fetches the locked dependencies into Cargo's cache. Amp can reuse these tools and
+dependencies in project snapshots. It uses the Node.js supplied by the orb; no
+JavaScript package installation, agent account, or secrets are needed.
+`.agents/resume` checks tool availability without installing anything on wake.
+
+Linux orbs can run `cargo fmt --check` and `node --test tests/pi-reader.mjs`.
+Use a Mac satellite for native builds, Rust tests, Clippy, app renders, and
+packaging. The Linux dependency cache does not replace a Mac's own toolchain or
+build cache.
+
 Built with Rust and Rune. [MIT license](LICENSE).

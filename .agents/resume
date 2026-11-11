@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# Do not download tools or dependencies on wake. Setup populates the snapshot.
+command -v cargo >/dev/null
+command -v node >/dev/null
+echo "FolderLens orb ready; use a Mac satellite for native verification."

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+SECONDS=0
+
+echo "Preparing FolderLens Rust toolchain"
+export PATH="$HOME/.cargo/bin:$PATH"
+if ! command -v rustup >/dev/null 2>&1; then
+    installer=$(mktemp)
+    trap 'rm -f "$installer"' EXIT
+    curl --fail --silent --show-error --location https://sh.rustup.rs -o "$installer"
+    sh "$installer" -y --profile minimal --default-toolchain none --no-modify-path
+fi
+
+# Read the same toolchain pin as CI; do not silently use a different Rust version.
+toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+test -n "$toolchain"
+rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
+echo "Toolchain ready after ${SECONDS}s"
+
+# A new Amp process must see Rust too, not only this setup process.
+profile="$HOME/.bash_profile"
+marker='# FolderLens orb Rust toolchain'
+if ! grep -Fqx "$marker" "$profile" 2>/dev/null; then
+    cat >> "$profile" <<'EOF'
+
+# FolderLens orb Rust toolchain
+if [ -f "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+fi
+EOF
+fi
+
+echo "Fetching locked dependencies (including macOS dependencies)"
+cargo fetch --locked
+echo "Dependency cache ready after ${SECONDS}s"
+
+node --version
+echo "FolderLens setup finished in ${SECONDS}s"
+echo "Native build, Clippy, Rust tests and app renders require a Mac satellite."
