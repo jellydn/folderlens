@@ -1,3 +1,15 @@
+## FolderLens 0.3.5 — Native Top center placement
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Fix Top center on notched displays: use the selected screen's full frame and native camera safe-area height instead of always adding a panel row below the visible work area. Compact aligns its bottom with the camera row's bottom; expanded starts at the full display's top. This follows Oak's native anchor without reading Oak settings or detecting its windows. Overlap with another app on the center row is allowed; no collision avoidance is added.
+- Keep menu-bar clearance on non-notched built-in and external displays, side positions and Lower center. Preserve saved display UUIDs, disconnect/reconnect fallback, all four positions, themes, compact/expanded sizes and collapse/tray fallback. Scan-only and manual-AI permissions are unchanged.
+- Update Settings help, README, guide, architecture notes and current Settings screenshots. Explain that a physical camera can obscure Top center content; Lower center and side positions remain available. This is a placement fix, not a camera-cut-out content layout.
+
+The camera-row regression failed before the fix and passes afterward. Verification covers the full macOS Rust/Pi suites, formatting, Clippy, compact/expanded geometry, safe-area height boundaries, offset and Dock-reduced screens, display selection/fallback and inspected standard/narrow/light Settings renders. A temporary in-process camera-metadata override exercises actual AppKit placement for all four positions and both sizes; programmatic resizing is not a native expand-button test. Actual Oak 0.5.55 uses the same compact bottom anchor under that override.
+
+The verification Mac has one virtual display, not physical-notch or multi-display hardware. Camera occlusion, physical display selection/hot-plug, mixed display scales, native pointer/keyboard expansion, Spaces/full-screen behavior and VoiceOver remain unverified. The owner's actual screen telemetry was not available. Real AI turns/Terminal continuation, Finder dialogs and manual app replacement/restart/Gatekeeper behavior also remain unverified. No owner's installed app is replaced during verification. All current installations remain manual-update-only; Homebrew users update through Homebrew, whose six-hour cask check can lag publication. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.4 — Choose a notch display
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.

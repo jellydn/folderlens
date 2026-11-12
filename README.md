@@ -12,7 +12,7 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.4 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.4) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.5 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.5) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -48,8 +48,13 @@ keeps Record choice intact. These are fixed palettes, not automatic system match
 **Position controls in 0.3.2:** **Settings → General → Notch placement** offers
 **Top left**, **Top center**, **Top right** and **Lower center** (default).
 These are screen positions, not presets for another app. Left/Right sit near the
-visible work area's edges; both panel sizes remain within that area. Lower center
-keeps the existing extra space above. Placement follows the selected display and
+visible work area's edges. Lower center keeps the existing extra space above.
+**Placement fix in 0.3.5:** on a notched display, Top center uses the native
+camera row, rather than placing another row below it. Compact aligns its bottom
+to the camera safe area's bottom; expanded starts at the full display's top.
+The physical camera can obscure content there; choose Lower center or a side
+position to keep the panel clear of it. Non-notched displays keep their menu-bar
+clearance. Placement follows the selected display and
 updates after expansion or display changes. If the expanded panel cannot fit, it
 collapses; if compact cannot fit, it hides in favor of the tray. Choose a different position if another
 app overlaps; FolderLens does not detect apps or reserve their assumed sizes.
@@ -62,7 +67,8 @@ If it disconnects, the notch uses the primary display and returns when the saved
 display reconnects. Choose Primary to forget the saved choice. Existing settings
 keep the automatic primary behavior. Position and theme remain unchanged, and
 display-only changes preserve Record choice. Both notch sizes use the chosen
-display's visible work area; the tray remains the fallback if compact cannot fit.
+display's geometry (including its camera safe area for Top center); the tray
+remains the fallback if compact cannot fit.
 
 ![Display selection with synthetic connected displays](shots/display-settings.png)
 

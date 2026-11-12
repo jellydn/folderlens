@@ -31,6 +31,8 @@ pub struct Display {
     pub name: String,
     pub frame: Rect,
     pub visible: Rect,
+    /// Camera-row height in AppKit points; zero on displays without a notch.
+    pub safe_area_top: f64,
 }
 
 /// NSScreen order starts with the menu-bar display, not the keyboard-focus display.
@@ -132,19 +134,26 @@ pub fn reveal() {
 
 /// Screen-relative placement, independent of other apps and their window sizes.
 fn notch_origin(
-    visible: Rect,
-    center: f64,
+    display: &Display,
     width: f64,
     height: f64,
     position: NotchPosition,
 ) -> Option<(f64, f64)> {
-    if width > visible.w || height > visible.h {
+    let mut placement_area = display.visible;
+    // Like Oak's inside-notch placement: a short panel sits at the camera row's
+    // bottom; a taller panel starts at the screen top. Other positions, and
+    // screens without a camera, retain their menu-bar/work-area clearance.
+    if position == NotchPosition::Center && display.safe_area_top > 0.0 {
+        let top = display.frame.y + display.frame.h;
+        placement_area.h = top - (display.safe_area_top - height).max(0.0) - placement_area.y;
+    }
+    if width > placement_area.w || height > placement_area.h {
         return None;
     }
-    let centered = center - width * 0.5;
+    let centered = display.frame.x + (display.frame.w - width) * 0.5;
     let x = match position {
-        NotchPosition::Left => visible.x + 8.0,
-        NotchPosition::Right => visible.x + visible.w - width - 8.0,
+        NotchPosition::Left => placement_area.x + 8.0,
+        NotchPosition::Right => placement_area.x + placement_area.w - width - 8.0,
         _ => centered,
     };
     // Preserve the lower-row spacing of existing 0.3.1 settings.
@@ -153,10 +162,16 @@ fn notch_origin(
     } else {
         0.0
     };
-    let y = visible.y + visible.h - height - inset;
+    let y = placement_area.y + placement_area.h - height - inset;
     Some((
-        x.clamp(visible.x, visible.x + visible.w - width),
-        y.clamp(visible.y, visible.y + visible.h - height),
+        x.clamp(
+            placement_area.x,
+            placement_area.x + placement_area.w - width,
+        ),
+        y.clamp(
+            placement_area.y,
+            placement_area.y + placement_area.h - height,
+        ),
     ))
 }
 
@@ -269,6 +284,7 @@ mod macos {
                 name: string_value(msg0(screen, sel(c"localizedName"))),
                 frame: rect(sel(c"frame")),
                 visible: rect(sel(c"visibleFrame")),
+                safe_area_top: msg_insets(screen, sel(c"safeAreaInsets")).top,
             });
         }
         displays
@@ -295,13 +311,8 @@ mod macos {
                 continue;
             }
             let frame = msg_rect(window, sel(c"frame"));
-            let Some((x, y)) = super::notch_origin(
-                area,
-                display.frame.x + display.frame.w * 0.5,
-                frame.size.w,
-                frame.size.h,
-                position,
-            ) else {
+            let Some((x, y)) = super::notch_origin(display, frame.size.w, frame.size.h, position)
+            else {
                 crate::notch::fit_work_area((area.w as f32, area.h as f32));
                 break;
             };
@@ -749,6 +760,20 @@ mod macos {
         }
     }
 
+    fn msg_insets(obj: *mut c_void, selector: *mut c_void) -> NsEdgeInsets {
+        unsafe {
+            #[cfg(target_arch = "aarch64")]
+            let raw = objc_msgSend as *const () as usize;
+            #[cfg(target_arch = "x86_64")]
+            let raw = objc_msgSend_stret as *const () as usize;
+            let f = std::mem::transmute::<
+                usize,
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> NsEdgeInsets,
+            >(raw);
+            f(obj, selector)
+        }
+    }
+
     fn msg_ptr_bool(obj: *mut c_void, selector: *mut c_void, arg: *mut c_void) -> bool {
         unsafe {
             let f: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i8 =
@@ -792,6 +817,14 @@ mod macos {
     struct NsRect {
         origin: NsPoint,
         size: NsSize,
+    }
+
+    #[repr(C)]
+    struct NsEdgeInsets {
+        top: f64,
+        left: f64,
+        bottom: f64,
+        right: f64,
     }
 
     #[cfg(test)]
@@ -934,6 +967,95 @@ mod macos {
 mod tests {
     use super::*;
 
+    fn flat_display(visible: Rect, center: f64) -> Display {
+        Display {
+            id: "fixture".into(),
+            name: "Non-notched display".into(),
+            frame: Rect {
+                x: center - visible.w / 2.0,
+                ..visible
+            },
+            visible,
+            safe_area_top: 0.0,
+        }
+    }
+
+    #[test]
+    fn top_center_uses_the_native_notch_row_not_the_work_area() {
+        let visible = Rect {
+            x: 0.0,
+            y: 74.0,
+            w: 1512.0,
+            h: 871.0,
+        };
+        let display = Display {
+            frame: Rect {
+                y: 0.0,
+                h: 982.0,
+                ..visible
+            },
+            safe_area_top: 37.0,
+            ..flat_display(visible, 756.0)
+        };
+        // Oak's inside-notch compact bottom is frame.maxY - safeAreaInsets.top.
+        assert_eq!(
+            notch_origin(&display, 300.0, 32.0, NotchPosition::Center),
+            Some((606.0, 945.0))
+        );
+        assert_eq!(
+            notch_origin(&display, 480.0, 230.0, NotchPosition::Center),
+            Some((516.0, 752.0))
+        );
+        // At and above the safe-area height, the panel top is the screen top.
+        for (height, bottom) in [(36.0, 945.0), (37.0, 945.0), (38.0, 944.0)] {
+            assert_eq!(
+                notch_origin(&display, 300.0, height, NotchPosition::Center),
+                Some((606.0, bottom))
+            );
+        }
+        for (width, height) in [(300.0, 32.0), (480.0, 230.0)] {
+            for (position, x, top) in [
+                (NotchPosition::Left, 8.0, 945.0),
+                (NotchPosition::Right, 1504.0 - width, 945.0),
+                (NotchPosition::Below, 756.0 - width / 2.0, 904.0),
+            ] {
+                assert_eq!(
+                    notch_origin(&display, width, height, position),
+                    Some((x, top - height))
+                );
+            }
+            // Non-notched built-in/external screens retain Always-on-Top clearance.
+            let flat = Display {
+                safe_area_top: 0.0,
+                ..display.clone()
+            };
+            assert_eq!(
+                notch_origin(&flat, width, height, NotchPosition::Center),
+                Some((756.0 - width / 2.0, 945.0 - height))
+            );
+            // Global AppKit coordinates, including a display above and left of primary.
+            let offset = Display {
+                frame: Rect {
+                    x: -1800.0,
+                    y: 500.0,
+                    ..display.frame
+                },
+                visible: Rect {
+                    x: -1720.0,
+                    y: 574.0,
+                    w: 1432.0,
+                    ..display.visible
+                },
+                ..display.clone()
+            };
+            let expected_y = if height == 32.0 { 1445.0 } else { 1252.0 };
+            assert_eq!(
+                notch_origin(&offset, width, height, NotchPosition::Center),
+                Some((-1044.0 - width / 2.0, expected_y))
+            );
+        }
+    }
+
     #[test]
     fn chosen_display_survives_reordering_disconnect_and_reconnect() {
         let primary = Display {
@@ -951,6 +1073,7 @@ mod tests {
                 w: 1512.0,
                 h: 925.0,
             },
+            safe_area_top: 32.0,
         };
         let external = Display {
             id: "external-uuid".into(),
@@ -967,6 +1090,7 @@ mod tests {
                 w: 2496.0,
                 h: 1375.0,
             },
+            safe_area_top: 0.0,
         };
         let connected = vec![primary.clone(), external.clone()];
         let preferred = Some("external-uuid");
@@ -991,13 +1115,7 @@ mod tests {
             ] {
                 let display = selected_display(&connected, preferred).unwrap();
                 assert_eq!(
-                    notch_origin(
-                        display.visible,
-                        display.frame.x + display.frame.w / 2.0,
-                        width,
-                        height,
-                        position
-                    ),
+                    notch_origin(display, width, height, position),
                     Some((expected_x, 1655.0 - height - inset))
                 );
             }
@@ -1014,8 +1132,7 @@ mod tests {
         };
         for (width, height) in [crate::notch::COMPACT, crate::notch::EXPANDED] {
             let (x, y) = notch_origin(
-                visible,
-                -720.0,
+                &flat_display(visible, -720.0),
                 width.into(),
                 height.into(),
                 crate::prefs::Prefs::default().notch_position,
@@ -1028,7 +1145,7 @@ mod tests {
     }
 
     #[test]
-    fn notch_expansion_keeps_center_and_clears_camera_on_offset_displays() {
+    fn notch_expansion_keeps_center_on_non_notched_offset_displays() {
         let visible = Rect {
             x: -1440.0,
             y: 80.0,
@@ -1038,8 +1155,7 @@ mod tests {
         let (width, height) = crate::notch::COMPACT;
         assert_eq!(
             notch_origin(
-                visible,
-                -720.0,
+                &flat_display(visible, -720.0),
                 width.into(),
                 height.into(),
                 NotchPosition::Center
@@ -1047,18 +1163,25 @@ mod tests {
             Some((-870.0, 838.0))
         );
         assert_eq!(
-            notch_origin(visible, -720.0, 480.0, 230.0, NotchPosition::Center),
+            notch_origin(
+                &flat_display(visible, -720.0),
+                480.0,
+                230.0,
+                NotchPosition::Center
+            ),
             Some((-960.0, 640.0))
         );
         assert_eq!(
             notch_origin(
-                Rect {
-                    x: 0.0,
-                    y: 0.0,
-                    w: 1280.0,
-                    h: 770.0
-                },
-                640.0,
+                &flat_display(
+                    Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 1280.0,
+                        h: 770.0
+                    },
+                    640.0
+                ),
                 width.into(),
                 height.into(),
                 NotchPosition::Center
@@ -1084,7 +1207,9 @@ mod tests {
                     NotchPosition::Center,
                     NotchPosition::Below,
                 ] {
-                    let (x, y) = notch_origin(visible, center, width, height, position).unwrap();
+                    let (x, y) =
+                        notch_origin(&flat_display(visible, center), width, height, position)
+                            .unwrap();
                     assert!(x >= visible.x && x + width <= visible.x + visible.w);
                     assert!(y >= visible.y && y + height <= visible.y + visible.h);
                     assert_eq!(
@@ -1115,26 +1240,43 @@ mod tests {
             h: 900.0,
         };
         assert_eq!(
-            notch_origin(dock_area, 800.0, 480.0, 230.0, NotchPosition::Right),
+            notch_origin(
+                &flat_display(dock_area, 800.0),
+                480.0,
+                230.0,
+                NotchPosition::Right
+            ),
             Some((1112.0, 670.0))
         );
         assert_eq!(
-            notch_origin(dock_area, 800.0, 480.0, 230.0, NotchPosition::Left),
+            notch_origin(
+                &flat_display(dock_area, 800.0),
+                480.0,
+                230.0,
+                NotchPosition::Left
+            ),
             Some((88.0, 670.0))
         );
         assert_eq!(
-            notch_origin(dock_area, 800.0, 480.0, 230.0, NotchPosition::Center),
+            notch_origin(
+                &flat_display(dock_area, 800.0),
+                480.0,
+                230.0,
+                NotchPosition::Center
+            ),
             Some((560.0, 670.0))
         );
         assert_eq!(
             notch_origin(
-                Rect {
-                    x: 0.0,
-                    y: 50.0,
-                    w: 480.0,
-                    h: 230.0
-                },
-                240.0,
+                &flat_display(
+                    Rect {
+                        x: 0.0,
+                        y: 50.0,
+                        w: 480.0,
+                        h: 230.0
+                    },
+                    240.0
+                ),
                 480.0,
                 230.0,
                 NotchPosition::Below
@@ -1149,11 +1291,22 @@ mod tests {
                 h,
             };
             assert_eq!(
-                notch_origin(area, -560.0, 480.0, 230.0, NotchPosition::Right),
+                notch_origin(
+                    &flat_display(area, -560.0),
+                    480.0,
+                    230.0,
+                    NotchPosition::Right
+                ),
                 None
             );
             assert_eq!(
-                notch_origin(area, -560.0, 300.0, 32.0, NotchPosition::Right).is_some(),
+                notch_origin(
+                    &flat_display(area, -560.0),
+                    300.0,
+                    32.0,
+                    NotchPosition::Right
+                )
+                .is_some(),
                 w >= 300.0 && h >= 32.0
             );
         }

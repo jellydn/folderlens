@@ -14,7 +14,7 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.4)
+## Quick review (0.3.5)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
@@ -39,10 +39,18 @@ These are fixed palettes, not automatic system-appearance matching.
 
 - **Top left / Top right:** 8 points from the visible work area's side, below the
   camera/menu bar. Expansion keeps the same edge anchor.
-- **Top center:** centered on the selected display, just below the camera/menu bar.
+- **Top center:** centered on the selected display. The 0.3.5 placement fix
+  uses the physical notch row when `safeAreaInsets.top` is nonzero: compact's
+  bottom aligns with the camera safe area's bottom, while expanded starts at the
+  full screen top. Without a notch, it remains below the menu bar.
 - **Lower center:** the default, with the existing 41-point extra top inset.
 
-Both panel sizes have origins clamped to the visible work area. Center positions
+The physical camera can obscure Top center content; Lower center and the side
+positions keep the panel below it. This is placement, not a camera cut-out layout
+or a guarantee that two apps can share the center row.
+
+Both panel sizes stay within the visible work area's horizontal and lower bounds.
+Only Top center on a notched display may extend above that area's top. Center positions
 use the full display's center, not the Dock-reduced area's center. Placement updates
 after expansion and display changes, including screens without physical notches.
 If the expanded panel cannot fit, it collapses. If even the compact panel cannot
@@ -238,7 +246,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.4 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.4). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.5 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.5). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 

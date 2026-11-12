@@ -153,6 +153,7 @@ fn preview_displays(state: &mut Settings) {
             w: 2560.0,
             h: 1375.0,
         },
+        safe_area_top: if id == "example-built-in" { 32.0 } else { 0.0 },
     })
     .collect();
     state.prefs.notch_display = Some("example-external".into());
@@ -558,7 +559,7 @@ fn general(state: &Settings) -> El {
         .child(display_choices(state))
         .child(section("Notch placement"))
         .child(placement)
-        .child(text("Choose a screen position to suit your setup. Lower center leaves extra space above. Positions stay within the work area; other apps are not detected. The tray stays available.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(text("Top center uses the camera row on notched displays; the camera can obscure content. Lower center leaves extra space above. Other apps are not detected. The tray stays available.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
         .child(section("Theme"))
         .child(themes)
         .child(text("Saved for the notch, Review and Settings. Default keeps the original dark appearance; Lotus, Alucard and Tokyo Night Day are light.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
