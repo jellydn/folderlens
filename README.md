@@ -8,11 +8,14 @@ A notch-first macOS app for reviewing cleanup candidates, disk space and system 
 
 FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, folder protections, manual agent help and publisher-verified update checks remain available. The [codebase map](.planning/codebase/ARCHITECTURE.md) documents the pre-rename source.
 
-![Quick review preview with synthetic example data](shots/review-ledger.png)
+![Review with CPU, Disk and Memory cards at the top; synthetic example data](shots/review-ledger.png)
+
+**New in 0.3.6:** Review shows system usage once, in the three cards above.
+The duplicate footer readings and GPU reading have been removed.
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.5 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.5) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.6 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.6) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 

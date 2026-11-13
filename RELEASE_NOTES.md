@@ -1,3 +1,17 @@
+## FolderLens 0.3.6 — System usage shown once
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Show CPU, Disk and Memory usage in three cards at the top of Review, using one catalog snapshot. Disk shows used percentage and free space. CPU and Memory retain their General settings toggles.
+- Remove the duplicate footer readings, GPU reading, GPU preference and background GPU sampling. Quit remains available in the footer. Existing settings still load; the retired GPU preference is ignored.
+- Search later GitHub release pages during update discovery so a page full of prereleases cannot hide a stable update. Bound discovery to ten pages and report an unavailable check, rather than an incorrect up-to-date result, if that bound is reached.
+- Allow ten seconds for the agent test stub to write a complete pid file under load, while keeping the two-second provider shutdown check unchanged.
+- Refresh the README Review screenshot and description, and trim agent guidance to project-specific constraints.
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy, updater self-tests including second-page discovery and bounded pagination, CPU/Disk/Memory values and visibility preferences at 360–960 points, inspected Review renders, and ad-hoc arm64 DMG/ZIP packaging.
+
+Native pointer/keyboard routing, physical-notch and multi-display behavior, real AI turns/tool routing/Terminal continuation and actual manual app replacement/restart/Gatekeeper behavior remain unverified. No owner's installed app is replaced during verification. All current installations remain manual-update-only; Homebrew users update through Homebrew, whose cask can lag publication. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.5 — Native Top center placement
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
