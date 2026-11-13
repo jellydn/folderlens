@@ -26,7 +26,7 @@
 
 **Critical:** `serde_json = "1"` for ACP/RPC, MCP and per-run provider configuration; macOS-only `block2 = "0.6.2"` for AppKit event blocks and `libc = "0.2"` for pipes, sockets and descriptor checks (`Cargo.toml`). Exact resolutions live in `Cargo.lock`.
 
-**Infrastructure:** Mach CPU statistics (`src/catalog.rs`); IOKit/CoreFoundation GPU statistics (`src/gpu.rs`); raw Objective-C/AppKit status routing (`src/status.rs`); Foundation, AppKit, Darwin and CryptoKit updater (`native/Updater.swift`).
+**Infrastructure:** Mach CPU statistics (`src/catalog.rs`); raw Objective-C/AppKit status routing (`src/status.rs`); Foundation, AppKit, Darwin and CryptoKit updater (`native/Updater.swift`).
 
 Sparkle 2.10.1 supplies the pinned Ed25519 signing executable only. It is not the installed updater framework (`scripts/sparkle-tools.sh`).
 

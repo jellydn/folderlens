@@ -11,7 +11,7 @@
 
 **GitHub updates:** `native/Updater.swift` discovers up to 100 releases at `api.github.com/repos/jellydn/shelf/releases?per_page=100`. It constructs fixed `github.com/jellydn/shelf/releases/download/<tag>/` URLs, then verifies metadata and archive content with the pinned publisher key. No scan or agent data is sent.
 
-**System services:** Finder/Terminal launch through `open`; folder selection uses `osascript`; Full Disk Access opens System Settings. Scan/gauge inputs include `ps`, `diskutil`, `sysctl`, `vm_stat`, Mach and IOKit (`src/prefs.rs`, `src/palette.rs`, `src/catalog.rs`, `src/gpu.rs`).
+**System services:** Finder/Terminal launch through `open`; folder selection uses `osascript`; Full Disk Access opens System Settings. Scan/gauge inputs include `ps`, `diskutil`, `sysctl`, `vm_stat` and Mach (`src/prefs.rs`, `src/palette.rs`, `src/catalog.rs`).
 
 ## Data Storage
 

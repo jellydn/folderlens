@@ -61,7 +61,6 @@ pub struct Prefs {
     pub send_paths: bool,
     pub gauge_memory: bool,
     pub gauge_cpu: bool,
-    pub gauge_gpu: bool,
     pub shortcut_hints: bool,
     pub notch_position: NotchPosition,
     pub notch_display: Option<String>,
@@ -84,7 +83,6 @@ impl Default for Prefs {
             send_paths: false,
             gauge_memory: true,
             gauge_cpu: true,
-            gauge_gpu: true,
             shortcut_hints: true,
             notch_position: NotchPosition::Below,
             notch_display: None,
@@ -195,7 +193,6 @@ pub fn load_from(path: &Path) -> Prefs {
             "send_paths" => prefs.send_paths = value == "1",
             "gauge_memory" => prefs.gauge_memory = value == "1",
             "gauge_cpu" => prefs.gauge_cpu = value == "1",
-            "gauge_gpu" => prefs.gauge_gpu = value == "1",
             "shortcut_hints" => prefs.shortcut_hints = value == "1",
             "notch_below" => {
                 prefs.notch_position = if value == "1" {
@@ -239,7 +236,6 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
     text.push_str(&format!("send_paths={}\n", flag(prefs.send_paths)));
     text.push_str(&format!("gauge_memory={}\n", flag(prefs.gauge_memory)));
     text.push_str(&format!("gauge_cpu={}\n", flag(prefs.gauge_cpu)));
-    text.push_str(&format!("gauge_gpu={}\n", flag(prefs.gauge_gpu)));
     text.push_str(&format!("shortcut_hints={}\n", flag(prefs.shortcut_hints)));
     text.push_str(&format!(
         "notch_position={}\n",

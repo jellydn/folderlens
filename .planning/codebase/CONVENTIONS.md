@@ -20,7 +20,7 @@
 
 ## Import Organization
 
-**Order:** Standard library groups, third-party crates, then crate/super modules (`src/agent.rs`, `src/broker.rs`). Narrow platform-specific imports stay inside `#[cfg]` code where useful (`src/gpu.rs`).
+**Order:** Standard library groups, third-party crates, then crate/super modules (`src/agent.rs`, `src/broker.rs`). Narrow platform-specific imports stay inside `#[cfg]` code where useful.
 
 **Path Aliases:** No application aliases. `#[path = "…"]` declares private ownership, not re-export barrels. `src/settings_updates.rs` uses its parent Settings helpers.
 

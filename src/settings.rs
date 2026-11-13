@@ -587,17 +587,10 @@ fn general(state: &Settings) -> El {
                         state.prefs.gauge_cpu = !state.prefs.gauge_cpu;
                         persist(state);
                     }),
-                ))
-                .child(setting_row(
-                    "GPU load",
-                    toggle("gauge-gpu", state.prefs.gauge_gpu, |state| {
-                        state.prefs.gauge_gpu = !state.prefs.gauge_gpu;
-                        persist(state);
-                    }),
                 )),
         ))
         .child(
-            text("Record choice keeps the selection in memory and deletes nothing. Readings appear below the review.")
+            text("Record choice keeps the selection in memory and deletes nothing. CPU, Disk and Memory usage appear at the top of the review.")
                 .font(type_::LABEL)
                 .color(paint(MUTED))
                 .wrap()

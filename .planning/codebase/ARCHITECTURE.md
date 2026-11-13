@@ -22,7 +22,6 @@
 
 **Catalog and measurement:**
 - `src/catalog.rs` owns leaves, groups, selection gates, process-use locks and system readings. It privately includes `src/scan.rs` for rules, traversal, allocated-block measurement and cache storage.
-- `src/gpu.rs` reads typed IOKit values. An available device statistic at zero takes precedence over renderer/tiler fallback.
 
 **Agent execution and authority:**
 - `src/agent.rs` owns `Job`, ACP/RPC messages, cancellation, reports and exact-session completion.

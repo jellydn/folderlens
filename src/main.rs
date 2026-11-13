@@ -12,7 +12,6 @@
 
 mod agent;
 mod catalog;
-mod gpu;
 mod notch;
 mod palette;
 mod prefs;
@@ -155,14 +154,11 @@ fn start_workers(handle: rune::AppHandle<State>) {
                 .and_then(|(a, b)| catalog::cpu_delta(a, b));
             before = after;
             let memory = catalog::memory_now();
-            let gpu = catalog::gpu_now();
             handle.update_if(move |s, tx| {
                 let cpu = cpu.unwrap_or(s.catalog.cpu);
-                let changed =
-                    (s.catalog.cpu, s.catalog.memory, s.catalog.gpu) != (cpu, memory, gpu);
+                let changed = (s.catalog.cpu, s.catalog.memory) != (cpu, memory);
                 s.catalog.cpu = cpu;
                 s.catalog.memory = memory;
-                s.catalog.gpu = gpu;
                 tx.instant();
                 changed
             });
@@ -930,15 +926,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .center_y()
                 .px(18.0)
                 .py(10.0)
-                .child(
-                    text(system_readings(s))
-                        .key("system-readings")
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .wrap()
-                        .min_w(0.0)
-                        .grow(1.0),
-                )
+                .child(el().grow(1.0))
                 .child(
                     button("Quit", ButtonStyle::Quiet)
                         .key("quit-app")
@@ -953,22 +941,16 @@ fn overview(s: &State) -> El {
         .filter(|&index| catalog::can_tick(&leaf_view(s, index)))
         .map(|index| s.catalog.leaves[index].bytes)
         .sum();
-    let free = if s.catalog.disk_total == 0 {
-        "Disk space unavailable".into()
-    } else {
-        format!(
-            "{} free of {}",
-            catalog::format_bytes(s.catalog.disk_free),
-            catalog::format_bytes(s.catalog.disk_total)
-        )
-    };
-    row()
+    let mut cards = row().w_full().gap(8.0);
+    for usage in usage_readings(s) {
+        cards = cards.child(usage_card(usage));
+    }
+    col()
         .w_full()
         .gap(12.0)
         .child(
             col()
-                .grow(1.0)
-                .min_w(0.0)
+                .w_full()
                 .gap(5.0)
                 .child(
                     text("Cleanup candidates")
@@ -993,57 +975,88 @@ fn overview(s: &State) -> El {
                         .color(paint(MUTED))
                         .wrap()
                         .w_full(),
-                )
-                .child(
-                    text(free)
-                        .font(type_::LABEL)
-                        .color(paint(MUTED))
-                        .wrap()
-                        .w_full(),
                 ),
         )
-        .child(if s.prefs.gauge_cpu {
-            col()
-                .w(104.0)
-                .gap(8.0)
-                .padding(12.0)
-                .radius(12.0)
-                .fill(paint(TRACK))
-                .child(text("CPU").font(type_::LABEL).color(paint(MUTED)))
-                .child(
-                    text(if s.catalog.missing {
-                        "—".into()
-                    } else {
-                        format!("{}%", s.catalog.cpu)
-                    })
-                    .key("cpu-meter")
-                    .font(TextStyle::new(25.0, 600.0))
-                    .color(paint(INK)),
-                )
-                .child(
-                    el().w(80.0)
-                        .h(6.0)
-                        .radius(3.0)
-                        .fill(paint(INK).alpha(0.12))
-                        .child(
-                            el().w(s.catalog.cpu.min(100) as f32 * 0.8)
-                                .h(6.0)
-                                .radius(3.0)
-                                .fill(paint(BLUE)),
-                        ),
-                )
-                .child(
-                    text(if s.catalog.missing {
-                        "Waiting"
-                    } else {
-                        "Live usage"
-                    })
-                    .font(type_::LABEL)
-                    .color(paint(MUTED)),
-                )
+        .child(cards)
+}
+
+/// One usage card. Every card reads `s.catalog` through `usage_readings`, so the panel shows each value once.
+struct Usage {
+    key: &'static str,
+    name: &'static str,
+    percent: Option<u32>,
+    detail: String,
+}
+
+fn usage_readings(s: &State) -> Vec<Usage> {
+    let c = &s.catalog;
+    let live_detail = || if c.missing { "Waiting" } else { "Live usage" }.to_string();
+    let live = |key, name, percent| Usage {
+        key,
+        name,
+        percent: (!c.missing).then_some(percent),
+        detail: live_detail(),
+    };
+    let disk_known = !c.missing && c.disk_total > 0;
+    let mut readings = Vec::new();
+    if s.prefs.gauge_cpu {
+        readings.push(live("cpu-meter", "CPU", c.cpu));
+    }
+    readings.push(Usage {
+        key: "disk-meter",
+        name: "Disk",
+        percent: disk_known.then(|| {
+            let used = c.disk_total - c.disk_free.min(c.disk_total);
+            (used as f64 / c.disk_total as f64 * 100.0).round() as u32
+        }),
+        detail: if c.missing {
+            live_detail()
+        } else if disk_known {
+            format!("{} free", catalog::format_bytes(c.disk_free))
         } else {
-            el()
-        })
+            "Unavailable".into()
+        },
+    });
+    if s.prefs.gauge_memory {
+        readings.push(live("memory-meter", "Memory", c.memory));
+    }
+    readings
+}
+
+fn usage_card(usage: Usage) -> El {
+    let filled = usage.percent.unwrap_or(0).min(100) as f32 * 0.64;
+    col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(8.0)
+        .padding(12.0)
+        .radius(12.0)
+        .fill(paint(TRACK))
+        .child(text(usage.name).font(type_::LABEL).color(paint(MUTED)))
+        .child(
+            text(
+                usage
+                    .percent
+                    .map_or("—".into(), |percent| format!("{percent}%")),
+            )
+            .key(usage.key)
+            .font(TextStyle::new(25.0, 600.0))
+            .color(paint(INK)),
+        )
+        .child(
+            el().w(64.0)
+                .h(6.0)
+                .radius(3.0)
+                .fill(paint(INK).alpha(0.12))
+                .child(el().w(filled).h(6.0).radius(3.0).fill(paint(BLUE))),
+        )
+        .child(
+            text(usage.detail)
+                .font(type_::LABEL)
+                .color(paint(MUTED))
+                .wrap()
+                .w_full(),
+        )
 }
 
 fn toggle_scans(s: &mut State) {
@@ -1263,24 +1276,6 @@ fn record_choice(s: &State) -> El {
             .wrap()
             .w_full(),
         )
-}
-
-fn system_readings(s: &State) -> String {
-    let mut readings = vec![if s.catalog.disk_total == 0 {
-        "Free space unavailable".into()
-    } else {
-        format!("{} free", catalog::format_bytes(s.catalog.disk_free))
-    }];
-    for (show, name, value) in [
-        (s.prefs.gauge_memory, "Memory", s.catalog.memory),
-        (s.prefs.gauge_cpu, "CPU", s.catalog.cpu),
-        (s.prefs.gauge_gpu, "GPU", s.catalog.gpu),
-    ] {
-        if show {
-            readings.push(format!("{name} {value}%"));
-        }
-    }
-    readings.join(" · ")
 }
 
 fn agent_review(s: &State) -> El {
@@ -1657,14 +1652,30 @@ mod tests {
     }
 
     #[test]
-    fn local_controls_fit_narrow_and_wide_panels_and_respect_cpu_preference() {
+    fn local_controls_fit_narrow_and_wide_panels_and_respect_gauge_preferences() {
         for width in [360.0, 619.0, 620.0, 960.0] {
             let mut rt = runtime();
             rt.set_viewport((width, 718.0), 2.0);
             rt.frame(0.0);
+            // Fixture: CPU 30%, 84.9 GB free of 494.35 GB (82.8% used), memory 79%.
+            for (key, expected) in [
+                ("cpu-meter", "30%"),
+                ("disk-meter", "83%"),
+                ("memory-meter", "79%"),
+            ] {
+                let element = rt
+                    .elements()
+                    .into_iter()
+                    .find(|el| el.key.as_deref() == Some(key))
+                    .unwrap_or_else(|| panic!("missing {key}"));
+                assert_eq!(element.text.as_deref(), Some(expected), "{width}: {key}");
+            }
+            assert!(rt.find("system-readings").is_none());
             for key in [
                 "candidate-estimate",
                 "cpu-meter",
+                "disk-meter",
+                "memory-meter",
                 "interval-half-hour",
                 "interval-hour",
                 "scans-toggle",
@@ -1681,9 +1692,14 @@ mod tests {
             assert!(rt.state.scans_running);
             click(&mut rt, "scans-toggle");
             assert!(!rt.state.scans_running);
-            rt.update(|s, _| s.prefs.gauge_cpu = false);
+            rt.update(|s, _| {
+                s.prefs.gauge_cpu = false;
+                s.prefs.gauge_memory = false;
+            });
             rt.frame(0.0);
             assert!(rt.find("cpu-meter").is_none());
+            assert!(rt.find("memory-meter").is_none());
+            assert!(rt.find("disk-meter").is_some());
         }
     }
 
@@ -1912,12 +1928,12 @@ mod tests {
     }
 
     #[test]
-    fn minimum_panel_height_keeps_recording_and_readings_visible() {
+    fn minimum_panel_height_keeps_recording_and_quit_visible() {
         for width in [360.0, 960.0] {
             let mut rt = runtime();
             rt.set_viewport((width, MIN_PANEL_HEIGHT), 2.0);
             rt.frame(0.0);
-            for key in ["confirm", "system-readings"] {
+            for key in ["confirm", "quit-app"] {
                 let rect = rt.presented(key).unwrap().0;
                 assert!(
                     rect[1] >= 56.0 && rect[1] + rect[3] <= MIN_PANEL_HEIGHT,
@@ -1988,7 +2004,7 @@ mod tests {
         assert!(catalog.disk_total > 0, "disk {}", catalog.disk_total);
         assert!(catalog.disk_free > 0, "free {}", catalog.disk_free);
         assert!(catalog.disk_free <= catalog.disk_total);
-        assert!(catalog.memory <= 100 && catalog.cpu <= 100 && catalog.gpu <= 100);
+        assert!(catalog.memory <= 100 && catalog.cpu <= 100);
         let commands = std::process::Command::new("ps")
             .args(["-ax", "-o", "command="])
             .output()
@@ -2148,7 +2164,7 @@ mod tests {
             click(&mut rt, "agent-reveal");
             let (progress, _) = rt.presented("agent-progress").unwrap();
             let (cancel, _) = rt.presented("agent-cancel").unwrap();
-            let (footer, _) = rt.presented("system-readings").unwrap();
+            let (footer, _) = rt.presented("quit-app").unwrap();
             assert!(
                 progress[1] >= 56.0 && progress[1] + progress[3] <= footer[1],
                 "{width}: {progress:?}"

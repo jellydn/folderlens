@@ -2,89 +2,55 @@
 
 macOS menu-bar app that reviews what a cleanup level would tick. Rust + Rune (GPU UI); macOS only.
 
-**Record choice (formerly Confirm) never deletes.** It records a nonempty eligible selection in memory. Selection, exclusion or measurement changes clear the record. There is no delete path, and tests assert the catalog is unchanged. Do not add one.
+Record choice (formerly Confirm) never deletes. It records a nonempty eligible selection in memory, and tests assert the catalog is unchanged. Do not add a delete or cleanup path.
 
-The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md) and [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md). Keep these aligned when changing their contracts; this file remains the command/safety reference.
+The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md) and [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md). Keep them aligned when you change their contracts.
 
 ## Commands
 
 - `cargo run --release` — live app (menu-bar archivebox icon).
-- `cargo test --locked` — full tests, including one live disk/gauge check (headless; no display needed).
-- `node --test tests/pi-reader.mjs` — Pi reader launch/model boundary with a harmless helper, no SDK or model request.
-- `cargo test --locked untick_holds` — one test by name filter.
-- `cargo fmt --check && cargo clippy --locked --all-targets` — format check and lint, also run in CI.
-- `sh scripts/bundle.sh` — build `target/release/FolderLens.app` with stable ID `io.github.jellydn.folderlens` and `LSUIElement`.
-- `sh scripts/release.sh` — sign/verify and package Apple Silicon release assets; no upload.
-- `cargo run -- --theme dark --scene balanced --snap shots/balanced.png` — headless panel shot.
-- `cargo run -- --theme dark --scene ledger-example --snap shots/review-ledger.png` — synthetic Review ledger shot, without a disk scan.
-- `cargo run -- --window settings --theme dark --scene agent --snap shots/settings-agent.png` — headless Settings shot.
+- `cargo test --locked` — full tests, headless; one live disk/gauge test needs macOS.
+- `node --test tests/pi-reader.mjs` — Pi reader boundary with a harmless helper.
+- `cargo fmt --check && cargo clippy --locked --all-targets` — also run in CI.
+- `sh scripts/bundle.sh` — build `target/release/FolderLens.app`.
+- `sh scripts/release.sh` — sign, verify and package release assets under `target/release/assets`; no upload.
+- `cargo run -- --theme dark --scene ledger-example --snap shots/review-ledger.png` — headless panel shot. Add `--window settings` for Settings; `--list-scenes` lists scenes. `*-example` and `agent-error-details` use synthetic data; other panel scenes scan the real Mac.
 
-Panel scenes: `ledger-example`, `recorded-example`, `menu-example`, `asking-example`, `reviewed-example`, `scanning`, `careful`, `balanced`, `aggressive`, `asking`, `reviewed`, `agent-failed`, `agent-error-details`, `confirmed`, `menu`, `selected`.
-Settings scenes: `general`, `agent`, `agent-copilot`, `agent-pi`, `agent-advanced`, `agent-opencode`, `agent-model-error`, `access`, `protected`, `protected-example`, `updates`, `updates-preview`.
-`--list-windows` shows `main` and `settings`; `--list-scenes` prints the selected window's scenes. Headless `*-example` and `agent-error-details` scenes use synthetic catalog data; other panel snapshots scan the real Mac. Scene choices do not persist settings.
+## Quirks
 
-## Layout and quirks
+- `catalog.rs` includes `scan.rs` with `#[path]`. Do not add `mod scan` to `main.rs`.
+- Workers load scans and gauges through Rune's UI queue. Do not move system commands into UI polling.
+- A panel scene that opens the action list must update `launch_size()`, or the headless window clips the list.
+- The first live scan is slow. Delete `~/Library/Application Support/FolderLens/sizes.tsv` to force a remeasure.
+- Tests must not touch the real `settings.txt`; `prefs::path_for_state()` gives a temp file under `cfg(test)`. Keep new tests on `fixture_state()`. Provider tests use `/bin/sh` stubs; never call a real CLI or the network.
+- `src/pi-reader.mjs` has no checked-in JS toolchain. Validate it against the installed Pi SDK (types, lint, Biome).
+- Legacy Shelf settings import once when FolderLens settings are absent. Keep legacy settings and conversations intact.
+- After panel changes, regenerate `shots/review-*.png` and `shots/exclusion-rules.png` with `--theme dark`. Keep the original screenshots linked in README as provenance.
 
-- `src/main.rs`: `State`, panel view, level-to-ticks logic, keys, agent result/error views, `AppSpec` and panel scenes. Startup shows a pending catalog immediately; workers load the disk scan and update gauges through Rune's UI queue. Do not move system commands into UI polling.
-- `src/palette.rs`: per-row action list, action-list height, Finder/ask/unlock actions. Ask uses the eligible ticked selection, not the hovered row; it also builds the allowed/blocked read scope.
-- `src/agent.rs`: background ACP/RPC jobs, elapsed progress, cancellation/deadline, bounded reports, redacted diagnostics, and exact saved-session continuation.
-- `src/provider.rs`: private submodule of `agent.rs`; provider-specific launch/resume arguments, model validation, private OpenCode configuration and startup-mode readiness. Never put shared provider configuration writes here.
-- `src/broker.rs`: private submodule of `agent.rs`; original ∩ current eligible read scope, descriptor-checked reads, private Unix-socket reader, headless MCP and JSON helpers. Helpers run before Rune or a live scan starts.
-- `src/pi-reader.mjs`: Pi's explicit reader extension; only the FolderLens tool can run. No JS toolchain or config is checked in; validate changes against the installed Pi SDK (types/lint/Biome).
-- `src/catalog.rs`: catalog model, levels, thresholds, live gauges (`diskutil`, `sysctl`, `vm_stat`, Mach host stats). **It includes `scan.rs` as a private submodule** via `#[path = "scan.rs"] mod scan;`. Add `mod scan` there, not in `main.rs`.
-- `src/gpu.rs`: typed IOKit performance statistics, with renderer/tiler fallback. No available statistic may legitimately read as 0%.
-- `src/scan.rs`: hint rules, folder scan/measure, size cache.
-- `src/prefs.rs`: plain-text settings, protected roots, agent `PATH` detection, private run folders, quoted executable launchers, and test temp paths. Its `TOOLS` list detects many ai-launcher CLIs; only five have adapters (see `provider.rs`).
-- `src/settings.rs`: separate Settings window with its own `AppSpec` and scenes.
-- `src/update.rs`: bundled native updater launch and background wake-up; no UI-thread network/process waits. `native/Updater.swift` owns signed metadata/archive verification, daily throttle, native consent and rollback. Headless snapshots/tests never start checks.
-- `src/status.rs`: raw Objective-C `NSStatusItem`; Rune has no status item. macOS 27 uses an expanded-interface delegate/session; older systems use the button action. Pointer exit, outside clicks and transient session-end callbacks never dismiss the persistent panel. Close, Escape and a second status-button click dismiss explicitly. Escape closes actions first, then the panel. The update helper orders out its alert and returns focus to its presenter without reopening explicitly closed windows. Policy/callback regressions are tested; native event routing remains a separate check.
-- Tests live in `#[cfg(test)] mod tests` at the bottom of each file. UI tests drive Rune's headless `Runtime` against `catalog::fixture()`. Provider tests use generated `/bin/sh` stubs; never call a real CLI or the network in tests.
-- `catalog::load_live()` scans `$HOME` and caches sizes at `~/Library/Application Support/FolderLens/sizes.tsv`. Delete that file to force a remeasure. First `cargo run`/`--snap` is slow.
-- `prefs::path_for_state()` returns a unique temp file under `cfg(test)`. Tests must not read or write the real `~/Library/Application Support/FolderLens/settings.txt`.
-- Absent FolderLens settings import legacy Shelf settings once; existing FolderLens files win. Keep legacy settings and conversations intact. The first rename upgrade is manual; see [migration](docs/guide.md#migrating-from-shelf).
-- Settings and the panel are never visible together: opening Settings calls `status::conceal()`, and a status-item click hides Settings.
-- Quick review starts at 720×718 points, resizes from 360 to 960 points wide, and has a 280-point minimum height so recording/readings remain visible. Below 620 points, Agent help precedes the folders in one scroll body. The header, Record choice and system readings stay fixed. Settings supports 360×420 points with a scrolling body and fixed Apply model action; advanced commands start collapsed. Actions still fit their row count and return to the standard panel size. Do not restore the old gauge dashboard or reclaimable-space claims.
+## Folder safety
 
-## Invariants
+- `prefs::ALWAYS` roots ignore Unlock. Unlock is session-only; in-use paths stay locked.
+- Do not claim reclaimable space; sizes are estimates.
 
-- `prefs::ALWAYS` roots (Mail, Messages, iCloud, CloudStorage, Keychains, SSH, GnuPG, AWS, Kubernetes) ignore Unlock and stay locked.
-- Unlock is session-only (`State::unlocked`); restart clears it. Kept folders and the "keep what changed within" hold can be unlocked for the session; in-use paths stay locked.
-- A panel scene that opens the action list must update `launch_size()` in `main.rs`; otherwise the headless window is tray-height and clips the list.
+## Ask Agent safety
 
-## Ask Agent safety and sessions
+- Each request writes a new private run folder under `~/Library/Application Support/FolderLens/Runs/`. Never overwrite earlier runs, and never auto-delete runs, settings or conversations, including during verification.
+- Keep the configured provider. Only `grok`, `agy`, `copilot`, `pi` and `opencode` have adapters; other CLIs fail visibly. Do not guess flags or switch tools.
+- Pass models with `--model` where supported, never by command-string interpolation. Do not use fuzzy model matches or paid fallbacks. OpenCode: only 2.0.23 is verified; wait for its `config_option_update` with `folderlens-readonly`, not a fixed sleep.
+- Require agent-start permission before a review. Model or account access is not proof of free inference. No automatic paid requests.
+- Path sharing off means saved context only. With sharing on, reads are limited to eligible selected paths (512 KiB, 2,000 lines, 1,024 entries) and the original ∩ current scope; new grants never widen it, and old grants never revive after restart.
+- Analysis must not change ticks, estimates, protections or the recorded choice. Do not put local paths or credentials in error logs.
+- Save `analysis.md` and `session.txt` only after a nonempty completed review. Pi must reach `agent_settled`, not `agent_end`.
+- Provider controls are not an OS sandbox. Grok/Antigravity Terminal continuation does not use the FolderLens broker; do not claim it enforces the selected-only boundary. Installed Grok refuses its sandbox on a socket-symlink error; do not disable protections or change runner settings to bypass it.
+- Real model turns, tool routing during a turn and native chat continuation remain unverified. Say so in PR and release notes.
 
-- Each explicit request snapshots scan/selection context into a new private `~/Library/Application Support/FolderLens/Runs/chat-…/context.md` plus `Ask.command`. Never overwrite earlier runs.
-- Keep the configured provider. Only `grok`, `agy`, `copilot`, `pi` and `opencode` have adapters; other detected CLIs fail visibly rather than switching tools or guessing flags. Grok/Antigravity/Copilot use ACP plan mode; Pi uses RPC with native tools/discovery disabled; OpenCode uses a private read-only ACP mode.
-- Model choices persist per agent (custom choices are keyed by executable) and survive provider switches. Use `--model` where supported, not command-string interpolation. OpenCode 2.0.23 requires private per-run configuration and ACP selection; reject other versions until their schemas are verified. Wait for its `config_option_update` containing `folderlens-readonly` before prompting, not a fixed sleep. Check advertised exact model access; do not silently use fuzzy matches or paid fallbacks. Blank may use the CLI default except Copilot uses Auto and OpenCode requires an explicit model.
-- Require agent-start permission before a review. Model/account access is not proof of free inference. Copilot Free is allowance-limited and Auto-only; Pi grants no inference access; OpenRouter Free needs a user account/key; OpenCode free models may expire and privacy terms differ. No automatic paid requests.
-- Path sharing off means saved context only. With sharing on, the reader permits at most 512 KiB UTF-8, 2,000 lines or 1,024 directory entries for eligible selected paths; reject writes, commands, protected/kept/held/in-use/unselected paths, special files and symlink escapes. Recheck the opened descriptor and current scope before returning data. New grants must not widen the frozen original scope.
-- Copilot/OpenCode use only the private FolderLens MCP reader and reject native ACP filesystem/permission requests. Pi disables native tools/discovery and loads only the explicit reader extension. Their Terminal continuation keeps these controls and the same broker socket: live reads need FolderLens running with original ∩ current eligible selection. Cancel, failure, a replacement job or app exit closes the broker; saved chat remains available, but old folder grants do not revive when FolderLens restarts.
-- Analysis must not modify ticks, estimates, protections, or Confirm state. Failures stop progress and keep scan results, with expandable redacted details, Agent settings, and Retry. Do not put local paths or credentials in error logs.
-- Save `analysis.md` and `session.txt` only after a nonempty completed review. Pi must reach `agent_settled`, not merely `agent_end`, and save its exact session file inside its run's `sessions/` directory. Rewrite `Ask.command` to resume the exact session, with quoted arguments/environment and the same model/tool controls. Before success, refuse an unrelated chat. Recheck the configured agent/model/start permission before Terminal launch.
-- Grok/Antigravity Terminal continuation retains its existing native plan/sandbox controls rather than the new MCP broker. Do not claim that those native Terminal tools enforce FolderLens's live selected-only boundary. Provider controls, prompt instructions and callbacks are not an independent operating-system sandbox. Destructive actions need separate approval; FolderLens has no cleanup/delete path.
-- Verify using harmless CLI stubs. Native metadata checks confirmed Antigravity session creation, Copilot plan/Auto selection, Pi model state, and OpenCode private-mode loading/exact-model selection without a model prompt. Real model analysis, tool routing during a native model turn, and native chat continuation remain unverified. Installed Grok currently refuses its read-only sandbox on a socket-symlink deny-list error; do not disable protections or change shared runner settings to bypass it.
-- Run folders may contain explicitly shared paths and persist until the user removes them. Do not auto-delete settings or conversations during verification or uninstall work.
+## Releases
 
-## Tests and releases
-
-- `the_live_index_feeds_this_mac` is the only live test: it checks real disk/gauge readings without assuming a particular disk capacity or home-folder contents. It requires macOS. Keep new tests on `fixture_state()`.
-- `shots/review-*.png` and `shots/exclusion-rules.png` are the unreleased Review ledger screenshots; regenerate them after panel changes with `--theme dark`. Preserve the original screenshots linked in README as provenance.
-- `Cargo.lock` is committed and Rune is pinned by `rev` in `Cargo.toml`; let Renovate update it.
-
-## Release
-
-- Updates follow Oak's Ed25519 signing-tools/Actions-secret pattern with a **dedicated FolderLens key**, never Oak's key. Only `native/update-public-key.txt` is committed; `SPARKLE_PRIVATE_KEY` exists only in FolderLens Actions secrets. `scripts/sparkle-tools.sh` verifies the pinned official tools archive, and `scripts/sign-release.py` signs metadata, ZIP and DMG through stdin without private logs. The release helper independently verifies signatures against the committed public key before publication.
-- `native/Updater.swift` compiles during bundling and its harmless `--self-test` must pass. `--verify-release <assets> <public-key-file>` verifies real release output without starting UI or installation. Never test replacement against the owner's installed app. Use disposable fixture directories for verification.
-- Update policy: daily automatic checks; downloads off by default; stable default, prereleases opt-in; explicit native approval before install/restart; no install-on-quit. Homebrew uses `brew upgrade`, never self-replacement. Missing/invalid/expired publisher signatures fail closed. Do not use a Sparkle automatic-install toggle: it can install on quit, contrary to this policy. No Gatekeeper/quarantine bypass, Developer ID or notarization claim.
-- Unknown installation origin is manual-update-only. Missing cask receipts, writable paths and copied bundle markers are not positive direct-install proof. All current distributions lack that proof, so `requireDirectInstallation` rejects before consent and before replacement, including Finder/custom-prefix/moved casks. Keep checks and opt-in verified downloads; do not add a preference bypass. Future positive provenance needs separate review.
-- Publisher verification does not require an Apple Developer account. Ad-hoc builds may need macOS Open Anyway; non-writable/translocated apps require manual installation. Keep key continuity, version/channel checks and rollback. Metadata expires after one year and must be re-signed or superseded. Native real-install/restart and agent model-turn limitations must be explicit in PR/release notes.
-- Prerelease tags (for example `v0.2.0-beta.1`) publish with `prerelease: true` and `make_latest: false` from the exact PR commit, not an implicit main merge. Do not move the stable Homebrew cask to prereleases. `FolderLensVersion` holds full SemVer; bundle display/build versions use macOS-compatible numeric/beta forms.
-- CI runs formatting, Clippy, the full tests, and app packaging on `macos-26`.
-- `sh scripts/release.sh` creates an ad-hoc signed Apple Silicon DMG, ZIP, and `SHA256SUMS` under `target/release/assets`.
-- `assets/FolderLens.icns` is the app icon; `assets/favicon.svg` and raster sizes are for documentation sites, not the monochrome menu-bar symbol. Regenerate with `uv run --with pillow scripts/icons.py` on macOS; ordinary builds only copy committed assets.
-- Push a `v*` tag matching `Cargo.toml` to publish those assets. Update `RELEASE_NOTES.md` before tagging. Builds are not notarized.
-- Published 0.2.0 assets/bundle remain Shelf. Do not republish that tag or rewrite historical notes. The rename needs a new version and matching release heading before publication; this PR only ships source changes.
-- Branch/PR builds package test apps without requiring a release tag; tag builds must validate their version. Do not try to override GitHub's reserved `GITHUB_*` variables.
-- Release assets are `FolderLens-<version>-macos-arm64.dmg`, `FolderLens-<version>-macos-arm64.zip`, and `SHA256SUMS`. Minimum macOS is 14. Verify extracted/mounted bundle signatures and architecture, then re-download published assets and compare their digests. Ad-hoc signing is not Developer ID signing or notarization.
-- The Homebrew cask is `Casks/folderlens.rb` in `jellydn/homebrew-tap`, installed with `brew install --cask jellydn/tap/folderlens`. Its updater reads stable published releases, verifies the downloaded DMG against GitHub's digest, and updates only this cask. The tap workflow checks every six hours and supports manual dispatch; it needs no cross-repository secret.
-- Homebrew versions with third-party trust enforcement require the user's cask-scoped `brew trust --cask jellydn/tap/folderlens`. Do not trust the entire tap or alter shared runner trust during verification. Use a disposable `XDG_CONFIG_HOME` and `HOMEBREW_CACHE` for isolated trust/audit/fetch checks; do not launch cleanup or overwrite an installed app.
+- Updates use a dedicated FolderLens Ed25519 key, never Oak's. Only `native/update-public-key.txt` is committed; the private key lives only in Actions secrets.
+- Update policy: daily checks, downloads off by default, prereleases opt-in, explicit approval before install, no install-on-quit, no Sparkle automatic-install toggle. Missing or invalid signatures fail closed. Homebrew installs use `brew upgrade`, never self-replacement.
+- Unknown installation origin is manual-update-only. Do not add a preference bypass for `requireDirectInstallation`.
+- Never test replacement against the owner's installed app; use disposable fixture directories. For Homebrew checks use a disposable `XDG_CONFIG_HOME` and `HOMEBREW_CACHE`, and do not trust the whole tap.
+- Builds are ad-hoc signed, not notarized. Do not claim Developer ID, notarization or a Gatekeeper bypass.
+- Push a `v*` tag matching `Cargo.toml` to publish; update `RELEASE_NOTES.md` first. Prerelease tags publish with `prerelease: true` and `make_latest: false`, and the stable Homebrew cask never moves to prereleases.
+- Do not republish 0.2.0 (still Shelf) or rewrite historical release notes.
+- Let Renovate update `Cargo.lock` and the pinned Rune `rev`.

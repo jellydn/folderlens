@@ -81,7 +81,7 @@ open Review, including while Settings is open. Escape collapses the notch first,
 then hides it. Closing Settings returns to the notch.
 
 To quit, expand the notch and choose **Quit**, or open Review from the tray and
-choose **Quit** in the fixed readings footer. **Actions → Quit FolderLens** and
+choose **Quit** in the fixed footer. **Actions → Quit FolderLens** and
 **Command-Q** also quit. **Close** and **Use tray** only hide a surface; scans
 continue while the app is open. Quitting stops interval checks and the scan worker;
 no scan daemon or scheduled task remains. Relaunch starts intervals paused.
@@ -96,8 +96,9 @@ Named palette families follow [Oak's theme choices](https://github.com/jellydn/o
 [Tokyo Night](https://github.com/folke/tokyonight.nvim). Text, muted and warning/error
 colors and light accents are adjusted for compact-app contrast, not copied as editor defaults.
 
-The review panel shows cleanup-candidate estimates, disk free space and a
-live CPU meter. Candidates are for review, not a promise of safely reclaimable space.
+The review panel shows cleanup-candidate estimates and CPU, Disk and Memory
+usage cards at the top. CPU and Memory follow General settings; GPU is no longer
+shown. Candidates are for review, not a promise of safely reclaimable space.
 No agent is needed to scan, select folders or record a choice.
 
 Use **Scan now** to refresh measurements. Select **30 min** or **1 hour**, then

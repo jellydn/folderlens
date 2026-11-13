@@ -184,7 +184,7 @@ The bundled app uses [FolderLens.icns](../assets/FolderLens.icns), generated fro
 
 ## Features
 
-- Menu-bar review ledger with compact live memory, CPU, GPU and free-space readings
+- Menu-bar review ledger with CPU, Disk and Memory usage cards
 - Candidate selection reasons, exclusions and an estimated-footprint receipt; no reclaimed-space claim
 - Careful, Balanced, and Aggressive presets, plus a Selected override
 - Record choice keeps an in-memory choice, not a cleanup instruction
@@ -281,7 +281,7 @@ The published Shelf 0.2.0 updater accepts only Shelf-named ZIPs. It cannot be ch
 
 The archivebox icon appears before the disk scan finishes. Click it to open the panel. In beta.5, outside clicks and pointer movement leave the panel open. Use Close, Escape or the menu-bar button to hide it; Escape closes Actions first. On macOS 27, the panel uses AppKit's expanded-interface session; older systems use the button action. Native event routing remains unverified.
 
-The first scan and system gauge commands run on background threads. Memory, CPU, and GPU update about once a second. GPU load comes from the driver's IOKit performance statistics, with renderer/tiler values as a fallback when device utilisation is unavailable. A driver that exposes no load still shows 0%.
+The first scan and system gauge commands run on background threads. Memory and CPU update about once a second. The panel shows CPU, Disk and Memory usage cards at the top; disk usage refreshes with each scan.
 
 For development, `cargo run --release` still works without building a bundle.
 

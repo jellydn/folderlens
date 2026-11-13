@@ -60,7 +60,6 @@ pub struct Catalog {
     pub disk_free: u64,
     pub memory: u32,
     pub cpu: u32,
-    pub gpu: u32,
     pub checked: String,
     pub missing: bool,
 }
@@ -152,10 +151,8 @@ fn load_catalog(use_cache: bool) -> Catalog {
     let (total, free) = disk_space();
     catalog.disk_total = total;
     catalog.disk_free = free;
-    let (memory, cpu, gpu) = host_gauges();
-    catalog.memory = memory;
-    catalog.cpu = cpu;
-    catalog.gpu = gpu;
+    catalog.memory = memory_percent();
+    catalog.cpu = cpu_percent();
     catalog.checked = index_age(updated);
     catalog.missing = false;
     catalog
@@ -173,7 +170,6 @@ fn missing(checked: &str) -> Catalog {
         disk_free: 0,
         memory: 0,
         cpu: 0,
-        gpu: 0,
         checked: checked.to_string(),
         missing: true,
     }
@@ -268,7 +264,6 @@ pub fn fixture() -> Catalog {
         disk_free: 84_900_000_000,
         memory: 79,
         cpu: 30,
-        gpu: 29,
         checked: "Indexed for the test".to_string(),
         missing: false,
     }
@@ -401,7 +396,6 @@ fn assemble(rows: &[Row], hints: &HashMap<String, Hint>, updated: f64, commands:
         disk_free: 0,
         memory: 0,
         cpu: 0,
-        gpu: 0,
         checked: String::new(),
         missing: false,
     }
@@ -554,10 +548,6 @@ fn bytes_after(text: &str, label: &str) -> Option<u64> {
     line[start..start + end].trim().parse().ok()
 }
 
-fn host_gauges() -> (u32, u32, u32) {
-    (memory_percent(), cpu_percent(), gpu_percent())
-}
-
 fn memory_percent() -> u32 {
     let total: u64 = run("sysctl", &["-n", "hw.memsize"])
         .and_then(|text| text.trim().parse().ok())
@@ -671,19 +661,11 @@ pub fn memory_now() -> u32 {
     memory_percent()
 }
 
-pub fn gpu_now() -> u32 {
-    gpu_percent()
-}
-
 /// Measure one folder again and store the allocated size on the leaf.
 pub fn remeasure(leaf: &mut Leaf) {
     let (bytes, _) = scan::measure(Path::new(&leaf.path));
     leaf.bytes = bytes;
     leaf.size_label = format_bytes(bytes);
-}
-
-fn gpu_percent() -> u32 {
-    crate::gpu::percent().unwrap_or(0)
 }
 
 fn index_age(updated: f64) -> String {
