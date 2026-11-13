@@ -57,6 +57,24 @@ func availableRelease(
   }.max { $0.1 < $1.1 }?.0
 }
 
+@MainActor
+func availableReleasePages(
+  current: UpdateVersion, prereleases: Bool, fetch: (Int) async throws -> Data
+) async throws -> String? {
+  var releases = [[String: Any]]()
+  // Bound network work, but never report an incomplete release list as up to date.
+  for page in 1...10 {
+    let bytes = try await fetch(page)
+    guard let entries = try JSONSerialization.jsonObject(with: bytes) as? [[String: Any]]
+    else { throw UpdateError.download }
+    releases.append(contentsOf: entries)
+    if entries.count < 100 {
+      return availableRelease(releases, current: current, prereleases: prereleases)
+    }
+  }
+  throw UpdateError.download
+}
+
 enum UpdateError: Error, LocalizedError {
   case invalidVersion, invalidSignature, invalidMetadata, untrustedDownload, unsupportedInstall,
     unknownOrigin, download, process
@@ -360,12 +378,12 @@ struct Updater {
         Data(base64Encoded: $0.trimmingCharacters(in: .whitespacesAndNewlines))
       }), key.count == 32
     else { throw UpdateError.invalidSignature }
-    let releaseData = try await data(
-      URL(string: "https://api.github.com/repos/jellydn/folderlens/releases?per_page=100")!,
-      max: 2_097_152)
-    guard let releases = try JSONSerialization.jsonObject(with: releaseData) as? [[String: Any]]
-    else { throw UpdateError.download }
-    guard let tag = availableRelease(releases, current: current, prereleases: prereleases) else {
+    let tag = try await availableReleasePages(current: current, prereleases: prereleases) { page in
+      try await data(
+        URL(string: "https://api.github.com/repos/jellydn/folderlens/releases?per_page=100&page=\(page)")!,
+        max: 2_097_152)
+    }
+    guard let tag else {
       if manual {
         _ = notice("FolderLens is up to date", "No newer release is available on the selected channel.")
       }
@@ -553,6 +571,21 @@ func selfTest() async throws {
   require(availableRelease(releases, current: try UpdateVersion("0.3.2"), prereleases: false) == "v0.3.4")
   require(availableRelease(releases, current: try UpdateVersion("0.3.2"), prereleases: true) == "v0.4.0-beta.1")
   require(availableRelease(releases, current: try UpdateVersion("0.3.4"), prereleases: false) == nil)
+  let prereleasePage = Array(
+    repeating: ["tag_name": "v0.4.0-beta.1", "draft": false, "prerelease": true] as [String: Any],
+    count: 100)
+  let laterStable = try await availableReleasePages(
+    current: UpdateVersion("0.3.2"), prereleases: false
+  ) { page in
+    try JSONSerialization.data(withJSONObject: page == 1 ? prereleasePage : releases)
+  }
+  require(laterStable == "v0.3.4")
+  do {
+    _ = try await availableReleasePages(current: UpdateVersion("0.3.2"), prereleases: false) { _ in
+      try JSONSerialization.data(withJSONObject: prereleasePage)
+    }
+    preconditionFailure("An incomplete release list must not report up to date")
+  } catch UpdateError.download {}
   let key = Curve25519.Signing.PrivateKey()
   let bytes = Data("harmless update fixture".utf8)
   let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
