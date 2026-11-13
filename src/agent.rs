@@ -955,15 +955,20 @@ done"#, "empty output"),
             Access::default(),
         )
         .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while !root.join("provider.pid").exists() && Instant::now() < deadline {
+        // Only provider startup gets the long wait: under a busy full suite the stub can take
+        // seconds to write its pid, and the file can exist before it holds a number.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let pid: i32 = loop {
+            let written = std::fs::read_to_string(root.join("provider.pid")).ok();
+            if let Some(pid) = written.and_then(|text| text.trim().parse().ok()) {
+                break pid;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "provider stub never wrote its pid"
+            );
             std::thread::sleep(Duration::from_millis(10));
-        }
-        let pid: i32 = std::fs::read_to_string(root.join("provider.pid"))
-            .unwrap()
-            .trim()
-            .parse()
-            .unwrap();
+        };
         let start = Instant::now();
         drop(job);
         let alive = unsafe { libc::kill(pid, 0) } == 0;
