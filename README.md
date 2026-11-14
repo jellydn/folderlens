@@ -10,12 +10,12 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ![Review with CPU, Disk and Memory cards at the top; synthetic example data](shots/review-ledger.png)
 
-**New in 0.3.6:** Review shows system usage once, in the three cards above.
-The duplicate footer readings and GPU reading have been removed.
+**New in 0.3.7:** With no agent set up, or after a failed agent review, Agent help
+shows **Local summary · no AI** for the current selection. It is computed on this Mac.
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.6 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.6) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.3.7 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.7) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
@@ -30,6 +30,7 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 1. Expand the notch and choose **Review / AI**, or click the menu-bar archivebox. Choose a preset or eligible folders; review reasons and exclusions.
 2. **Record choice** records without deleting. Selection changes clear the record.
 3. For **Ask Agent**, configure **Settings → Agent / Access**. Requests are manual; provider costs and data policies apply.
+4. With no agent set up, or after a failed review, Agent help shows **Local summary · no AI**: item count, total, top kinds, largest folders and the estimate. It is computed on this Mac from the current selection, sends nothing and changes nothing.
 
 ### Notch and local checks
 

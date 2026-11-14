@@ -1,3 +1,16 @@
+## FolderLens 0.3.7 — Local summary without AI
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Add **Local summary · no AI** to Agent help. It shows when no agent is chosen or agent-start permission is off, or when the last agent review failed, and the selection is not empty. It lists the item count and total, the top three kinds and the three largest folders by estimated size, and the estimate. Sizes are estimates, not reclaimed space.
+- The summary is computed on this Mac from the current ticks. It makes no request, and it does not change ticks, estimates, protections or Record choice. A ready, running or successful agent review hides it.
+- Keep "Choose an agent in Settings.", the error Details, Agent settings and Retry unchanged.
+- Add the synthetic `no-agent-example` panel scene. Update the README and guide.
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy (no new warnings), a regression test for exact summary text with a locked tick and size order that differs from row order, visibility when an agent is ready or failed, unchanged ticks and estimates, and inspected 720- and 360-point renders of the no-agent and failed-review states. The default Review screenshots are unchanged because the summary is below the fold.
+
+Native pointer/keyboard routing, physical-notch and multi-display behavior, real AI turns/tool routing/Terminal continuation and actual manual app replacement/restart/Gatekeeper behavior remain unverified. No owner's installed app is replaced during verification. All current installations remain manual-update-only; Homebrew users update through Homebrew, whose cask can lag publication. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.6 — System usage shown once
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
