@@ -200,6 +200,8 @@ Each request creates a private folder under `~/Library/Application Support/Folde
 
 Ask Agent runs the configured CLI on a background thread. Grok, Antigravity, GitHub Copilot CLI and OpenCode use ACP; Pi uses RPC. Other agents show an unsupported-provider message; FolderLens does not switch agents or guess their flags. The panel shows elapsed progress and Cancel, then the review or an inline error. Details shows redacted diagnostics, with Agent settings and Retry. Errors do not clear scan results or change ticks.
 
+When no agent is chosen or agent-start permission is off, or the last review failed, Agent help also shows **Local summary · no AI** for a nonempty selection: item count and total, the top three kinds and largest folders by estimated size, and the estimate. It is computed locally from the current ticks; it makes no request and does not change ticks, estimates or Record choice. A ready, running or successful agent review hides it.
+
 In **Settings → Agent**, enter a model ID and select **Apply**. FolderLens remembers a separate choice for each agent (and each custom executable). Switching agents restores that agent's saved model. Grok, Antigravity, Copilot and Pi receive provider-supported `--model` arguments. OpenCode receives private per-run configuration and an ACP model selection, not a nonexistent top-level model flag. FolderLens checks advertised model access before prompting; an unavailable explicit model fails instead of silently choosing another model. Blank keeps the CLI default, except Copilot uses `auto` and OpenCode requires an explicit model.
 
 | Agent | Interface and model example | Access and cost limits |

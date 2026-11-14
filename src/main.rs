@@ -1188,6 +1188,7 @@ fn agent_help(s: &State) -> El {
         .child(button("Agent setup", ButtonStyle::Quiet).key("agent-configure")
             .on_press(|_: &mut State| settings::open(settings::Page::Agent)))
         .child(agent_review(s))
+        .child(local_summary(s))
         .child(if s.agent.as_ref().is_some_and(|job| matches!(job.result, Some(Ok(_)))) { button("Continue saved chat in Terminal", ButtonStyle::Secondary).key("agent-terminal").w_full()
             .on_press(|state: &mut State| { if let Some(job) = &state.agent { if let Err(error) = job.open_chat(&state.prefs) { state.note = error; } } }) } else { el() })
         .child(if s.agent.is_some() { button("Run files in Finder", ButtonStyle::Quiet).key("agent-files")
@@ -1209,6 +1210,97 @@ fn agent_help(s: &State) -> El {
             .child(text("Review access settings").key("review-access").font(type_::LABEL).color(paint(BLUE))
                 .on_press(|_: &mut State| settings::open(settings::Page::Access)))
         } else { el() })
+}
+
+/// Non-AI fallback: shown when no agent can run or the last review failed.
+/// It only reads the current ticks and estimates.
+fn local_summary(s: &State) -> El {
+    let agent_ready = !s.prefs.agent_bin.is_empty() && s.prefs.allow_start;
+    let failed = s
+        .agent
+        .as_ref()
+        .is_some_and(|job| matches!(job.result, Some(Err(_))));
+    if agent_ready && !failed {
+        return el();
+    }
+    let ticked: Vec<usize> = (0..s.catalog.leaves.len())
+        .filter(|&i| is_ticked(s, i))
+        .collect();
+    // The status line already explains an empty selection.
+    if ticked.is_empty() {
+        return el();
+    }
+    let line = |content: String, key: &str| {
+        text(content)
+            .key(key)
+            .font(type_::LABEL)
+            .color(paint(MUTED))
+            .wrap()
+            .w_full()
+    };
+    let mut selected: Vec<&catalog::Leaf> = ticked.iter().map(|&i| &s.catalog.leaves[i]).collect();
+    let total: u64 = selected.iter().map(|leaf| leaf.bytes).sum();
+    let sized = |name: &str, bytes: u64| format!("{name} {}", catalog::format_bytes(bytes));
+    let mut kinds: Vec<(&str, u64)> = (0..s.catalog.groups.len())
+        .map(|g| {
+            let range = leaf_range(s, g);
+            let bytes = ticked
+                .iter()
+                .filter(|i| range.contains(i))
+                .map(|&i| s.catalog.leaves[i].bytes)
+                .sum();
+            (s.catalog.groups[g].name.as_str(), bytes)
+        })
+        .filter(|&(_, bytes)| bytes > 0)
+        .collect();
+    kinds.sort_by_key(|&(_, bytes)| std::cmp::Reverse(bytes));
+    selected.sort_by_key(|leaf| std::cmp::Reverse(leaf.bytes));
+    let top = |items: Vec<String>| items.into_iter().take(3).collect::<Vec<_>>().join(", ");
+    col()
+        .key("local-summary")
+        .w_full()
+        .gap(4.0)
+        .child(
+            text("Local summary · no AI")
+                .font(TextStyle::new(13.0, 600.0))
+                .color(paint(INK)),
+        )
+        .child(line(
+            format!(
+                "{} item{} · {} total",
+                selected.len(),
+                if selected.len() == 1 { "" } else { "s" },
+                catalog::format_bytes(total)
+            ),
+            "local-summary-count",
+        ))
+        .child(line(
+            format!(
+                "Top kinds: {}",
+                top(kinds
+                    .iter()
+                    .map(|&(name, bytes)| sized(name, bytes))
+                    .collect())
+            ),
+            "local-summary-kinds",
+        ))
+        .child(line(
+            format!(
+                "Largest: {}",
+                top(selected
+                    .iter()
+                    .map(|leaf| sized(&leaf.name, leaf.bytes))
+                    .collect())
+            ),
+            "local-summary-folders",
+        ))
+        .child(line(
+            format!(
+                "Estimated {} · review only, not reclaimed. FolderLens deletes nothing.",
+                catalog::format_bytes(total)
+            ),
+            "local-summary-estimate",
+        ))
 }
 
 fn record_choice(s: &State) -> El {
@@ -1430,6 +1522,11 @@ fn main() {
                 apply_level(s, Level::Balanced);
                 s.note = "Example data · no disk scan or agent request".into();
                 s.confirmed = true;
+            }),
+            ("no-agent-example", |s| {
+                apply_level(s, Level::Balanced);
+                s.prefs.agent_bin.clear();
+                s.note = "Example data · no agent set up".into();
             }),
             ("menu-example", |s| palette::open(s, None)),
             ("asking-example", |s| {
@@ -2036,6 +2133,67 @@ mod tests {
     }
 
     #[test]
+    fn local_summary_describes_the_selection_when_no_agent_can_answer() {
+        let mut rt = runtime();
+        rt.update(|state, _| {
+            // Larger than every other leaf, so size order differs from row order.
+            let spotify = leaf_at(state, "spotify");
+            state.catalog.leaves[spotify].bytes = 30_000_000_000;
+            for id in ["spotify", "deps", "logs", "build", "cache-held"] {
+                let index = leaf_at(state, id);
+                state.ticks[index] = Some(true);
+            }
+        });
+        rt.frame(0.1);
+        let text_of = |rt: &Runtime<State>, key: &str| {
+            rt.elements()
+                .into_iter()
+                .find(|el| el.key.as_deref() == Some(key))
+                .and_then(|el| el.text)
+                .unwrap_or_else(|| panic!("missing {key}"))
+        };
+        let before = ticked_ids(&rt.state);
+        // cache-held is locked, so App caches counts only Spotify: 30 + 17.48 + 5.7 + 3.3 GB.
+        let expected = [
+            ("local-summary-count", "4 items · 56.5 GB total"),
+            (
+                "local-summary-kinds",
+                "Top kinds: App caches 30.0 GB, Build output 17.5 GB, Logs and crash reports 5.70 GB",
+            ),
+            (
+                "local-summary-folders",
+                "Largest: Spotify cache 30.0 GB, frontend-target 17.5 GB, Logs and crash reports 5.70 GB",
+            ),
+        ];
+        for (key, text) in expected {
+            assert_eq!(text_of(&rt, key), text);
+        }
+        assert!(text_of(&rt, "local-summary-estimate").starts_with("Estimated 56.5 GB"));
+
+        rt.update(|state, _| {
+            state.prefs.agent_bin = "unsupported-test-agent".into();
+            state.prefs.allow_start = true;
+        });
+        rt.frame(0.2);
+        assert!(
+            rt.find("local-summary").is_none(),
+            "a ready agent replaces the summary"
+        );
+        rt.update(|state, _| {
+            state.agent = Some(agent::Job::preview(Some(Err("Agent ended.".into()))))
+        });
+        rt.frame(0.3);
+        for (key, text) in expected {
+            assert_eq!(text_of(&rt, key), text);
+        }
+        for key in ["agent-error-toggle", "agent-error-settings", "agent-retry"] {
+            assert!(rt.find(key).is_some(), "{key}");
+        }
+        assert_eq!(ticked_ids(&rt.state), before);
+        assert_eq!(ticked_bytes(&rt.state), 56_480_000_000);
+    }
+
+    #[test]
     fn agent_progress_and_results_leave_ticks_and_estimates_unchanged() {
         let mut rt = runtime();
         rt.update(|state, _| {
@@ -2082,6 +2240,7 @@ mod tests {
         assert_eq!(ticked_ids(&rt.state), before);
         click(&mut rt, "agent-retry");
         assert!(rt.find("agent-error-details").is_none());
+        assert!(rt.find("local-summary-count").is_some());
         assert!(rt
             .state
             .agent
