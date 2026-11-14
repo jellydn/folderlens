@@ -16,11 +16,11 @@ Fixed on 2026-11-14 after this audit: tests that reach `agent::Job::start` use a
 - Impact: Tick and eligibility rules sit next to view code, so a rule change touches the UI file. This file has the most churn.
 - Fix approach: Move the tick and eligibility helpers (`src/main.rs:321-509`) into their own module. Leave view code where it is. Do this as a behavior-preserving refactor, with the existing tests as the guard.
 
-**Long builder lines that rustfmt does not reformat:**
-- Issue: `agent_help` (`src/main.rs:1175-1214`) puts whole widget chains on single lines of up to 318 characters (`src/main.rs:1208`, `1206`). `cargo fmt --check` passes because rustfmt leaves expressions it cannot fit unformatted, without reporting an error. The same happens at `src/settings.rs:735`, `775` (498 chars), `927`, `src/settings_updates.rs:24-26`, `src/broker.rs:358` (513 chars) and `src/agent.rs:49-51`, `341`.
-- Files: `src/main.rs`, `src/settings.rs`, `src/settings_updates.rs`, `src/broker.rs`, `src/agent.rs`
-- Impact: CI does not check the formatting of these lines. Diffs to safety copy (for example, the access text at `src/main.rs:1208`) are hard to review.
-- Fix approach: Split `agent_help` into small named child builders so that rustfmt can format them. Do not add a rustfmt option only for this.
+**Long lines that rustfmt does not reformat:**
+- Issue: rustfmt leaves an expression unformatted, without an error, when a string literal in it cannot fit. The UI builder chains in `src/main.rs` (`agent_help`), `src/settings.rs`, `src/settings_updates.rs` and `src/palette.rs` were split on 2026-11-14: long copy moved into module `const`s and the Settings `note` helper, so rustfmt now formats every builder chain. What remains is not a builder chain: `json!` payloads (`src/broker.rs:354-367`, `src/provider.rs:93-157`, `src/agent.rs:460-463`), the `model_note` match arms and error-message literals in `src/agent.rs` and `src/provider.rs`, `/bin/sh` stub scripts in tests, and one expected-text array in a `src/main.rs` test.
+- Files: `src/agent.rs`, `src/broker.rs`, `src/provider.rs`
+- Impact: Low. These lines are data and messages; diffs to long messages are harder to review.
+- Fix approach: Move a long message into a `const` when it next changes. Do not add a rustfmt option only for this.
 
 **Duplicate candidate-total computation:**
 - Issue: The same total of eligible leaves is computed in `overview` (`src/main.rs:940-943`) and in `Readings::from_review` (`src/notch.rs:50-53`).

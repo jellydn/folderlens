@@ -378,6 +378,15 @@ fn card(rows: El) -> El {
         .child(rows)
 }
 
+/// A wrapped, muted explanation below a setting.
+fn note(content: impl Into<String>) -> El {
+    text(content.into())
+        .font(type_::LABEL)
+        .color(paint(MUTED))
+        .wrap()
+        .w_full()
+}
+
 fn setting_row(label: &str, trailing: El) -> El {
     row()
         .w_full()
@@ -411,6 +420,9 @@ fn toggle(key: &'static str, on: bool, press: impl Fn(&mut Settings) + 'static) 
                 .absolute(knob, 2.0),
         )
 }
+
+const DISPLAY_MISSING_NOTE: &str = "Saved display disconnected. Using primary until it reconnects. Choose Primary to forget the saved display. The tray remains available.";
+const DISPLAY_NOTE: &str = "Choose a connected display, or follow the primary display automatically. A disconnected choice falls back to primary and returns when reconnected.";
 
 fn display_choices(state: &Settings) -> El {
     let missing = state
@@ -468,12 +480,19 @@ fn display_choices(state: &Settings) -> El {
             }),
         );
     }
-    choices.child(text(if missing {
-        "Saved display disconnected. Using primary until it reconnects. Choose Primary to forget the saved display. The tray remains available."
+    let display_note = if missing {
+        DISPLAY_MISSING_NOTE
     } else {
-        "Choose a connected display, or follow the primary display automatically. A disconnected choice falls back to primary and returns when reconnected."
-    }).key("notch-display-note").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        DISPLAY_NOTE
+    };
+    choices.child(note(display_note).key("notch-display-note"))
 }
+
+const READINGS_NOTE: &str =
+    "Choose the readings shown with your selection. Estimates are not reclaimed space.";
+const PLACEMENT_NOTE: &str = "Top center uses the camera row on notched displays; the camera can obscure content. Lower center leaves extra space above. Other apps are not detected. The tray stays available.";
+const THEME_NOTE: &str = "Saved for the notch, Review and Settings. Default keeps the original dark appearance; Lotus, Alucard and Tokyo Night Day are light.";
+const RECORD_CHOICE_NOTE: &str = "Record choice keeps the selection in memory and deletes nothing. CPU, Disk and Memory usage appear at the top of the review.";
 
 fn general(state: &Settings) -> El {
     let mut themes = col().w_full().gap(8.0);
@@ -554,15 +573,15 @@ fn general(state: &Settings) -> El {
         .w_full()
         .gap(14.0)
         .child(heading("Only the readings you need"))
-        .child(text("Choose the readings shown with your selection. Estimates are not reclaimed space.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(READINGS_NOTE))
         .child(section("Notch display"))
         .child(display_choices(state))
         .child(section("Notch placement"))
         .child(placement)
-        .child(text("Top center uses the camera row on notched displays; the camera can obscure content. Lower center leaves extra space above. Other apps are not detected. The tray stays available.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(PLACEMENT_NOTE))
         .child(section("Theme"))
         .child(themes)
-        .child(text("Saved for the notch, Review and Settings. Default keeps the original dark appearance; Lotus, Alucard and Tokyo Night Day are light.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(THEME_NOTE))
         .child(section("Readings and shortcuts"))
         .child(card(
             col()
@@ -589,13 +608,7 @@ fn general(state: &Settings) -> El {
                     }),
                 )),
         ))
-        .child(
-            text("Record choice keeps the selection in memory and deletes nothing. CPU, Disk and Memory usage appear at the top of the review.")
-                .font(type_::LABEL)
-                .color(paint(MUTED))
-                .wrap()
-                .w_full(),
-        )
+        .child(note(RECORD_CHOICE_NOTE))
 }
 
 fn agent(state: &Settings) -> El {
@@ -713,6 +726,9 @@ fn agent(state: &Settings) -> El {
         })
 }
 
+const ADAPTERS_NOTE: &str = "Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a FolderLens review; detection does not verify login, runtime dependencies, model access or native analysis.";
+const RUN_FILES_NOTE: &str = "Each manual run saves private context and a continuation launcher. Shared paths may remain in run files until you remove them. Analysis and an exact saved session are available only after success. Credentials belong in the provider's setup, not the model field. Copilot, Pi and OpenCode use FolderLens's bounded reader; Grok/Antigravity Terminal tools rely on their native controls, not FolderLens's live read boundary.";
+
 fn agent_commands(state: &Settings) -> El {
     let mut list = col().w_full();
     let found = prefs::agents();
@@ -728,11 +744,20 @@ fn agent_commands(state: &Settings) -> El {
     for agent in found {
         list = list.child(agent_row(state, agent));
     }
-    col().key("agent-commands").w_full().gap(12.0)
+    col()
+        .key("agent-commands")
+        .w_full()
+        .gap(12.0)
         .child(section("Model access and cost"))
-        .child(text(crate::agent::model_note(&state.prefs.agent_bin)).font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(
+            text(crate::agent::model_note(&state.prefs.agent_bin))
+                .font(type_::LABEL)
+                .color(paint(MUTED))
+                .wrap()
+                .w_full(),
+        )
         .child(section("Commands detected on this Mac"))
-        .child(text("Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a FolderLens review; detection does not verify login, runtime dependencies, model access or native analysis.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(ADAPTERS_NOTE))
         .child(card(list.max_h(160.0).scroll(ScrollSpec {
             stick_bottom: false,
         })))
@@ -772,7 +797,7 @@ fn agent_commands(state: &Settings) -> El {
                         }),
                 ),
         )
-        .child(text("Each manual run saves private context and a continuation launcher. Shared paths may remain in run files until you remove them. Analysis and an exact saved session are available only after success. Credentials belong in the provider's setup, not the model field. Copilot, Pi and OpenCode use FolderLens's bounded reader; Grok/Antigravity Terminal tools rely on their native controls, not FolderLens's live read boundary.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(RUN_FILES_NOTE))
 }
 
 fn agent_row(state: &Settings, agent: &Agent) -> El {
@@ -823,6 +848,10 @@ fn radio(on: bool) -> El {
     }
     mark
 }
+
+const RULES_NOTE: &str = "These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule can select eligible folders through the active preset or a retained manual selection. Nothing is deleted.";
+const KEEP_OUT_NOTE: &str = "Keep a folder out of future selections. Session allowance in folder actions can override this rule, but never a built-in or in-use exclusion.";
+const KEEP_HOURS_NOTE: &str = "0 h disables the recent-change hold. In-use folders remain unavailable. Nothing on this page authorizes cleanup.";
 
 fn protected(state: &Settings) -> El {
     let mut folders = col().w_full().child(
@@ -923,12 +952,14 @@ fn protected(state: &Settings) -> El {
         .w_full()
         .gap(14.0)
         .child(heading("What stays out"))
-        .child(text("Why a folder stays outside the review").font(type_::BODY).color(paint(INK)))
-        .child(text("These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule can select eligible folders through the active preset or a retained manual selection. Nothing is deleted.")
-            .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(
+            text("Why a folder stays outside the review")
+                .font(type_::BODY)
+                .color(paint(INK)),
+        )
+        .child(note(RULES_NOTE))
         .child(card(folders))
-        .child(text("Keep a folder out of future selections. Session allowance in folder actions can override this rule, but never a built-in or in-use exclusion.")
-            .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(KEEP_OUT_NOTE))
         .child(card(
             row()
                 .w_full()
@@ -954,8 +985,7 @@ fn protected(state: &Settings) -> El {
                     -1,
                 ))),
         ))
-        .child(text("0 h disables the recent-change hold. In-use folders remain unavailable. Nothing on this page authorizes cleanup.")
-            .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
+        .child(note(KEEP_HOURS_NOTE))
         .child(card(always))
 }
 
@@ -1045,18 +1075,15 @@ fn agent_permissions(state: &Settings) -> El {
     )
 }
 
+const FROZEN_SCOPE_NOTE: &str = "Saved permissions apply to manual requests. Each request freezes its eligible selection; later changes can reduce, never expand, its live read scope.";
+const DISK_ACCESS_NOTE: &str = "macOS hides some folders until Full Disk Access is on. FolderLens measures the rest of your home either way.";
+
 fn access(state: &Settings) -> El {
     col()
         .w_full()
         .gap(14.0)
         .child(heading("Selected-folder access"))
-        .child(
-            text("Saved permissions apply to manual requests. Each request freezes its eligible selection; later changes can reduce, never expand, its live read scope.")
-                .font(type_::LABEL)
-                .color(paint(MUTED))
-                .wrap()
-                .w_full(),
-        )
+        .child(note(FROZEN_SCOPE_NOTE))
         .child(agent_permissions(state))
         .child(section("Folders"))
         .child(card(setting_row(
@@ -1067,13 +1094,7 @@ fn access(state: &Settings) -> El {
                 .color(paint(BLUE))
                 .on_press(|_state: &mut Settings| prefs::open_full_disk_access()),
         )))
-        .child(
-            text("macOS hides some folders until Full Disk Access is on. FolderLens measures the rest of your home either way.")
-                .font(type_::LABEL)
-                .color(paint(MUTED))
-                .wrap()
-                .w_full(),
-        )
+        .child(note(DISK_ACCESS_NOTE))
 }
 
 #[cfg(test)]

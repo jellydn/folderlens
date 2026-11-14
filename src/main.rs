@@ -1219,44 +1219,143 @@ fn scan_controls(s: &State) -> El {
         )
 }
 
+const ACCESS_LIMITS: &str = "Manual request; provider costs and data policies apply. An answer does not prove cleanup is safe. Live reads require the original and current eligible selection. Grok/Antigravity Terminal tools use their native controls, not FolderLens's live reader. Provider controls are not an OS sandbox.";
+
 fn agent_help(s: &State) -> El {
-    let can_ask = (0..s.catalog.leaves.len()).any(|i| is_ticked(s, i));
-    col().w_full().gap(10.0).padding(12.0).radius(12.0).fill(paint(TRACK))
-        .child(text(if s.agent.is_some() { "Agent review" } else { "Agent help" }).font(TextStyle::new(14.0, 500.0)).color(paint(INK)))
-        .child(text(if !s.prefs.allow_start { "Set up an agent to request a review." }
-            else if s.prefs.send_paths { "Eligible selected folder paths may be shared." }
-            else { "Saved context only. Folder paths are not shared." })
-            .key("access-summary").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(if s.agent.as_ref().is_some_and(|job| job.result.is_none()) { el() } else {
-            let ask = button("Ask Agent", if can_ask { ButtonStyle::Secondary } else { ButtonStyle::Disabled }).key("ask-agent");
-            if can_ask { ask.on_press(palette::ask) } else { ask }
-        })
-        .child(text("Manual request. Provider costs may apply.").font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-        .child(button("Agent setup", ButtonStyle::Quiet).key("agent-configure")
-            .on_press(|_: &mut State| settings::open(settings::Page::Agent)))
+    let running = s.agent.as_ref().is_some_and(|job| job.result.is_none());
+    let succeeded = s
+        .agent
+        .as_ref()
+        .is_some_and(|job| matches!(job.result, Some(Ok(_))));
+    col()
+        .w_full()
+        .gap(10.0)
+        .padding(12.0)
+        .radius(12.0)
+        .fill(paint(TRACK))
+        .child(
+            text(if s.agent.is_some() {
+                "Agent review"
+            } else {
+                "Agent help"
+            })
+            .font(TextStyle::new(14.0, 500.0))
+            .color(paint(INK)),
+        )
+        .child(label(access_summary(s), MUTED).key("access-summary"))
+        .child(if running { el() } else { ask_button(s) })
+        .child(label("Manual request. Provider costs may apply.", MUTED))
+        .child(
+            button("Agent setup", ButtonStyle::Quiet)
+                .key("agent-configure")
+                .on_press(|_: &mut State| settings::open(settings::Page::Agent)),
+        )
         .child(agent_review(s))
         .child(local_summary(s))
-        .child(if s.agent.as_ref().is_some_and(|job| matches!(job.result, Some(Ok(_)))) { button("Continue saved chat in Terminal", ButtonStyle::Secondary).key("agent-terminal").w_full()
-            .on_press(|state: &mut State| { if let Some(job) = &state.agent { if let Err(error) = job.open_chat(&state.prefs) { state.note = error; } } }) } else { el() })
-        .child(if s.agent.is_some() { button("Run files in Finder", ButtonStyle::Quiet).key("agent-files")
-            .on_press(|state: &mut State| {
-                if let Some(folder) = state.agent.as_ref().and_then(|job| job.script.parent()) {
-                    state.note = match prefs::open([folder]) {
-                        Ok(_) => "Requested run folder in Finder. Shared paths may be saved there.".into(),
-                        Err(_) => "Could not open the run folder in Finder.".into(),
-                    };
+        .child(if succeeded { terminal_button() } else { el() })
+        .child(if s.agent.is_some() {
+            run_files_button()
+        } else {
+            el()
+        })
+        .child(
+            text(if s.access_details {
+                "Hide access and limits"
+            } else {
+                "Access and limits"
+            })
+            .key("access-details-toggle")
+            .font(type_::LABEL)
+            .color(paint(BLUE))
+            .on_press(|state: &mut State| state.access_details = !state.access_details),
+        )
+        .child(if s.access_details {
+            access_details(s)
+        } else {
+            el()
+        })
+}
+
+/// A wrapped label line in the Agent help card.
+fn label(content: impl Into<String>, color: &str) -> El {
+    text(content.into())
+        .font(type_::LABEL)
+        .color(paint(color))
+        .wrap()
+        .w_full()
+}
+
+fn access_summary(s: &State) -> &'static str {
+    if !s.prefs.allow_start {
+        "Set up an agent to request a review."
+    } else if s.prefs.send_paths {
+        "Eligible selected folder paths may be shared."
+    } else {
+        "Saved context only. Folder paths are not shared."
+    }
+}
+
+fn ask_button(s: &State) -> El {
+    let can_ask = (0..s.catalog.leaves.len()).any(|i| is_ticked(s, i));
+    let style = if can_ask {
+        ButtonStyle::Secondary
+    } else {
+        ButtonStyle::Disabled
+    };
+    let ask = button("Ask Agent", style).key("ask-agent");
+    if can_ask {
+        ask.on_press(palette::ask)
+    } else {
+        ask
+    }
+}
+
+fn terminal_button() -> El {
+    button("Continue saved chat in Terminal", ButtonStyle::Secondary)
+        .key("agent-terminal")
+        .w_full()
+        .on_press(|state: &mut State| {
+            if let Some(job) = &state.agent {
+                if let Err(error) = job.open_chat(&state.prefs) {
+                    state.note = error;
                 }
-            }) } else { el() })
-        .child(text(if s.access_details { "Hide access and limits" } else { "Access and limits" }).key("access-details-toggle").font(type_::LABEL).color(paint(BLUE))
-            .on_press(|state: &mut State| state.access_details = !state.access_details))
-        .child(if s.access_details { col().w_full().gap(8.0)
-            .child(text(format!("{} · {}", prefs::agent_name(&s.prefs.agent_id).unwrap_or("Custom / unconfigured agent"), if s.prefs.model().is_empty() { "CLI default model" } else { s.prefs.model() }))
-                .key("agent-configuration").font(type_::LABEL).color(paint(INK)).wrap().w_full())
-            .child(text("Manual request; provider costs and data policies apply. An answer does not prove cleanup is safe. Live reads require the original and current eligible selection. Grok/Antigravity Terminal tools use their native controls, not FolderLens's live reader. Provider controls are not an OS sandbox.")
-                .font(type_::LABEL).color(paint(MUTED)).wrap().w_full())
-            .child(text("Review access settings").key("review-access").font(type_::LABEL).color(paint(BLUE))
-                .on_press(|_: &mut State| settings::open(settings::Page::Access)))
-        } else { el() })
+            }
+        })
+}
+
+fn run_files_button() -> El {
+    button("Run files in Finder", ButtonStyle::Quiet)
+        .key("agent-files")
+        .on_press(|state: &mut State| {
+            if let Some(folder) = state.agent.as_ref().and_then(|job| job.script.parent()) {
+                state.note = match prefs::open([folder]) {
+                    Ok(_) => "Requested run folder in Finder. Shared paths may be saved there.",
+                    Err(_) => "Could not open the run folder in Finder.",
+                }
+                .into();
+            }
+        })
+}
+
+fn access_details(s: &State) -> El {
+    let agent = prefs::agent_name(&s.prefs.agent_id).unwrap_or("Custom / unconfigured agent");
+    let model = if s.prefs.model().is_empty() {
+        "CLI default model"
+    } else {
+        s.prefs.model()
+    };
+    col()
+        .w_full()
+        .gap(8.0)
+        .child(label(format!("{agent} · {model}"), INK).key("agent-configuration"))
+        .child(label(ACCESS_LIMITS, MUTED))
+        .child(
+            text("Review access settings")
+                .key("review-access")
+                .font(type_::LABEL)
+                .color(paint(BLUE))
+                .on_press(|_: &mut State| settings::open(settings::Page::Access)),
+        )
 }
 
 /// Non-AI fallback: shown when no agent can run or the last review failed.

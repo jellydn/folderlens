@@ -151,6 +151,9 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     true
 }
 
+const ROW_HINT: &str =
+    "Folder actions use this row. Ask Agent uses the eligible selection, not this row.";
+
 pub fn panel(s: &State) -> El {
     let reason = match s.target {
         Some(Target::Leaf(index)) if index < s.catalog.leaves.len() => {
@@ -183,7 +186,9 @@ pub fn panel(s: &State) -> El {
         .key("palette")
         .w_full()
         .h_full()
-        .scroll(ScrollSpec { stick_bottom: false })
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .fill(paint(PANEL))
         .radius(14.0)
         .transition(Transition::none())
@@ -195,15 +200,31 @@ pub fn panel(s: &State) -> El {
                 .py(12.0)
                 .gap(6.0)
                 .window_drag()
-                .child(text("Folder actions / selection review").font(type_::LABEL).color(paint(MUTED)))
+                .child(
+                    text("Folder actions / selection review")
+                        .font(type_::LABEL)
+                        .color(paint(MUTED)),
+                )
                 .child(
                     text(target_name(s))
                         .font(TextStyle::new(15.0, 600.0))
-                        .color(paint(INK)).truncate(),
+                        .color(paint(INK))
+                        .truncate(),
                 )
-                .child(text(reason).font(type_::LABEL).color(paint(MUTED)).truncate().w_full())
-                .child(text("Folder actions use this row. Ask Agent uses the eligible selection, not this row.")
-                    .font(type_::LABEL).color(paint(MUTED)).wrap().w_full()),
+                .child(
+                    text(reason)
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .truncate()
+                        .w_full(),
+                )
+                .child(
+                    text(ROW_HINT)
+                        .font(type_::LABEL)
+                        .color(paint(MUTED))
+                        .wrap()
+                        .w_full(),
+                ),
         )
         .child(rule())
         .child(list)
