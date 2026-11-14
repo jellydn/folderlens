@@ -7,6 +7,7 @@ Accepted by the owner for the prerelease. No Apple Developer account is availabl
 Amended 2026-11-08: unknown-origin installations are manual-update-only. One current-state beta.2 prerelease is authorized; promotion and subsequent releases remain paused.
 Amended 2026-11-09: the owner authorizes stable 0.2.0 and current documentation updates. The manual-update-only rule and all publisher, consent and verification requirements remain unchanged.
 Amended 2026-11-11: for FolderLens 0.3.3, the owner selects Check → Download and verify → Reveal in Finder, with manual final replacement. The installation-ownership boundary remains unchanged.
+Amended 2026-11-14: Shelf was renamed FolderLens in 0.2.1. Below, the "dedicated Shelf key" and Shelf Actions secret mean the dedicated FolderLens key and the FolderLens repository's `SPARKLE_PRIVATE_KEY`; the decision is unchanged.
 
 ## Context
 Shelf needs update checks and optional downloads without automatic install/restart or a paid Apple account. Oak provides a working Ed25519/signing-secret pattern, but Sparkle's automatic-download path can install on quit, which conflicts with the approved policy.

@@ -6,7 +6,7 @@ A notch-first macOS app for reviewing cleanup candidates, disk space and system 
 
 **Record choice records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
 
-FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, folder protections, manual agent help and publisher-verified update checks remain available. The [codebase map](.planning/codebase/ARCHITECTURE.md) documents the pre-rename source.
+FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, folder protections, manual agent help and publisher-verified update checks remain available. The [codebase map](.planning/codebase/ARCHITECTURE.md) documents the current source.
 
 ![Review with CPU, Disk and Memory cards at the top; synthetic example data](shots/review-ledger.png)
 
@@ -133,7 +133,7 @@ These current Rune renders use example Agent states, not real model turns or nat
 
 ## Details
 
-[Full guide and historical screenshots](docs/guide.md) · [Agent boundary](docs/adr/0001-scoped-agent-sessions.md) · [Update policy](docs/adr/0002-publisher-verified-updates.md) · [Release notes](RELEASE_NOTES.md)
+[Full guide and historical screenshots](docs/guide.md) · [Agent boundary](docs/adr/0001-scoped-agent-sessions.md) · [Update policy](docs/adr/0002-publisher-verified-updates.md) · [No-AI review](docs/adr/0003-review-works-without-ai.md) · [Release notes](RELEASE_NOTES.md)
 
 ## Build and test
 

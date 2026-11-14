@@ -4,6 +4,7 @@ Date: 2026-11-07
 
 ## Status
 Accepted by the owner for this preview implementation; native model-turn and continuation verification remains incomplete.
+Amended 2026-11-14: Shelf was renamed FolderLens in 0.2.1, and Confirm is now Record choice. Below, "Shelf" means FolderLens; the decision is unchanged. [ADR 3](0003-review-works-without-ai.md) records the no-agent paths.
 
 ## Context
 Ask Agent must combine a saved scan/selection snapshot with optional read-only inspection. An exact saved chat must remain usable while Shelf is closed without reviving old folder grants. Providers have different protocols and model flags, and a free-model name is not an inference entitlement.

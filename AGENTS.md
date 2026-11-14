@@ -4,7 +4,7 @@ macOS menu-bar app that reviews what a cleanup level would tick. Rust + Rune (GP
 
 Record choice (formerly Confirm) never deletes. It records a nonempty eligible selection in memory, and tests assert the catalog is unchanged. Do not add a delete or cleanup path.
 
-The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md) and [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md). Keep them aligned when you change their contracts.
+The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md), [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md) and [review without an agent](docs/adr/0003-review-works-without-ai.md). Keep them aligned when you change their contracts.
 
 ## Commands
 
