@@ -1,6 +1,4 @@
-//! The action list for one row. The window shrinks to the list. Confirm still deletes nothing.
-
-use std::process::{Command, Stdio};
+//! The action list for one row. The window shrinks to the list. Record choice still deletes nothing.
 
 use rune::tok::{type_, TextStyle};
 use rune::{col, row, text, El, Key, KeyEvent, ScrollSpec, Transition, Tx};
@@ -421,10 +419,7 @@ pub fn run(s: &mut State, id: &str) {
 
 fn reveal(s: &mut State) {
     if let Some(path) = first_path(s) {
-        let _ = Command::new("open")
-            .args(["-R", &path])
-            .stdin(Stdio::null())
-            .spawn();
+        let _ = prefs::open(["-R", path.as_str()]);
         s.note = "Opened in Finder.".to_string();
     }
     close(s);

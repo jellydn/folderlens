@@ -14,7 +14,7 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.5)
+## Quick review (0.3.7)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
@@ -248,7 +248,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.5 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.5). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.7 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.7). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 
@@ -311,6 +311,7 @@ Start with the [architecture map](../.planning/codebase/ARCHITECTURE.md). The sa
 
 - [Scoped agent sessions and per-agent model configuration](adr/0001-scoped-agent-sessions.md)
 - [Publisher-verified updates, channels and install approval](adr/0002-publisher-verified-updates.md)
+- [Review without an agent and the local summary](adr/0003-review-works-without-ai.md)
 
 ## Author
 

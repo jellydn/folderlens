@@ -1194,7 +1194,7 @@ fn agent_help(s: &State) -> El {
         .child(if s.agent.is_some() { button("Run files in Finder", ButtonStyle::Quiet).key("agent-files")
             .on_press(|state: &mut State| {
                 if let Some(folder) = state.agent.as_ref().and_then(|job| job.script.parent()) {
-                    state.note = match std::process::Command::new("open").arg(folder).spawn() {
+                    state.note = match prefs::open([folder]) {
                         Ok(_) => "Requested run folder in Finder. Shared paths may be saved there.".into(),
                         Err(_) => "Could not open the run folder in Finder.".into(),
                     };

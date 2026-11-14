@@ -408,7 +408,7 @@ pub fn prepare_ask(
         return Err("Grant access in Settings before FolderLens starts an agent.");
     }
     let mut prompt = format!(
-        "# FolderLens cleanup context\n\nHelp me clean up the items currently selected in FolderLens.\nSelection mode: {selection}.\n{detail}\n\nInspect the selected items and propose a safe cleanup. Ask for approval before deleting files or running destructive commands. Leave unselected, protected, held, and in-use items unchanged. FolderLens Confirm only records a choice and does not delete files."
+        "# FolderLens cleanup context\n\nHelp me clean up the items currently selected in FolderLens.\nSelection mode: {selection}.\n{detail}\n\nInspect the selected items and propose a safe cleanup. Ask for approval before deleting files or running destructive commands. Leave unselected, protected, held, and in-use items unchanged. FolderLens Record choice only records a choice and does not delete files."
     );
     if prefs.send_paths && !paths.is_empty() {
         prompt.push_str("\nSelected paths (in the same order as the items):\n");
@@ -486,7 +486,21 @@ fn shell_quote(text: &str) -> String {
 pub fn open_full_disk_access() {
     let url =
         "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles";
-    let _ = Command::new("open").arg(url).spawn();
+    let _ = open([url]);
+}
+
+/// Runs macOS `open` without blocking the UI. A thread waits for it, so no zombie remains until Quit.
+pub fn open<I, S>(args: I) -> std::io::Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let mut child = Command::new("open")
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .spawn()?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
 }
 
 #[cfg(test)]

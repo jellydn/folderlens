@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -87,7 +87,11 @@ impl Job {
         context: &str,
         access: Access,
     ) -> Result<Self, String> {
+        #[cfg(not(test))]
         let runs = prefs::user_path().with_file_name("Runs");
+        // Tests that reach Retry must never write to the real Runs folder.
+        #[cfg(test)]
+        let runs = std::env::temp_dir().join(format!("folderlens-runs-{}", std::process::id()));
         Self::start_in(&runs, bin, name, model, context, access)
     }
 
@@ -223,11 +227,7 @@ impl Job {
         if !matches!(self.result, Some(Ok(_))) {
             return Err("Finish a successful analysis before opening its chat.".into());
         }
-        Command::new("open")
-            .arg(&self.script)
-            .spawn()
-            .map(|_| ())
-            .map_err(|err| err.to_string())
+        prefs::open([&self.script]).map_err(|err| err.to_string())
     }
 }
 
@@ -704,6 +704,7 @@ fn redact_diagnostics(text: &str) -> String {
 mod tests {
     use super::*;
     use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::process::Command;
 
     fn wait(job: &mut Job) {
         let deadline = Instant::now() + Duration::from_secs(10);

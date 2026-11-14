@@ -28,7 +28,6 @@ pub enum Level {
 pub struct Leaf {
     pub id: String,
     /// Full folder path. The tray shows the short name. Tests and the in-use check read this.
-    #[allow(dead_code)]
     pub path: String,
     pub name: String,
     pub detail: String,
@@ -115,15 +114,6 @@ pub fn format_bytes(bytes: u64) -> String {
     } else {
         format!("{bytes} B")
     }
-}
-
-#[allow(dead_code)]
-pub fn ready_bytes(leaves: &[Leaf]) -> u64 {
-    leaves
-        .iter()
-        .filter(|leaf| can_tick(leaf))
-        .map(|leaf| leaf.bytes)
-        .sum()
 }
 
 pub fn load_live() -> Catalog {

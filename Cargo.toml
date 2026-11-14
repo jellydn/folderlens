@@ -3,7 +3,7 @@ name = "folderlens"
 version = "0.3.7"
 edition = "2021"
 publish = false
-description = "Review what a cleanup level would tick. Confirm does not delete."
+description = "Review what a cleanup level would tick. Record choice does not delete."
 
 [dependencies]
 rune = { git = "https://github.com/anomalyco/rune", rev = "77bcc60037b115b56f85f57f1818b66eb846937d" }
