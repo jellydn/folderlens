@@ -14,7 +14,7 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.7)
+## Quick review (0.3.8)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
@@ -148,7 +148,7 @@ All current images below are headless Rune GPU renders. Folder examples and Agen
 
 ![Recorded choice, no deletion](../shots/review-receipt.png)
 
-Folder actions show the target and its reason. Ask Agent still uses the eligible selection, not the action target. Protected settings explain user exclusions, recent-change holds and built-in exclusions separately; their rules are unchanged.
+Folder actions show the target and its reason. **Measure folder again** (⌘R) runs on the scan worker: the status shows "Measuring…", new sizes replace the estimates when it finishes, and Record choice clears. There is no queue: while a scan runs, it asks you to measure again after the scan. Ask Agent still uses the eligible selection, not the action target. Protected settings explain user exclusions, recent-change holds and built-in exclusions separately; their rules are unchanged.
 
 ![Folder and review actions](../shots/review-actions.png)
 
@@ -248,7 +248,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.7 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.7). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.8 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.8). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 

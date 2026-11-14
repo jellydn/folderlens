@@ -1,3 +1,17 @@
+## FolderLens 0.3.8 — Background folder measuring
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- **Measure folder again** (Actions, ⌘R) now runs on the scan worker instead of the UI thread, so the panel no longer freezes while a large folder is measured. The status shows "Measuring…"; new sizes apply by folder path when it finishes, and Record choice clears because the estimates changed. A request while a scan runs is refused with a note, and a due interval scan waits for the measure. Sizes remain estimates, not reclaimed space.
+- Finder and Terminal actions now reap the macOS `open` process they start, so repeated clicks no longer leave finished processes until Quit.
+- The saved agent context and prompt now say Record choice instead of Confirm. The meaning is unchanged: it only records a choice and deletes nothing.
+- Tests that reach Ask or Retry use a temporary run folder, never the real `Runs/` folder.
+- Maintenance: clear all Clippy warnings, split long UI builder chains so rustfmt formats them (renders unchanged), remove dead code, refresh the codebase map, and add ADR 0003 (review works without an agent) with rename amendments to ADRs 0001 and 0002.
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy with warnings denied, a regression test that Measure folder again sends its request to the worker without measuring on the UI thread, takes one worker request at a time and applies sizes by path after rows move, byte-identical before/after renders of six Review states and all fourteen Settings scenes at 720 and 360 points, and ad-hoc arm64 DMG/ZIP packaging. A real large-folder measure in the live app was not timed.
+
+Native pointer/keyboard routing, physical-notch and multi-display behavior, real AI turns/tool routing/Terminal continuation and actual manual app replacement/restart/Gatekeeper behavior remain unverified. No owner's installed app is replaced during verification. All current installations remain manual-update-only; Homebrew users update through Homebrew, whose cask can lag publication. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.7 — Local summary without AI
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
