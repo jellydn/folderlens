@@ -6,7 +6,7 @@ Fresh remap of FolderLens 0.3.7 (`main` at `0c68acb`). Each finding cites curren
 
 Resolved since the 2026-11-09 audit and removed here: the Clippy warnings (fixed in `0c68acb`); missing update pagination (`native/Updater.swift:61-75` now reads up to ten pages and fails closed at the bound); the agent transport limits (now in place at `src/agent.rs:282-317`).
 
-Fixed on 2026-11-14 after this audit: tests that reach `agent::Job::start` use a temporary `Runs` folder (`src/agent.rs`); `open` children are reaped by `prefs::open` (`src/prefs.rs`); the agent prompt, crate description and palette comment say Record choice; `ready_bytes` and the stale `allow` on `Leaf.path` are gone (`src/catalog.rs`); `docs/guide.md` links 0.3.7; the ADRs carry rename amendments, and ADR 0003 records the no-agent paths.
+Fixed on 2026-11-14 after this audit: tests that reach `agent::Job::start` use a temporary `Runs` folder (`src/agent.rs`); `open` children are reaped by `prefs::open` (`src/prefs.rs`); the agent prompt, crate description and palette comment say Record choice; `ready_bytes` and the stale `allow` on `Leaf.path` are gone (`src/catalog.rs`); `docs/guide.md` links 0.3.7; the ADRs carry rename amendments, and ADR 0003 records the no-agent paths. Measure folder again now runs on the scan worker (`src/main.rs`: `ScanRequest::Measure`); it is refused while a scan runs, so it needs no separate cancellation.
 
 ## Tech Debt
 
@@ -93,12 +93,6 @@ Fixed on 2026-11-14 after this audit: tests that reach `agent::Job::start` use a
 - Files: `src/main.rs`, `src/prefs.rs`
 - Cause: This is how changes made in Settings reach Review (`README.md` documents "next poll").
 - Improvement path: Compare the file's mtime before parsing. Keep the read off any system-command path.
-
-**Synchronous "Measure folder again":**
-- Problem: `palette::analyse` calls `catalog::remeasure`, which runs a recursive `scan::measure`, on the UI thread (`src/palette.rs:458-465`, `src/catalog.rs:649-653`).
-- Files: `src/palette.rs`, `src/catalog.rs`, `src/scan.rs:628`
-- Cause: A manual action that has no worker.
-- Improvement path: Send the work through the existing scan worker or the Rune UI queue (`src/main.rs:124-147`). This needs a design for state and cancellation.
 
 **Directory listing scope checks:**
 - Problem: For each of up to 1,024 entries, `Reader::allows` clones the whole current `Access` and canonicalizes every selected and blocked root (`src/broker.rs:45-52`, `src/agent.rs:35-40`). Every unticked leaf is a blocked root (`src/palette.rs:503-509`).

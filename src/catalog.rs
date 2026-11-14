@@ -44,7 +44,7 @@ pub struct Leaf {
 pub struct Group {
     pub id: String,
     pub name: String,
-    /// The scan's label. The tray sums the leaves, so Analyse can change the total.
+    /// The scan's label. Review sums the leaves, so Measure folder again can change the total.
     #[allow(dead_code)]
     pub size_label: String,
     pub first: usize,
@@ -635,11 +635,9 @@ pub fn memory_now() -> u32 {
     memory_percent()
 }
 
-/// Measure one folder again and store the allocated size on the leaf.
-pub fn remeasure(leaf: &mut Leaf) {
-    let (bytes, _) = scan::measure(Path::new(&leaf.path));
-    leaf.bytes = bytes;
-    leaf.size_label = format_bytes(bytes);
+/// Measure one folder again and return its allocated size. Slow; call it from a worker.
+pub fn measure(path: &str) -> u64 {
+    scan::measure(Path::new(path)).0
 }
 
 fn index_age(updated: f64) -> String {

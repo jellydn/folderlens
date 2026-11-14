@@ -450,13 +450,22 @@ fn unlock(s: &mut State) {
     close(s);
 }
 
+/// The scan worker measures; `finish_measure` applies the sizes when it is done.
 fn analyse(s: &mut State) {
     let name = target_name(s);
-    for index in target_indexes(s) {
-        catalog::remeasure(&mut s.catalog.leaves[index]);
+    let paths: Vec<String> = target_indexes(s)
+        .into_iter()
+        .map(|index| s.catalog.leaves[index].path.clone())
+        .collect();
+    if !paths.is_empty() {
+        s.note = if s.scanning {
+            "A scan is running. Measure again when it finishes.".to_string()
+        } else if super::request_measure(s, name.clone(), paths) {
+            format!("Measuring {name}…")
+        } else {
+            format!("Could not measure {name}.")
+        };
     }
-    s.note = format!("Measured {name}.");
-    s.confirmed = false;
     close(s);
 }
 

@@ -57,13 +57,23 @@ struct State {
     agent: Option<agent::Job>,
     agent_details: bool,
     access_details: bool,
-    scan_requests: Option<std::sync::mpsc::Sender<()>>,
+    scan_requests: Option<std::sync::mpsc::Sender<ScanRequest>>,
+    /// True while the worker scans or measures. It takes one request at a time.
     scanning: bool,
     interval_minutes: u64,
     scans_running: bool,
     next_scan: Option<Instant>,
     /// Last height sent to the window. Arrow keys must not resize again.
     window_h: f32,
+}
+
+/// Work for the scan worker thread.
+#[derive(Debug, PartialEq)]
+enum ScanRequest {
+    /// Scan every root.
+    All,
+    /// Measure these folders again (Actions → Measure folder again).
+    Measure { name: String, paths: Vec<String> },
 }
 
 fn state_from(catalog: Catalog) -> State {
@@ -131,7 +141,21 @@ fn start_workers(handle: rune::AppHandle<State>) {
     let scan_handle = handle.clone();
     std::thread::spawn(move || {
         let mut initial = true;
-        while receiver.recv().is_ok() {
+        while let Ok(request) = receiver.recv() {
+            if let ScanRequest::Measure { name, paths } = request {
+                let sizes: Vec<(String, u64)> = paths
+                    .into_iter()
+                    .map(|path| {
+                        let bytes = catalog::measure(&path);
+                        (path, bytes)
+                    })
+                    .collect();
+                scan_handle.update(move |s, tx| {
+                    finish_measure(s, &name, sizes);
+                    tx.instant();
+                });
+                continue;
+            }
             let catalog = if initial {
                 catalog::load_live()
             } else {
@@ -166,17 +190,40 @@ fn start_workers(handle: rune::AppHandle<State>) {
     });
 }
 
-fn request_scan(s: &mut State) {
+/// Sends work to the scan worker unless it is busy. Returns whether the work started.
+fn start_scan_work(s: &mut State, request: ScanRequest) -> bool {
     if s.scanning {
-        return;
+        return false;
     }
-    if s.scan_requests
+    s.scanning = s
+        .scan_requests
         .as_ref()
-        .is_some_and(|sender| sender.send(()).is_ok())
-    {
-        s.scanning = true;
+        .is_some_and(|sender| sender.send(request).is_ok());
+    s.scanning
+}
+
+fn request_scan(s: &mut State) {
+    if start_scan_work(s, ScanRequest::All) {
         s.next_scan = None;
     }
+}
+
+/// A due interval scan waits for the measure, then runs on the next poll.
+fn request_measure(s: &mut State, name: String, paths: Vec<String>) -> bool {
+    start_scan_work(s, ScanRequest::Measure { name, paths })
+}
+
+/// Apply measured sizes by path, because a rescan can reorder rows.
+fn finish_measure(s: &mut State, name: &str, sizes: Vec<(String, u64)>) {
+    s.scanning = false;
+    for (path, bytes) in sizes {
+        if let Some(leaf) = s.catalog.leaves.iter_mut().find(|leaf| leaf.path == path) {
+            leaf.bytes = bytes;
+            leaf.size_label = catalog::format_bytes(bytes);
+        }
+    }
+    s.note = format!("Measured {name}.");
+    s.confirmed = false;
 }
 
 fn schedule_scan(s: &mut State, now: Instant) {
@@ -1865,6 +1912,59 @@ mod tests {
             receiver.try_recv(),
             Err(std::sync::mpsc::TryRecvError::Disconnected)
         ));
+    }
+
+    #[test]
+    fn measure_folder_again_runs_on_the_scan_worker() {
+        let mut s = fixture_state();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        s.scan_requests = Some(sender);
+        apply_level(&mut s, Level::Aggressive);
+        s.confirmed = true;
+        let before = s.catalog.leaves.iter().map(|l| l.bytes).collect::<Vec<_>>();
+        palette::open(&mut s, Some(palette::Target::Group(5)));
+        palette::run(&mut s, "analyse");
+        assert_eq!(
+            receiver.try_recv().unwrap(),
+            ScanRequest::Measure {
+                name: "App caches".into(),
+                paths: vec!["/fixture/cache-held".into(), "/fixture/spotify".into()],
+            }
+        );
+        assert_eq!(
+            s.catalog.leaves.iter().map(|l| l.bytes).collect::<Vec<_>>(),
+            before,
+            "the UI thread does not measure"
+        );
+        assert!(s.scanning && s.confirmed);
+        assert_eq!(s.note, "Measuring App caches…");
+
+        let logs = leaf_at(&s, "logs");
+        palette::open(&mut s, Some(palette::Target::Leaf(logs)));
+        palette::run(&mut s, "analyse");
+        request_scan(&mut s);
+        assert!(receiver.try_recv().is_err(), "one worker request at a time");
+        assert_eq!(s.note, "A scan is running. Measure again when it finishes.");
+
+        // A rescan moved Spotify to the first row before the measure finished.
+        let spotify = leaf_at(&s, "spotify");
+        s.catalog.leaves.swap(0, spotify);
+        finish_measure(
+            &mut s,
+            "App caches",
+            vec![
+                ("/fixture/spotify".into(), 2_500_000_000),
+                ("/fixture/gone".into(), 1),
+            ],
+        );
+        assert_eq!(s.catalog.leaves[0].id, "spotify");
+        assert_eq!(s.catalog.leaves[0].bytes, 2_500_000_000);
+        assert_eq!(s.catalog.leaves[0].size_label, "2.50 GB");
+        assert_eq!(s.catalog.leaves[spotify].bytes, before[0]);
+        assert!(!s.scanning && !s.confirmed);
+        assert_eq!(s.note, "Measured App caches.");
+        request_scan(&mut s);
+        assert_eq!(receiver.try_recv().unwrap(), ScanRequest::All);
     }
 
     #[test]

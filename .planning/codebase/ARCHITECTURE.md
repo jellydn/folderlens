@@ -65,7 +65,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 **Catalog and measurement:**
 - Purpose: Find candidate folders, measure allocated size, apply tier gates and in-use locks, read disk, CPU and memory.
 - Location: `src/catalog.rs`, which privately includes `src/scan.rs` with `#[path = "scan.rs"] mod scan`.
-- Contains: `Level`, `Leaf`, `Group`, `Catalog`, `can_tick`, `auto_tick`, `format_bytes`, `load_live` (uses size cache), `refresh_live` (remeasures), `pending`, `fixture`, `assemble`, `cpu_ticks` / `cpu_delta` / `memory_now`, `remeasure`. `src/scan.rs` holds `RULES`, `scan_root`, `measure_all` (up to 8 threads), `measure` (512-byte blocks, one count per inode, no symlink follow), and the `sizes.tsv` v2 cache.
+- Contains: `Level`, `Leaf`, `Group`, `Catalog`, `can_tick`, `auto_tick`, `format_bytes`, `load_live` (uses size cache), `refresh_live` (remeasures), `pending`, `fixture`, `assemble`, `cpu_ticks` / `cpu_delta` / `memory_now`, `measure`. `src/scan.rs` holds `RULES`, `scan_root`, `measure_all` (up to 8 threads), `measure` (512-byte blocks, one count per inode, no symlink follow), and the `sizes.tsv` v2 cache.
 - Depends on: `std`, and the commands `ps`, `diskutil info /`, `sysctl -n hw.memsize`, `vm_stat`, plus Mach `host_statistics` for CPU (`src/catalog.rs`).
 - Used by: `src/main.rs`, `src/palette.rs`, `src/notch.rs`.
 
@@ -98,7 +98,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 5. The worker sends the catalog through `AppHandle::update`; `finish_scan` keeps manual ticks by path and open groups by ID, remaps the action target, clears `confirmed` and the note, and pushes a new `Access` to a running job (`src/main.rs`). A `missing` catalog keeps the previous results and sets a note.
 6. Scan now (`request_scan`), Pause / Resume (`toggle_scans`) and the 30 min / 1 hour presets come from the panel, the Actions list (⌘P) or the notch (`send`). Intervals are session-only and start paused (`State::scans_running = false`). `poll` calls `scan_if_due`, which only sends a request (`src/main.rs`, `src/notch.rs`, `src/palette.rs`).
 7. The gauge thread samples CPU ticks and memory once a second and calls `update_if`, which redraws only when a value changed (`src/main.rs`: `start_workers`; `src/catalog.rs`: `cpu_delta`, `memory_now`).
-8. Exception: the Actions item Analyse calls `catalog::remeasure` synchronously on the UI thread for the target rows (`src/palette.rs`: `analyse`).
+8. Actions → Measure folder again (`analyse`) sends `ScanRequest::Measure` with the target paths to the same scan worker. It is refused while a scan runs, and a due interval scan waits for it. The worker calls `catalog::measure`, and `finish_measure` applies sizes by path and clears Record choice (`src/palette.rs`: `analyse`, `src/main.rs`).
 
 **Selection, ticks and estimates:**
 1. `leaf_view` adds app-level protection to each scanned leaf: `prefs::ALWAYS` roots (ignore Unlock), session unlocks in `State::unlocked`, kept roots in `Prefs::kept`, and the "changed within N h" hold from `Prefs::keep_hours` (`src/main.rs`).
@@ -231,7 +231,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 
 **Window policy:** The review panel, Settings and notch are not visible together: showing the panel hides notch and Settings, hiding it shows the notch, and `settings::open` conceals the panel and hides the notch (`src/status.rs`, `src/settings.rs`). Escape closes Actions first, then the panel (`src/palette.rs`: `on_key`). The notch hides itself when the work area is too small and returns only from that state (`src/notch.rs`: `Visibility`).
 
-**Concurrency rule:** System commands (`ps`, `diskutil`, `vm_stat`, scans, agent CLIs, update helper) run on worker threads, never in `poll` (`src/main.rs`, `src/update.rs`, `src/agent.rs`). Known exception: Analyse remeasures on the UI thread (`src/palette.rs`).
+**Concurrency rule:** System commands (`ps`, `diskutil`, `vm_stat`, scans, agent CLIs, update helper) run on worker threads, never in `poll` (`src/main.rs`, `src/update.rs`, `src/agent.rs`). Measure folder again also runs on the scan worker (`src/main.rs`: `ScanRequest`).
 
 ---
 
