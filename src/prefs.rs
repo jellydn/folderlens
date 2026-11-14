@@ -126,18 +126,16 @@ pub fn user_path() -> PathBuf {
     home.join("Library/Application Support/FolderLens/settings.txt")
 }
 
+#[cfg(test)]
 pub fn path_for_state() -> PathBuf {
-    #[cfg(test)]
-    {
-        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return std::env::temp_dir()
-            .join(format!("folderlens-prefs-{}-{n}.txt", std::process::id()));
-    }
-    #[cfg(not(test))]
-    {
-        user_path()
-    }
+    static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::env::temp_dir().join(format!("folderlens-prefs-{}-{n}.txt", std::process::id()))
+}
+
+#[cfg(not(test))]
+pub fn path_for_state() -> PathBuf {
+    user_path()
 }
 
 pub fn load_from(path: &Path) -> Prefs {
@@ -368,31 +366,31 @@ pub fn always_name(path: &str) -> Option<&'static str> {
         .find_map(|(name, root)| path_under(path, &expand_home(root)).then_some(*name))
 }
 
-/// The folder picker. Cancel and a test run add nothing.
+/// Tests never open the folder picker, so they add nothing.
+#[cfg(test)]
 pub fn choose_folder() -> Option<String> {
-    #[cfg(test)]
-    {
+    None
+}
+
+/// The folder picker. Cancel adds nothing.
+#[cfg(not(test))]
+pub fn choose_folder() -> Option<String> {
+    let output = Command::new("osascript")
+        .args([
+            "-e",
+            "POSIX path of (choose folder with prompt \"Protected folder\")",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
         return None;
     }
-    #[cfg(not(test))]
-    {
-        let output = Command::new("osascript")
-            .args([
-                "-e",
-                "POSIX path of (choose folder with prompt \"Protected folder\")",
-            ])
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
-        let path = String::from_utf8(output.stdout).ok()?;
-        let path = path.trim().trim_end_matches('/').to_string();
-        if path.is_empty() {
-            None
-        } else {
-            Some(path)
-        }
+    let path = String::from_utf8(output.stdout).ok()?;
+    let path = path.trim().trim_end_matches('/').to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path)
     }
 }
 

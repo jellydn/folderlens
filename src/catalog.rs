@@ -183,9 +183,7 @@ pub fn fixture() -> Catalog {
             "Backups and archives",
             true,
             0,
-            None,
-            None,
-            None,
+            [None, None, None],
             27_000_000_000,
         ),
         leaf(
@@ -193,9 +191,7 @@ pub fn fixture() -> Catalog {
             "frontend-target",
             false,
             0,
-            None,
-            Some(24),
-            Some(1),
+            [None, Some(24), Some(1)],
             17_480_000_000,
         ),
         leaf(
@@ -203,9 +199,7 @@ pub fn fixture() -> Catalog {
             "Logs and crash reports",
             false,
             500,
-            Some(168),
-            Some(24),
-            Some(1),
+            [Some(168), Some(24), Some(1)],
             5_700_000_000,
         ),
         leaf(
@@ -213,9 +207,7 @@ pub fn fixture() -> Catalog {
             "mise node 26.13.0",
             true,
             3,
-            None,
-            None,
-            None,
+            [None, None, None],
             10_830_000_000,
         ),
         leaf(
@@ -223,9 +215,7 @@ pub fn fixture() -> Catalog {
             "acx node_modules",
             false,
             2,
-            None,
-            Some(24),
-            Some(1),
+            [None, Some(24), Some(1)],
             3_300_000_000,
         ),
         leaf(
@@ -233,9 +223,7 @@ pub fn fixture() -> Catalog {
             "smolvm",
             true,
             1,
-            None,
-            None,
-            None,
+            [None, None, None],
             17_000_000_000,
         ),
         leaf(
@@ -243,9 +231,7 @@ pub fn fixture() -> Catalog {
             "Spotify cache",
             false,
             48,
-            None,
-            Some(24),
-            Some(1),
+            [None, Some(24), Some(1)],
             709_000_000,
         ),
     ];
@@ -274,9 +260,7 @@ fn leaf(
     name: &str,
     locked: bool,
     idle_h: u32,
-    careful: Option<u32>,
-    balanced: Option<u32>,
-    aggressive: Option<u32>,
+    [careful, balanced, aggressive]: [Option<u32>; 3],
     bytes: u64,
 ) -> Leaf {
     Leaf {

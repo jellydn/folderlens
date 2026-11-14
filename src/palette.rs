@@ -135,11 +135,14 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
             s.query.pop();
             s.highlight = 0;
         }
-        Key::Text(typed) if !ev.mods.cmd && !ev.mods.ctrl => {
-            if typed.chars().all(|c| !c.is_control()) && s.query.len() < 40 {
-                s.query.push_str(typed);
-                s.highlight = 0;
-            }
+        Key::Text(typed)
+            if !ev.mods.cmd
+                && !ev.mods.ctrl
+                && typed.chars().all(|c| !c.is_control())
+                && s.query.len() < 40 =>
+        {
+            s.query.push_str(typed);
+            s.highlight = 0;
         }
         _ => {}
     }
