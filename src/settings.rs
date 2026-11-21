@@ -561,16 +561,21 @@ fn general(state: &Settings) -> El {
                     &icons::KEYBOARD,
                     "Show shortcut hints",
                     "",
-                    switch("hint-toggle", p.shortcut_hints, |s| {
-                        s.prefs.shortcut_hints = !s.prefs.shortcut_hints;
-                        persist(s);
-                    }),
+                    switch(
+                        "hint-toggle",
+                        "Show shortcut hints",
+                        p.shortcut_hints,
+                        |s| {
+                            s.prefs.shortcut_hints = !s.prefs.shortcut_hints;
+                            persist(s);
+                        },
+                    ),
                 ),
                 setting(
                     &icons::MEMORY,
                     "Memory usage",
                     READINGS_NOTE,
-                    switch("gauge-memory", p.gauge_memory, |s| {
+                    switch("gauge-memory", "Memory usage", p.gauge_memory, |s| {
                         s.prefs.gauge_memory = !s.prefs.gauge_memory;
                         persist(s);
                     }),
@@ -579,7 +584,7 @@ fn general(state: &Settings) -> El {
                     &icons::CPU,
                     "CPU usage",
                     "",
-                    switch("gauge-cpu", p.gauge_cpu, |s| {
+                    switch("gauge-cpu", "CPU usage", p.gauge_cpu, |s| {
                         s.prefs.gauge_cpu = !s.prefs.gauge_cpu;
                         persist(s);
                     }),
@@ -709,10 +714,15 @@ fn agent(state: &Settings) -> El {
                 &icons::PLAY,
                 "Allow manual agent requests",
                 "Manual requests only. Provider costs and data policies apply.",
-                switch("allow-start", p.allow_start, |s| {
-                    s.prefs.allow_start = !s.prefs.allow_start;
-                    persist(s);
-                }),
+                switch(
+                    "allow-start",
+                    "Allow manual agent requests",
+                    p.allow_start,
+                    |s| {
+                        s.prefs.allow_start = !s.prefs.allow_start;
+                        persist(s);
+                    },
+                ),
             ),
         ],
         Some(vec![setting(
@@ -1010,10 +1020,15 @@ fn access(state: &Settings) -> El {
                 &icons::SHARE,
                 "Share eligible selected paths",
                 FROZEN_SCOPE_NOTE,
-                switch("send-paths", state.prefs.send_paths, |s| {
-                    s.prefs.send_paths = !s.prefs.send_paths;
-                    persist(s);
-                }),
+                switch(
+                    "send-paths",
+                    "Share eligible selected paths",
+                    state.prefs.send_paths,
+                    |s| {
+                        s.prefs.send_paths = !s.prefs.send_paths;
+                        persist(s);
+                    },
+                ),
             ),
             setting(
                 &icons::DISK,
@@ -1261,8 +1276,23 @@ mod tests {
                 assert!(rt.presented("page-title").is_some());
             }
             assert!(!path.exists(), "navigation does not change saved settings");
+            let label = |rt: &Runtime<Settings>, key: &str| {
+                rt.elements()
+                    .into_iter()
+                    .find(|el| el.key.as_deref() == Some(key))
+                    .and_then(|el| el.label)
+            };
+            assert_eq!(
+                label(&rt, "allow-start").as_deref(),
+                Some("Allow manual agent requests"),
+                "a switch is named by its setting"
+            );
             press(&mut rt, "allow-start", size);
             press(&mut rt, "nav-access", size);
+            assert_eq!(
+                label(&rt, "send-paths").as_deref(),
+                Some("Share eligible selected paths")
+            );
             for key in ["send-paths", "disk-access"] {
                 assert!(rt.presented(key).is_some(), "{size:?}: {key}");
             }

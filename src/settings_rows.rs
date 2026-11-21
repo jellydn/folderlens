@@ -190,11 +190,17 @@ pub fn list(anchor: &str, options: Options) -> El {
     )
 }
 
-/// An on/off switch.
-pub fn switch(key: &'static str, on: bool, press: impl Fn(&mut Settings) + 'static) -> El {
+/// An on/off switch, named by its setting's `title`.
+pub fn switch(
+    key: &'static str,
+    title: &str,
+    on: bool,
+    press: impl Fn(&mut Settings) + 'static,
+) -> El {
     el().key(key)
         .role("switch")
-        .a11y_value(if on { "on" } else { "off" })
+        .label(title.to_string())
+        .checked(on)
         .focusable(true)
         .focus_ring(2.0, 2.0, paint(BLUE))
         .size(36.0, 22.0)

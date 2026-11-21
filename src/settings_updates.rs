@@ -14,28 +14,43 @@ pub(super) fn rows(state: &Settings) -> Vec<El> {
             &icons::REFRESH,
             "Check for updates daily",
             "",
-            switch("update-checks", p.update_checks, |s| {
-                s.prefs.update_checks = !s.prefs.update_checks;
-                persist(s);
-            }),
+            switch(
+                "update-checks",
+                "Check for updates daily",
+                p.update_checks,
+                |s| {
+                    s.prefs.update_checks = !s.prefs.update_checks;
+                    persist(s);
+                },
+            ),
         ),
         setting(
             &icons::DOWNLOAD,
             "Download updates automatically",
             "Needs daily checks. Never installs on quit.",
-            switch("update-downloads", p.update_downloads, |s| {
-                s.prefs.update_downloads = !s.prefs.update_downloads;
-                persist(s);
-            }),
+            switch(
+                "update-downloads",
+                "Download updates automatically",
+                p.update_downloads,
+                |s| {
+                    s.prefs.update_downloads = !s.prefs.update_downloads;
+                    persist(s);
+                },
+            ),
         ),
         setting(
             &icons::FLASK,
             "Include prereleases",
             "The Homebrew cask stays on stable",
-            switch("update-prereleases", p.update_prereleases, |s| {
-                s.prefs.update_prereleases = !s.prefs.update_prereleases;
-                persist(s);
-            }),
+            switch(
+                "update-prereleases",
+                "Include prereleases",
+                p.update_prereleases,
+                |s| {
+                    s.prefs.update_prereleases = !s.prefs.update_prereleases;
+                    persist(s);
+                },
+            ),
         ),
     ]
 }
