@@ -14,8 +14,10 @@ One binary crate, `folderlens` 0.3.7 (`Cargo.toml`), plus one Swift helper (`nat
 │   ├── scan.rs           # Built-in RULES, folder traversal, allocated-size measure, sizes.tsv cache
 │   ├── palette.rs        # Actions list, keyboard handling, Ask prompt/access/start
 │   ├── prefs.rs          # settings.txt, ALWAYS roots, agent detection, run folders, launchers
-│   ├── settings.rs       # Settings window (General, Agent, Keep safe, Access); includes settings_updates.rs
-│   ├── settings_updates.rs # Settings → Updates page
+│   ├── settings.rs       # Settings window: sidebar, General/Agent/Keep safe/Privacy pages, sub-pages
+│   ├── settings_rows.rs  # Hex-style card, row, value ›, dropdown ⌄, switch, Advanced fold
+│   ├── settings_icons.rs # Settings stroke icons
+│   ├── settings_updates.rs # General › Advanced update switches and notes
 │   ├── status.rs         # AppKit status item, show/hide, display list, notch placement
 │   ├── notch.rs          # Compact/expanded notch window
 │   ├── agent.rs          # Job/Session lifecycle, ACP and Pi RPC; includes broker.rs, provider.rs

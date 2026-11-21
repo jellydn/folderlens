@@ -1750,7 +1750,7 @@ fn main() {
     let settings = WindowSpec::new("settings", settings::spec()).options(WindowOptions {
         visible: false,
         resizable: true,
-        min_size: Some((360.0, 420.0)),
+        min_size: Some((640.0, 460.0)),
         ..WindowOptions::default()
     });
     let panel = app.handle();

@@ -29,7 +29,7 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 
 1. Expand the notch and choose **Review / AI**, or click the menu-bar archivebox. Choose a preset or eligible folders; review reasons and exclusions.
 2. **Record choice** records without deleting. Selection changes clear the record.
-3. For **Ask Agent**, configure **Settings → Agent / Access**. Requests are manual; provider costs and data policies apply.
+3. For **Ask Agent**, configure **Settings → Agent** and **Settings → Privacy**. Requests are manual; provider costs and data policies apply.
 4. With no agent set up, or after a failed review, Agent help shows **Local summary · no AI**: item count, total, top kinds, largest folders and the estimate. It is computed on this Mac from the current selection, sends nothing and changes nothing.
 
 ### Notch and local checks
@@ -117,13 +117,26 @@ Intervals never launch AI or cleanup. These controls are available starting with
 
 These current Rune renders use example Agent states, not real model turns or native popup verification. [Full gallery](docs/guide.md#feature-gallery-beta5) covers review/recording, folder actions, General, provider/model Apply, selected-path access, protection, Agent progress/Cancel, errors/Retry, saved chat and Updates. Filled buttons mark the main action; secondary actions are outlined, and removing an exclusion uses a warning style. Record choice never deletes.
 
-| Agent setup and model | Updates and manual-install policy |
+| Agent setup and model | Updates (General › Advanced) |
 | --- | --- |
 | ![Provider, model and explicit permissions](shots/quick-agent-settings.png) | ![Update controls and signing limits](shots/quick-updates.png) |
 
+## Settings
+
+Settings has a sidebar with four pages, after [Hex](https://github.com/anomalyco/hex)'s settings. Each page is one card of rows; **Advanced ▸** below the card holds rarer settings.
+
+| Page | Rows | Advanced |
+| --- | --- | --- |
+| General | Theme, Notch display, Notch placement, shortcut hints, Memory and CPU readings | Update checks, automatic downloads, prereleases |
+| Agent | Agent › (detected adapters, custom executable), Model › (model ID and Apply), Allow manual agent requests | Run files |
+| Keep safe | Your exclusions ›, Exclude changes within (− h +) | Built-in exclusions (cannot be unlocked) |
+| Privacy | Share eligible selected paths, Full Disk Access | — |
+
+The sidebar footer has **What's new** (this version's release on GitHub), the version and **Check for updates**. Changes save at once, except a model ID, which saves with **Apply**.
+
 ## Updates
 
-**Settings → Updates → Check for Updates…** offers **Download → verify → Reveal in Finder**. Extract the verified ZIP, quit FolderLens, then replace the app manually. Preferences and chats are stored separately and are not removed. FolderLens never replaces or restarts the installed app; Homebrew users use `brew upgrade --cask jellydn/tap/folderlens` instead.
+**Check for updates** in the Settings sidebar footer offers **Download → verify → Reveal in Finder**. Extract the verified ZIP, quit FolderLens, then replace the app manually. Preferences and chats are stored separately and are not removed. FolderLens never replaces or restarts the installed app; Homebrew users use `brew upgrade --cask jellydn/tap/folderlens` instead.
 
 ## Limits
 

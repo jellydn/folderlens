@@ -135,7 +135,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 2. The helper reads `update_checks`, `update_downloads` and `update_prereleases` from `settings.txt`, and skips unless 24 h passed since `~/Library/Application Support/FolderLens/Updates/last-check` (`native/Updater.swift`: `Updater.check`).
 3. It pages GitHub releases for `jellydn/folderlens`, downloads `update.json` and `update.json.sig`, and verifies them with the pinned Ed25519 key (tag, channel, version, expiry) (`native/Updater.swift`: `verifiedManifest`).
 4. Homebrew installs get `brew upgrade --cask jellydn/tap/folderlens` guidance and stop. Otherwise the ZIP downloads (automatic only if `update_downloads` is on; else after a Download prompt), with a size bound, SHA/size check and quarantine.
-5. Only a manual check (Settings → Updates → Check for Updates…, `src/settings_updates.rs` → `update::check`) rechecks the ZIP and offers Reveal in Finder. Replacement is manual. `Updater.install` and `requireDirectInstallation` remain but are reached only from `selfTest` (`native/Updater.swift`).
+5. Only a manual check (Check for updates in the Settings sidebar footer, `src/settings.rs` → `update::check`) rechecks the ZIP and offers Reveal in Finder. Replacement is manual. `Updater.install` and `requireDirectInstallation` remain but are reached only from `selfTest` (`native/Updater.swift`).
 
 **State Management:**
 - `State` in `src/main.rs` holds the catalog, level, per-leaf overrides (`ticks: Vec<Option<bool>>`), open groups, `confirmed`, a `Prefs` copy, palette state, session unlocks, the note, the current `agent::Job`, scan request sender and interval flags, and the last window height.
