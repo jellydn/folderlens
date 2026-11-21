@@ -1,3 +1,18 @@
+## FolderLens 0.3.9 — Settings redesign
+
+**Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
+
+- Settings is redesigned in the style of [Hex](https://github.com/anomalyco/hex) (MIT): a sidebar with **General**, **Agent**, **Keep safe** and **Privacy**, each page one card of icon rows with a grey help line and a control on the right, and an **Advanced ▸** fold for rarer settings.
+- Theme, notch display and notch placement are dropdowns. **Agent ›**, **Model ›** and **Your exclusions ›** open sub-pages with a back link. All seven themes, including Kanagawa Lotus, apply throughout.
+- Update choices move to General › Advanced. The sidebar footer shows **What's new**, the version and **Check for updates**. Built-in exclusions move to Keep safe › Advanced.
+- **Allow manual agent requests** now shows only on Agent and **Share eligible selected paths** only on Privacy. Escape closes an open dropdown or sub-page before it hides Settings.
+- Switches and agent choices have accessible names, and the selected agent reports its state to assistive technology.
+- The Settings window opens at 820×580 and cannot shrink below 640×460. Saved settings, model validation and permission rules are unchanged.
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy, Settings tests at 820×580 and 640×460 (persistence through every dropdown, all seven theme backgrounds, keyboard reach into the theme list, a disconnected display keeping the saved choice, model Apply rejecting flags without saving, one permission switch per page, switch names, the Advanced fold), inspected headless renders of every page and sub-page, and ad-hoc arm64 DMG/ZIP packaging in CI. The live Settings window was not checked on screen.
+
+Native pointer/keyboard routing, screen-reader output, physical-notch and multi-display behavior, real AI turns/tool routing/Terminal continuation and actual manual app replacement/restart/Gatekeeper behavior remain unverified. No owner's installed app is replaced during verification. All current installations remain manual-update-only; Homebrew users update through Homebrew, whose cask can lag publication. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.8 — Background folder measuring
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
