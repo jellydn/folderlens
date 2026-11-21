@@ -800,6 +800,8 @@ fn agent_row(state: &Settings, agent: &Agent) -> El {
     setting(&icons::TERMINAL, agent.name, &bin, radio(on))
         .key(format!("agent-{}", agent.id))
         .role("radio")
+        .label(agent.name)
+        .checked(on)
         .focusable(true)
         .on_press(move |state: &mut Settings| {
             state.prefs.agent_id = id.clone();
