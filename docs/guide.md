@@ -14,7 +14,7 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 
 <a name="quick-review-beta4-preview"></a>
 
-## Quick review (0.3.8)
+## Quick review (0.3.9)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
 
@@ -148,19 +148,19 @@ All current images below are headless Rune GPU renders. Folder examples and Agen
 
 ![Recorded choice, no deletion](../shots/review-receipt.png)
 
-Folder actions show the target and its reason. **Measure folder again** (⌘R) runs on the scan worker: the status shows "Measuring…", new sizes replace the estimates when it finishes, and Record choice clears. There is no queue: while a scan runs, it asks you to measure again after the scan. Ask Agent still uses the eligible selection, not the action target. Protected settings explain user exclusions, recent-change holds and built-in exclusions separately; their rules are unchanged.
+Folder actions show the target and its reason. **Measure folder again** (⌘R) runs on the scan worker: the status shows "Measuring…", new sizes replace the estimates when it finishes, and Record choice clears. There is no queue: while a scan runs, it asks you to measure again after the scan. Ask Agent still uses the eligible selection, not the action target. Keep safe settings explain user exclusions, recent-change holds and built-in exclusions separately; their rules are unchanged.
 
 ![Folder and review actions](../shots/review-actions.png)
 
 ![Exclusion rules, example retained folder](../shots/exclusion-rules.png)
 
-Settings uses General, Agent, Keep safe, Access and Updates tabs. Agent shows the configured executable, per-provider model and explicit request/path-sharing permissions. **Apply model** stays visible while the page scrolls; switches save immediately. **Change agent / advanced setup** reveals detected commands, the custom executable and saved-file details. Access retains the same permission switches and system-access information. Detection does not verify login, model access or a working native session.
+Settings has a sidebar with General, Agent, Keep safe and Privacy pages; each is one card of rows with an **Advanced ▸** fold. Agent shows the configured executable, the per-provider model and the agent-start permission. **Agent ›** opens detected commands and the custom executable; **Model ›** opens the model ID with **Apply**. Switches save immediately. Privacy holds path sharing and Full Disk Access. Update choices are under General › Advanced, and **Check for updates** is in the sidebar footer. Detection does not verify login, model access or a working native session.
 
 The fixed **Agent** entry scrolls to Ask Agent or the current review's progress, Cancel and result. **Agent setup** opens provider configuration. **Access and limits** expands the configured provider/model and safety limits. **Run files in Finder** opens an existing request's folder only when clicked. **Continue saved chat in Terminal** appears only after a successful review; a running or failed request has no completed session to continue. These controls do not change the selected-folder broker or provider safety rules.
 
 ![Quick review Agent settings](../shots/quick-agent-settings.png)
 
-| General readings | Selected-folder access |
+| General | Privacy |
 | --- | --- |
 | ![General settings](../shots/quick-general.png) | ![Manual requests, selected paths and system access](../shots/quick-access.png) |
 
@@ -202,7 +202,7 @@ Ask Agent runs the configured CLI on a background thread. Grok, Antigravity, Git
 
 When no agent is chosen or agent-start permission is off, or the last review failed, Agent help also shows **Local summary · no AI** for a nonempty selection: item count and total, the top three kinds and largest folders by estimated size, and the estimate. It is computed locally from the current ticks; it makes no request and does not change ticks, estimates or Record choice. A ready, running or successful agent review hides it.
 
-In **Settings → Agent**, enter a model ID and select **Apply**. FolderLens remembers a separate choice for each agent (and each custom executable). Switching agents restores that agent's saved model. Grok, Antigravity, Copilot and Pi receive provider-supported `--model` arguments. OpenCode receives private per-run configuration and an ACP model selection, not a nonexistent top-level model flag. FolderLens checks advertised model access before prompting; an unavailable explicit model fails instead of silently choosing another model. Blank keeps the CLI default, except Copilot uses `auto` and OpenCode requires an explicit model.
+In **Settings → Agent → Model**, enter a model ID and select **Apply**. FolderLens remembers a separate choice for each agent (and each custom executable). Switching agents restores that agent's saved model. Grok, Antigravity, Copilot and Pi receive provider-supported `--model` arguments. OpenCode receives private per-run configuration and an ACP model selection, not a nonexistent top-level model flag. FolderLens checks advertised model access before prompting; an unavailable explicit model fails instead of silently choosing another model. Blank keeps the CLI default, except Copilot uses `auto` and OpenCode requires an explicit model.
 
 | Agent | Interface and model example | Access and cost limits |
 | --- | --- | --- |
@@ -225,9 +225,9 @@ Agent-start permission still applies. Requests remain manual; there are no autom
 
 ## Updates
 
-Settings → Updates checks GitHub releases daily while the bundled app runs. Stable releases are the default; **Include prereleases** is opt-in. **Download automatically** is off by default and requires daily checks to be enabled. Manual checks remain available. Updates send only an app/version request to GitHub, never scan results, selected paths, saved chats or agent credentials.
+Settings → General → Advanced checks GitHub releases daily while the bundled app runs. Stable releases are the default; **Include prereleases** is opt-in. **Download automatically** is off by default and requires daily checks to be enabled. Manual checks remain available. Updates send only an app/version request to GitHub, never scan results, selected paths, saved chats or agent credentials.
 
-In 0.3.3, choose **Check for Updates… → Download → Reveal in Finder**. FolderLens verifies signed `update.json` metadata against its pinned, dedicated Ed25519 public key, then verifies the ZIP's signed size and SHA-256 before offering the Finder action. Expired metadata, missing/wrong signatures, wrong channel/version and corrupted downloads fail closed. Extract the ZIP, finish or cancel agent reviews, quit FolderLens, then replace the app manually. A download or quitting never installs anything. App settings and chats are stored separately and are not removed. Automatic downloads never open Finder; a later manual check can reveal the already-verified archive.
+Choose **Check for updates** (Settings sidebar footer) **→ Download → Reveal in Finder**. FolderLens verifies signed `update.json` metadata against its pinned, dedicated Ed25519 public key, then verifies the ZIP's signed size and SHA-256 before offering the Finder action. Expired metadata, missing/wrong signatures, wrong channel/version and corrupted downloads fail closed. Extract the ZIP, finish or cancel agent reviews, quit FolderLens, then replace the app manually. A download or quitting never installs anything. App settings and chats are stored separately and are not removed. Automatic downloads never open Finder; a later manual check can reveal the already-verified archive.
 
 Detected Homebrew installations are not self-replaced: use `brew upgrade --cask jellydn/tap/folderlens`. The stable tap does not follow prereleases. Source/debug binaries do not run an updater; use the bundled app.
 
@@ -248,7 +248,7 @@ Update metadata expires one year after signing. Publish a new release or explici
 
 ## Install
 
-For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.8 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.8). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
+For Apple Silicon Macs running macOS 14 or later, get the DMG or ZIP containing `FolderLens.app` from the [0.3.9 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.3.9). Check `SHA256SUMS`. Existing Shelf releases and assets are not replaced.
 
 Or install the stable release through Homebrew. The `folderlens` cask installs `FolderLens.app` starting with 0.2.1. It checks for new stable versions every six hours and can lag behind publication; run `brew update` first:
 
