@@ -7,7 +7,7 @@ use rune::tok::{type_, TextStyle};
 use rune::{col, el, icon, row, text, El, Icon, Tx};
 
 use super::icons;
-use super::Settings;
+use super::{List, Settings};
 use crate::theme::{CARD, TOGGLE_OFF};
 use crate::{paint, BLUE, INK, MUTED, PANEL};
 
@@ -118,16 +118,18 @@ pub fn value_link(key: &str, shown: &str, press: impl Fn(&mut Settings) + 'stati
     })
 }
 
-/// A value that opens a dropdown list; `list` names it in [`Settings::open_list`].
-pub fn dropdown(key: &'static str, shown: &str, list: &'static str) -> El {
-    value(key, shown, &icons::CHEVRON_DOWN).on_press_tx(move |s: &mut Settings, tx: &mut Tx| {
-        tx.instant();
-        s.open_list = if s.open_list == Some(list) {
-            None
-        } else {
-            Some(list)
-        };
-    })
+/// A value that opens a dropdown list.
+pub fn dropdown(list: List, shown: &str) -> El {
+    value(list.anchor(), shown, &icons::CHEVRON_DOWN).on_press_tx(
+        move |s: &mut Settings, tx: &mut Tx| {
+            tx.instant();
+            s.open_list = if s.open_list == Some(list) {
+                None
+            } else {
+                Some(list)
+            };
+        },
+    )
 }
 
 /// Dropdown options: key, label, selected, and what choosing it does.

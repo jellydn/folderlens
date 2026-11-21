@@ -32,6 +32,24 @@ pub enum Page {
     Access,
 }
 
+/// A dropdown; its value's key is the anchor its list draws under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum List {
+    Theme,
+    Display,
+    Position,
+}
+
+impl List {
+    pub fn anchor(self) -> &'static str {
+        match self {
+            Self::Theme => "theme",
+            Self::Display => "notch-display",
+            Self::Position => "notch-position",
+        }
+    }
+}
+
 /// A value that needs its own editor opens a sub-page with a back link.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubPage {
@@ -51,8 +69,7 @@ pub struct Settings {
     pub update_note: String,
     pub sub: Option<SubPage>,
     pub advanced_open: bool,
-    /// The open dropdown: "theme", "display" or "position".
-    pub open_list: Option<&'static str>,
+    pub open_list: Option<List>,
 }
 
 pub fn spec() -> AppSpec<Settings> {
@@ -109,7 +126,7 @@ pub fn spec() -> AppSpec<Settings> {
             ("theme-open", |state| {
                 preview_displays(state);
                 state.prefs.theme = crate::theme::Theme::Lotus;
-                state.open_list = Some("theme");
+                state.open_list = Some(List::Theme);
             }),
             ("updates", |state| state.advanced_open = true),
             ("updates-preview", |state| {
@@ -510,14 +527,14 @@ fn general(state: &Settings) -> El {
             "Notch display",
             DISPLAY_MISSING_NOTE,
             WARNING,
-            dropdown("notch-display", &display_label(state), "display"),
+            dropdown(List::Display, &display_label(state)),
         )
     } else {
         setting(
             &icons::DISPLAY,
             "Notch display",
             DISPLAY_NOTE,
-            dropdown("notch-display", &display_label(state), "display"),
+            dropdown(List::Display, &display_label(state)),
         )
     };
     col()
@@ -531,14 +548,14 @@ fn general(state: &Settings) -> El {
                     &icons::THEME,
                     "Theme",
                     THEME_NOTE,
-                    dropdown("theme", p.theme.label(), "theme"),
+                    dropdown(List::Theme, p.theme.label()),
                 ),
                 display_note.key("notch-display-note"),
                 setting(
                     &icons::PLACEMENT,
                     "Notch placement",
                     PLACEMENT_NOTE,
-                    dropdown("notch-position", position, "position"),
+                    dropdown(List::Position, position),
                 ),
                 setting(
                     &icons::KEYBOARD,
@@ -581,7 +598,7 @@ fn general(state: &Settings) -> El {
 fn open_list(state: &Settings) -> El {
     let p = &state.prefs;
     let options: Options = match state.open_list {
-        Some("theme") => crate::theme::Theme::ALL
+        Some(List::Theme) => crate::theme::Theme::ALL
             .into_iter()
             .map(|theme| {
                 let press: Box<dyn Fn(&mut Settings)> = Box::new(move |s| {
@@ -596,7 +613,7 @@ fn open_list(state: &Settings) -> El {
                 )
             })
             .collect(),
-        Some("display") => {
+        Some(List::Display) => {
             let missing = display_missing(state);
             let primary = p.notch_display.is_none() || missing;
             let mut options: Options = vec![(
@@ -626,7 +643,7 @@ fn open_list(state: &Settings) -> El {
             }
             options
         }
-        Some("position") => POSITIONS
+        Some(List::Position) => POSITIONS
             .into_iter()
             .map(|(label, position)| {
                 let press: Box<dyn Fn(&mut Settings)> = Box::new(move |s| {
@@ -641,14 +658,9 @@ fn open_list(state: &Settings) -> El {
                 )
             })
             .collect(),
-        _ => return el(),
+        None => return el(),
     };
-    let anchor = match state.open_list {
-        Some("display") => "notch-display",
-        Some("position") => "notch-position",
-        _ => "theme",
-    };
-    rows::list(anchor, options)
+    rows::list(state.open_list.map_or("theme", List::anchor), options)
 }
 
 const ADAPTERS_NOTE: &str = "Adapters: Grok, Antigravity, Copilot, Pi and OpenCode 2.0.23. Other detected commands cannot run a FolderLens review; detection does not verify login, runtime dependencies, model access or native analysis.";
@@ -775,7 +787,7 @@ fn agent_row(state: &Settings, agent: &Agent) -> El {
     let id = agent.id.to_string();
     let bin = agent.bin.to_string_lossy().into_owned();
     let on = state.prefs.agent_id == agent.id;
-    setting(&icons::TERMINAL, agent.name, &bin.clone(), radio(on))
+    setting(&icons::TERMINAL, agent.name, &bin, radio(on))
         .key(format!("agent-{}", agent.id))
         .role("radio")
         .focusable(true)
@@ -918,15 +930,15 @@ fn kept(state: &Settings) -> El {
         .kept
         .iter()
         .map(|path| {
-            let path = path.clone();
+            let removed = path.clone();
             setting(
                 &icons::FOLDER,
-                &path.clone(),
+                path,
                 "",
                 button("Stop keeping", ButtonStyle::Destructive)
                     .key(format!("unkeep-{path}"))
                     .on_press(move |state: &mut Settings| {
-                        state.prefs.kept.retain(|kept| kept != &path);
+                        state.prefs.kept.retain(|kept| kept != &removed);
                         persist(state);
                     }),
             )
