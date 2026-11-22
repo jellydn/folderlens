@@ -125,7 +125,7 @@ impl Reader {
     }
 }
 
-fn opened_path(file: &File) -> Result<PathBuf, String> {
+pub(crate) fn opened_path(file: &File) -> Result<PathBuf, String> {
     let mut path = [0u8; libc::PATH_MAX as usize];
     // F_GETPATH resolves this live descriptor. Reject removed/unresolvable objects.
     if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETPATH, path.as_mut_ptr()) } == -1 {

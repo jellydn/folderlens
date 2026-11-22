@@ -59,7 +59,7 @@ Fixed on 2026-11-14 after this audit: tests that reach `agent::Job::start` use a
 **Saved context prompt invites cleanup in a continued chat:**
 - Risk: `prepare_ask` writes "Help me clean up… propose a safe cleanup. Ask for approval before deleting files" into `context.md` (`src/prefs.rs:411`). The analysis turn adds "Do not … delete anything" (`src/agent.rs:341`), but that instruction is sent only with the first prompt. **Hypothesis:** in a Terminal continuation (outside FolderLens, with native tools for Grok and Antigravity), the saved context can lead the model to propose deletion.
 - Files: `src/prefs.rs:398-422`, `src/agent.rs:341`
-- Current mitigation: Native plan/read-only flags (`src/provider.rs:79-91`). FolderLens has no delete path.
+- Current mitigation: Native plan/read-only flags (`src/provider.rs:79-91`). FolderLens has no delete path; Move to Trash needs a user press on its own sheet and no agent can start it.
 - Recommendations: Owner decision. Make the saved context read-only in intent, the same as the analysis prompt. This changes the prompt contract, so update ADR 0001 too.
 
 **Diagnostics redaction:**
@@ -144,7 +144,7 @@ Fixed on 2026-11-14 after this audit: tests that reach `agent::Job::start` use a
 
 ## Missing Critical Features
 
-**No delete or cleanup engine:** This is intentional (`AGENTS.md`). Record choice only sets `confirmed` (`src/main.rs:1352-1356`). Do not add deletion as an audit fix.
+**No delete or cleanup engine:** This is intentional (`AGENTS.md`). Move to Trash (ADR 4) moves only a confirmed selection to the Trash. Record choice only sets `confirmed` (`src/main.rs:1352-1356`). Do not add deletion as an audit fix.
 
 **Developer ID signing and notarization:** Not done. No Apple Developer account is available (ADR 0002). `scripts/bundle.sh:2` and `:35` sign ad hoc only.
 

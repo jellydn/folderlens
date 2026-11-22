@@ -3,7 +3,7 @@
 Date: 2026-11-22
 
 ## Status
-Accepted by the owner on 2026-11-22. Not implemented yet. Until the Move to Trash action ships, FolderLens has no path that removes or moves files. This ADR replaces the "never deletes" rule in [ADR 1](0001-scoped-agent-sessions.md) and AGENTS.md only for the action below. Record choice is unchanged and still never deletes.
+Accepted by the owner on 2026-11-22. Implemented in `src/trash.rs` and the review footer's **Move to Trash…** sheet. It is the only path in FolderLens that moves files. This ADR replaces the "never deletes" rule in [ADR 1](0001-scoped-agent-sessions.md) and AGENTS.md only for the action below. Record choice is unchanged and still never deletes.
 
 ## Context
 Users review a selection, may ask an agent to explain it, and then want to act on it without leaving FolderLens. Until now FolderLens recorded the choice and stopped. Permanent deletion cannot be undone, the AI can be wrong or manipulated by file names, and scans can be out of date when the user acts.

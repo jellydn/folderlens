@@ -1,4 +1,4 @@
-//! The action list for one row. The window shrinks to the list. Record choice still deletes nothing.
+//! The action list for one row. The window shrinks to the list. Record choice moves nothing.
 
 use rune::tok::{type_, TextStyle};
 use rune::{col, row, text, El, Key, KeyEvent, ScrollSpec, Transition, Tx};
@@ -81,6 +81,13 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     if ev.is_command('q') {
         _tx.quit();
         return true;
+    }
+    // The Move to Trash sheet: Escape closes it; Return never confirms it.
+    if s.trash.is_some() {
+        if matches!(ev.key, Key::Escape) {
+            s.trash = None;
+        }
+        return matches!(ev.key, Key::Escape | Key::Enter);
     }
     if !s.palette {
         if matches!(ev.key, Key::Escape) {

@@ -43,7 +43,7 @@ Source: `main` at `0c68acb`, FolderLens 0.3.7 (`Cargo.toml`). Accepted boundarie
 - Folder picker: `osascript` "choose folder" (disabled under `cfg(test)`) (`src/prefs.rs` `choose_folder`).
 - `open` for: Full Disk Access pane `x-apple.systempreferences:…Privacy_AllFiles` (`src/prefs.rs`), reveal a selected item `open -R` (`src/palette.rs`), the run folder in Finder (`src/main.rs`), and the saved chat `Ask.command` in Terminal after a successful review with the same agent and model (`src/agent.rs` `open_chat`).
 - AppKit status item, event monitors and screens via `objc_msgSend` and `block2` (`src/status.rs`).
-- No delete or cleanup command exists. Record choice only records a selection in memory (`AGENTS.md`).
+- No delete or cleanup command exists. Record choice only records a selection in memory. Move to Trash calls `NSFileManager trashItemAtURL` (`src/trash.rs`) only after the user confirms its sheet (ADR 4).
 
 ## Data Storage
 

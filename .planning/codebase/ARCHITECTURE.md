@@ -13,7 +13,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 **Overall:** One Rust binary crate (`Cargo.toml`, package `folderlens`) that runs a state-driven Rune GPU UI as a macOS accessory app. It has three Rune windows (review panel, Settings, notch), background worker threads, an isolated agent job with an app-owned read broker, and a separate Swift update helper (`native/Updater.swift`).
 
 **Key Characteristics:**
-- Review only. Presets, manual overrides and protections derive the ticks (`src/main.rs`: `is_ticked`, `leaf_view`). Record choice sets the in-memory flag `State::confirmed` and never deletes or changes the catalog (`src/main.rs`: `record_choice`). No delete or cleanup path exists in `src/` yet; [ADR 4](../../docs/adr/0004-move-to-trash-with-confirmation.md) (accepted, not implemented) allows only a confirmed Move to Trash.
+- Review only. Presets, manual overrides and protections derive the ticks (`src/main.rs`: `is_ticked`, `leaf_view`). Record choice sets the in-memory flag `State::confirmed` and never deletes or changes the catalog (`src/main.rs`: `record_choice`). The only file-moving path is Move to Trash ([ADR 4](../../docs/adr/0004-move-to-trash-with-confirmation.md)): the footer's **Move to Trash…** opens `trash_sheet` with `trash_items` (eligible ticked leaves only); its destructive button calls `move_to_trash`, which runs `trash::run` with `still_eligible` and the `O_NOFOLLOW`/`F_GETPATH` recheck, then `trash::to_trash` (`NSFileManager trashItemAtURL`). It stops at the first refused move, reports in `State::trash_report` and starts a rescan.
 - Slow work stays off the UI thread. A scan worker and a gauge worker send results through Rune's UI queue with `AppHandle::update` / `update_if` (`src/main.rs`: `start_workers`). The update helper runs on its own thread (`src/update.rs`). `poll` only reads preferences, dispatches due scan requests and polls the agent job (`src/main.rs`: `poll`).
 - Saved context and live read authority are separate. Each Ask writes a new private run folder (`src/prefs.rs`: `prepare_run`). Live reads go through one broker whose scope is the frozen original selection ∩ the current eligible selection (`src/broker.rs`: `Reader::allows`). See ADR 1.
 - The panel stays useful without AI. Scans, intervals, presets, ticks, estimates and Record choice need no agent, and `local_summary` shows a non-AI reading when no agent can run or the last review failed (`src/main.rs`; ADR 3).
@@ -109,7 +109,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 
 **Record choice:**
 1. The footer button `confirm` is disabled when nothing is ticked (`src/main.rs`: `record_choice`).
-2. A press sets `State::confirmed` to true only if at least one leaf is ticked. Nothing is written to disk and the catalog does not change; the footer says "Nothing deleted · in memory only".
+2. A press sets `State::confirmed` to true only if at least one leaf is ticked. Nothing is written to disk and the catalog does not change; the footer says "Record choice moves nothing".
 3. Any change to ticks, level, protections, measurement, a rescan, or non-appearance preferences clears it (`src/main.rs`: `poll`, `finish_scan`, `apply_level`, `toggle_leaf`; `src/palette.rs`). Theme and notch-display changes keep it. Tests `a_locked_row_stays_unticked_and_confirm_deletes_nothing` and `quick_review_keeps_recording_visible_and_non_destructive` assert the catalog is unchanged (`src/main.rs`).
 
 **Ask Agent run (ADR 1):**
@@ -128,7 +128,7 @@ This is the start of the codebase map for FolderLens 0.3.7 (`Cargo.toml`). Other
 
 **Local summary (no AI, ADR 3):**
 1. `local_summary` renders when `agent_bin` is empty or `allow_start` is off, or when the last job ended in `Err` (`src/main.rs`).
-2. With a nonempty selection it shows the item count and total, the top three groups and the three largest folders by estimated size, and "review only, not reclaimed. FolderLens deletes nothing." It reads `is_ticked` and catalog sizes only; it starts no process and writes no file.
+2. With a nonempty selection it shows the item count and total, the top three groups and the three largest folders by estimated size, and "review only, not reclaimed. Nothing moves until you confirm Move to Trash." It reads `is_ticked` and catalog sizes only; it starts no process and writes no file.
 
 **Updates (ADR 2):**
 1. On a live (not headless) start, `update::start` runs `FolderLensUpdater --automatic <bundle> <settings.txt> <pid>` every hour on a thread (`src/update.rs`).
