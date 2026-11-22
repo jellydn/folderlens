@@ -70,7 +70,7 @@ pub fn fit(s: &mut State, tx: &mut Tx) {
 
 /// The full action list, before a search filter or the Select submenu.
 pub fn open_height() -> f32 {
-    let n = 10.0;
+    let n = 11.0;
     let rules = 2.0;
     let gaps = (n + rules - 1.0) * 2.0;
     let list = 12.0 + n * 32.0 + rules * 9.0 + gaps;
@@ -315,6 +315,12 @@ fn action_rows(s: &State) -> Vec<Row> {
         item("analyse", "Measure folder again", "⌘R", path),
         item("ask", "Ask Agent about eligible selection", "⌘J", true),
         item(
+            "sort",
+            "Sort selection with AI (safe / review / keep)",
+            "",
+            true,
+        ),
+        item(
             "pause",
             if s.scans_running {
                 "Pause interval scans"
@@ -409,6 +415,7 @@ pub fn run(s: &mut State, id: &str) {
         }
         "analyse" => analyse(s),
         "ask" => ask(s),
+        "sort" => sort(s),
         "pause" => {
             super::toggle_scans(s);
             close(s);
@@ -538,6 +545,36 @@ pub fn ask_access(s: &State) -> crate::agent::Access {
 }
 
 pub fn ask(s: &mut State) {
+    start(s, false);
+}
+
+/// Sorts the eligible selection into safe / review / keep. Only providers without tools can
+/// sort: Local AI and private Pi or OpenCode runs.
+pub fn sort(s: &mut State) {
+    start(s, true);
+}
+
+/// The selected items as a sort task: names, or full paths with path sharing on.
+fn sort_task(s: &State) -> crate::agent::Task {
+    let selected: Vec<_> = (0..s.catalog.leaves.len())
+        .filter(|&index| super::is_ticked(s, index))
+        .map(|index| leaf_view(s, index))
+        .collect();
+    let items = crate::triage::items(selected.iter().map(|leaf| {
+        let name = if s.prefs.send_paths {
+            leaf.path.as_str()
+        } else {
+            leaf.name.as_str()
+        };
+        (name, leaf.size_label.as_str(), leaf.detail.as_str())
+    }));
+    let paths = selected.iter().map(|leaf| leaf.path.clone()).collect();
+    crate::agent::Task::Sort { items, paths }
+}
+
+/// Ask or sort, after the same checks: one job at a time, adapter not turned off, agent and
+/// selection ready, and consent for this provider and model before anything is sent.
+pub fn start(s: &mut State, sort: bool) {
     if s.agent.as_ref().is_some_and(|job| job.result.is_none()) {
         s.note = "An agent review is already running.".into();
         close(s);
@@ -548,6 +585,11 @@ pub fn ask(s: &mut State) {
         close(s);
         return;
     }
+    if sort && !s.prefs.is_local() && !s.prefs.private_run() {
+        s.note = "Sorting needs Local AI, or Pi or OpenCode with Private runs on. Choose one in Settings › Agent.".into();
+        close(s);
+        return;
+    }
     match ask_prompt(s) {
         // An executable without an adapter fails visibly below; nothing is sent, so no question.
         Ok(_)
@@ -555,13 +597,19 @@ pub fn ask(s: &mut State) {
                 && !s.prefs.has_consent() =>
         {
             s.consent_open = true;
+            s.sort_pending = sort;
         }
         Ok(prompt) => {
             let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
+            let task = if sort {
+                sort_task(s)
+            } else {
+                crate::agent::Task::Review(prompt.clone())
+            };
             let job = if s.prefs.is_local() {
-                crate::agent::Job::start_local(&s.prefs, &prompt)
+                crate::agent::Job::start_local(&s.prefs, task)
             } else if s.prefs.private_run() {
-                crate::agent::Job::start_private(&s.prefs, &s.prefs_path, who, &prompt)
+                crate::agent::Job::start_private(&s.prefs, &s.prefs_path, who, task)
             } else {
                 match crate::agent::Job::start(
                     &s.prefs.agent_bin,

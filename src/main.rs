@@ -20,6 +20,7 @@ mod prefs;
 mod settings;
 mod status;
 mod theme;
+mod triage;
 mod update;
 
 use std::time::{Duration, Instant};
@@ -71,6 +72,10 @@ struct State {
     consent_open: bool,
     /// The quick provider and model list in Agent help is open.
     switch_open: bool,
+    /// The open consent question was asked for a sort, so Allow sorts.
+    sort_pending: bool,
+    /// Advisory AI labels by path (ADR 5). Never ticks; cleared on a rescan.
+    triage: triage::Labels,
 }
 
 /// Work for the scan worker thread.
@@ -116,6 +121,8 @@ fn state_from(catalog: Catalog) -> State {
         window_h: palette::TRAY_H,
         consent_open: false,
         switch_open: false,
+        sort_pending: false,
+        triage: triage::Labels::new(),
     }
 }
 
@@ -313,6 +320,7 @@ fn finish_scan(s: &mut State, catalog: Catalog, now: Instant) {
     s.catalog = catalog;
     s.confirmed = false;
     s.note.clear();
+    s.triage.clear();
     if let Some(job) = &s.agent {
         job.set_access(palette::ask_access(s));
     }
@@ -369,6 +377,9 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     }
     if let Some(job) = &mut s.agent {
         changed |= job.poll();
+        if let Some(labels) = triage::finish(job) {
+            s.triage = labels;
+        }
     }
     notch::sync(s);
     changed
@@ -826,6 +837,10 @@ fn selection_reason(s: &State, index: usize) -> String {
     let leaf = leaf_view(s, index);
     if !catalog::can_tick(&leaf) {
         return format!("Excluded · {}", leaf.detail);
+    }
+    // Shown only on eligible rows: a protected row keeps FolderLens's verdict above.
+    if let Some((label, reason)) = s.triage.get(&leaf.path) {
+        return format!("AI: {} · {reason}", label.as_str());
     }
     if let Some(on) = s.ticks[index] {
         return if on {
@@ -1382,7 +1397,7 @@ fn consent_card(s: &State) -> El {
                             state.prefs.consent.insert(state.prefs.consent_key());
                             prefs::save_to(&state.prefs_path, &state.prefs);
                             state.consent_open = false;
-                            palette::ask(state);
+                            palette::start(state, state.sort_pending);
                         }),
                 )
                 .child(
@@ -1774,7 +1789,7 @@ fn launch_size() -> (f32, f32) {
 }
 
 fn main() {
-    if let Some(code) = agent::reader_helper() {
+    if let Some(code) = agent::reader_helper().or_else(triage::eval_cli) {
         std::process::exit(code);
     }
     let size = launch_size();
@@ -1787,6 +1802,28 @@ fn main() {
             ("quick-switch-example", |s: &mut State| {
                 local_preview(s);
                 s.switch_open = true;
+            }),
+            ("triage-example", |s: &mut State| {
+                apply_level(s, Level::Balanced);
+                let picks = [
+                    (triage::Label::Safe, "App cache; rebuilt on launch"),
+                    (
+                        triage::Label::Review,
+                        "The name alone does not show what is inside",
+                    ),
+                    (triage::Label::Keep, "Looks like project work"),
+                ];
+                let paths: Vec<String> = (0..s.catalog.leaves.len())
+                    .filter(|&i| is_ticked(s, i))
+                    .map(|i| s.catalog.leaves[i].path.clone())
+                    .collect();
+                for (path, (label, reason)) in paths.into_iter().zip(picks) {
+                    s.triage.insert(path, (label, reason.into()));
+                }
+                for open in &mut s.open {
+                    *open = true;
+                }
+                s.note = "Example data · no disk scan or agent request".into();
             }),
             ("overview-example", |s: &mut State| {
                 s.note = "Example data · no disk scan or agent request".into();
@@ -2592,6 +2629,78 @@ mod tests {
     }
 
     #[test]
+    fn ai_labels_are_advice_only_and_a_keep_rule_wins_over_them() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut seen = Vec::new();
+            let mut chunk = [0; 4096];
+            // Read until the JSON body ends; the request is small.
+            while !seen.ends_with(b"}") {
+                let n = stream.read(&mut chunk).unwrap();
+                seen.extend_from_slice(&chunk[..n]);
+            }
+            let answer = concat!(
+                r#"{"i":0,"label":"safe","reason":"Cache"}"#,
+                "\n",
+                r#"{"i":1,"label":"keep","reason":"Work files"}"#
+            );
+            let body = serde_json::json!({"choices":[{"message":{"content":answer}}]}).to_string();
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        let mut rt = runtime();
+        rt.update(|s, _| {
+            apply_level(s, Level::Balanced);
+            s.prefs.agent_id = prefs::LOCAL.into();
+            s.prefs.agent_bin = prefs::LOCAL.into();
+            s.prefs.local_endpoint = format!("http://127.0.0.1:{port}/v1");
+            s.prefs
+                .models
+                .insert(prefs::LOCAL.into(), "qwen2.5:3b".into());
+            s.prefs.allow_start = true;
+            s.prefs.consent.insert(s.prefs.consent_key());
+            palette::sort(s);
+        });
+        let before = ticked_ids(&rt.state);
+        let selected: Vec<usize> = (0..rt.state.catalog.leaves.len())
+            .filter(|&i| is_ticked(&rt.state, i))
+            .collect();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while rt.state.triage.is_empty() && Instant::now() < deadline {
+            rt.update(|s, _| {
+                let job = s.agent.as_mut().unwrap();
+                job.poll();
+                if let Some(labels) = triage::finish(job) {
+                    s.triage = labels;
+                }
+            });
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let job = rt.state.agent.as_ref().unwrap();
+        assert!(
+            matches!(&job.result, Some(Ok(text)) if text.starts_with("Sorted 2 of")),
+            "{:?}",
+            job.result
+        );
+        assert_eq!(ticked_ids(&rt.state), before, "labels never tick");
+        assert!(selection_reason(&rt.state, selected[0]).starts_with("AI: safe · Cache"));
+        assert!(selection_reason(&rt.state, selected[1]).starts_with("AI: keep"));
+        // A Keep rule added later wins: the row shows FolderLens's verdict, not "safe".
+        rt.update(|s, _| {
+            let path = s.catalog.leaves[selected[0]].path.clone();
+            s.prefs.kept.push(path);
+        });
+        assert!(selection_reason(&rt.state, selected[0]).starts_with("Excluded"));
+        let _ = std::fs::remove_file(&rt.state.prefs_path);
+    }
+
+    #[test]
     fn an_adapter_the_write_guard_turned_off_sends_nothing() {
         let mut rt = runtime();
         rt.update(|s, _| {
@@ -2837,8 +2946,8 @@ mod tests {
             "{search:?}"
         );
         for id in [
-            "keep", "unlock", "select", "analyse", "ask", "pause", "settings", "close", "quit",
-            "finder",
+            "keep", "unlock", "select", "analyse", "ask", "sort", "pause", "settings", "close",
+            "quit", "finder",
         ] {
             rt.update(|state, tx| {
                 on_key(

@@ -28,6 +28,27 @@ pub fn reader_helper() -> Option<i32> {
     provider::resume_helper().or_else(broker::helper)
 }
 
+/// What a Local AI or private CLI job asks: a free-text review of the saved context, or a
+/// triage sort of `items` whose answer is parsed into labels for `paths` (same order).
+pub enum Task {
+    Review(String),
+    Sort { items: String, paths: Vec<String> },
+}
+
+impl Task {
+    /// The system prompt and user message, and the paths a sort labels.
+    fn split(self) -> (&'static str, String, Option<Vec<String>>) {
+        match self {
+            Self::Review(context) => (
+                crate::local_ai::SYSTEM,
+                format!("<selection>\n{context}\n</selection>"),
+                None,
+            ),
+            Self::Sort { items, paths } => (crate::triage::SYSTEM, items, Some(paths)),
+        }
+    }
+}
+
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Access {
     pub selected: Vec<PathBuf>,
@@ -57,7 +78,7 @@ pub fn validate_model(bin: &str, model: &str) -> Result<(), String> {
 
 pub fn model_note(bin: &str) -> &'static str {
     if bin == prefs::LOCAL {
-        return "Use the exact ID from List models. 3B parameters or larger is recommended (for example qwen2.5:3b); smaller models often give vague or repeated answers. The model gets names and sizes only, never file contents.";
+        return "Use the exact ID from List models. 3B parameters or larger for reviews (for example qwen2.5:3b), 7B or larger for Sort with AI (qwen2.5:7b passed the triage eval, 3b did not); smaller models give vague answers or broken labels. The model gets names and sizes only, never file contents.";
     }
     match Provider::for_bin(bin) {
         Ok(Provider::Copilot) => "auto: Copilot Free uses an account-limited allowance, not unlimited free use. Explicit models may require a paid plan and credits. GitHub login required.",
@@ -85,6 +106,8 @@ pub struct Job {
     /// Local AI cannot abort a ureq request, so a cancel ends the job at once and drops the
     /// late answer. Jobs with a child keep waiting until it is reaped.
     drop_on_cancel: bool,
+    /// For a triage sort: the labelled paths, by index. `triage::finish` takes them.
+    pub triage: Option<Vec<String>>,
 }
 
 impl Drop for Job {
@@ -146,6 +169,7 @@ impl Job {
             cancel: cancel.clone(),
             broker: Some(broker),
             drop_on_cancel: false,
+            triage: None,
         };
         let script = job.script.clone();
         let bin = job.bin.clone();
@@ -162,7 +186,7 @@ impl Job {
 
     /// A Local AI review: one HTTP request on a worker, with names and sizes only. No run
     /// folder, session or continuation is written, and the model gets no reader.
-    pub fn start_local(prefs: &prefs::Prefs, context: &str) -> Self {
+    pub fn start_local(prefs: &prefs::Prefs, task: Task) -> Self {
         if let Err(error) = validate_model(prefs::LOCAL, prefs.model()) {
             return Self::failed("Local AI", &prefs.agent_bin, &error);
         }
@@ -179,7 +203,8 @@ impl Job {
         let allow_network = prefs.local_allow_network;
         let key_saved = prefs.local_key_saved;
         let model = job.model.clone();
-        let context = context.to_string();
+        let (system, user, paths) = task.split();
+        job.triage = paths;
         let cancel = job.cancel.clone();
         std::thread::spawn(move || {
             // The Keychain may prompt, so it is read here, never on the UI thread.
@@ -188,9 +213,15 @@ impl Job {
             if cancel.load(Ordering::SeqCst) == CANCELLED {
                 return;
             }
-            let result =
-                crate::local_ai::review(&endpoint, allow_network, &model, key.as_ref(), &context)
-                    .map_err(|error| redact_diagnostics(&error));
+            let result = crate::local_ai::chat(
+                &endpoint,
+                allow_network,
+                &model,
+                key.as_ref(),
+                system,
+                &user,
+            )
+            .map_err(|error| redact_diagnostics(&error));
             let _ = sender.send(result);
         });
         job
@@ -199,12 +230,7 @@ impl Job {
     /// A private Pi or OpenCode review (ADR 5): one run with no tools, session or run folder.
     /// When the write guard finds a change, the worker itself turns the adapter off in the
     /// settings at `prefs_path`, so the finding survives Quit or a replaced job.
-    pub fn start_private(
-        prefs: &prefs::Prefs,
-        prefs_path: &Path,
-        name: &str,
-        context: &str,
-    ) -> Self {
+    pub fn start_private(prefs: &prefs::Prefs, prefs_path: &Path, name: &str, task: Task) -> Self {
         let mut job = Self::preview(None);
         job.name = name.into();
         job.bin = prefs.agent_bin.clone();
@@ -217,10 +243,9 @@ impl Job {
         // Captured now: the agent that runs, not whichever is chosen when the run ends.
         let agent = prefs.model_key();
         let (name, prefs_path) = (job.name.clone(), prefs_path.to_path_buf());
-        let stdin = format!(
-            "{}\n\n<selection>\n{context}\n</selection>\n",
-            crate::local_ai::SYSTEM
-        );
+        let (system, user, paths) = task.split();
+        job.triage = paths;
+        let stdin = format!("{system}\n\n{user}\n");
         std::thread::spawn(move || {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
@@ -260,6 +285,7 @@ impl Job {
             cancel: Arc::new(AtomicU8::new(RUNNING)),
             broker: None,
             drop_on_cancel: false,
+            triage: None,
         }
     }
 
