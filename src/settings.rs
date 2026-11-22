@@ -138,7 +138,12 @@ pub fn spec() -> AppSpec<Settings> {
             }),
         ],
         setup: Some(|state, waker| {
-            state.logo = Some(ImageCache::new(waker).load(LOGO));
+            let logo = ImageCache::new(waker).load(LOGO);
+            // A headless snapshot draws one frame, so it waits for the decode the window does not.
+            if rune::is_headless() {
+                let _ = logo.wait();
+            }
+            state.logo = Some(logo);
         }),
         poll: Some(|state, _, tx| {
             tx.wake_after(std::time::Duration::from_secs(1));
