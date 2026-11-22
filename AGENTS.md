@@ -2,9 +2,9 @@
 
 macOS menu-bar app that reviews what a cleanup level would tick. Rust + Rune (GPU UI); macOS only.
 
-Record choice (formerly Confirm) never deletes. It records a nonempty eligible selection in memory, and tests assert the catalog is unchanged. Do not add a delete or cleanup path.
+Record choice (formerly Confirm) never deletes. It records a nonempty eligible selection in memory, and tests assert the catalog is unchanged. The only file-moving path allowed is Move to Trash under [ADR 4](docs/adr/0004-move-to-trash-with-confirmation.md): user-started, FolderLens-confirmed, protections first, Trash only. Never add permanent deletion, emptying the Trash, or a path an agent or AI label can start.
 
-The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md), [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md) and [review without an agent](docs/adr/0003-review-works-without-ai.md). Keep them aligned when you change their contracts.
+The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md), [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md), [review without an agent](docs/adr/0003-review-works-without-ai.md), [move to Trash with confirmation](docs/adr/0004-move-to-trash-with-confirmation.md) and [Local AI and advisory triage](docs/adr/0005-local-ai-and-advisory-triage.md). ADRs 4 and 5 are accepted but not implemented yet. Keep them aligned when you change their contracts.
 
 ## Commands
 
