@@ -4,6 +4,18 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
 
+/// A review as `Task::Review` sends it.
+fn review(
+    endpoint: &str,
+    allow_network: bool,
+    model: &str,
+    key: Option<&ApiKey>,
+    context: &str,
+) -> Result<String, String> {
+    let user = format!("<selection>\n{context}\n</selection>");
+    chat(endpoint, allow_network, model, key, SYSTEM, &user)
+}
+
 #[test]
 fn without_the_opt_in_only_this_mac_is_accepted() {
     assert_eq!(

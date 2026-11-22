@@ -223,11 +223,19 @@ OpenCode continuations recheck the verified CLI version even when FolderLens is 
 
 ### Local AI
 
-Choose **Local AI** in **Settings → Agent → Agent** to use an OpenAI-compatible server: Ollama (`http://127.0.0.1:11434/v1`), LM Studio (`:1234/v1`), llama.cpp `llama-server` (`:8080/v1`) or the Llama menu-bar app. **Server** sets the address, the **Allow LAN and Tailscale servers** switch, and an optional API key (kept in the Keychain, sent as a Bearer token only over https or to this Mac; a plain-http server elsewhere, Tailscale included, is refused while a key is saved. Use `tailscale serve` for https, or no key). **List models** reads `/v1/models`; pick one in **Agent → Model**. 3B parameters or larger is recommended.
+Choose **Local AI** in **Settings → Agent → Agent** to use an OpenAI-compatible server: Ollama (`http://127.0.0.1:11434/v1`), LM Studio (`:1234/v1`), llama.cpp `llama-server` (`:8080/v1`) or the Llama menu-bar app. **Server** sets the address, the **Allow LAN and Tailscale servers** switch, and an optional API key (kept in the Keychain, sent as a Bearer token only over https or to this Mac; a plain-http server elsewhere, Tailscale included, is refused while a key is saved. Use `tailscale serve` for https, or no key). **List models** reads `/v1/models`; pick one in **Agent → Model**. 3B parameters or larger is recommended for reviews, and 7B or larger for **Sort with AI** (below).
 
 Only servers on this Mac are accepted until you turn on the network switch. Then private LAN and Tailscale addresses and names work too; public addresses are always refused, also when a name resolves to one. HTTPS uses the macOS trust store. Local AI gets item names, estimated sizes and FolderLens notes (full paths only with path sharing on), never file contents or tools, and FolderLens writes no run folder for it. The server may keep its own logs.
 
 Before the first request to each provider and exact model (and each server outside this Mac), Agent help asks for consent and names what is sent. **Settings → Privacy → Revoke all** asks again. The provider and model menu in Agent help switches between adapted CLIs and listed Local AI models.
+
+### Sort with AI (safe / review / keep)
+
+**Actions → Sort selection with AI** asks Local AI, or Pi or OpenCode with **Private runs** on, to label each item in the eligible selection **safe**, **review** or **keep** with a short reason. The row reason then reads, for example, "AI: review · The name alone does not show what is inside". It sends the same metadata as a review (names, or full paths with path sharing on, estimated sizes and FolderLens notes), never file contents, and asks for consent first like any request.
+
+Labels are advice only. They never tick, untick, unlock or record anything. A protected row (always protected, Keep safe list, recently changed, in use) always shows FolderLens's own verdict instead of the label. Labels stay in memory and clear on the next scan. When the model answers anything other than the expected JSON lines, the sort fails visibly and nothing changes.
+
+Use 7B parameters or larger. With the synthetic fixtures in `folderlens --eval-triage --model M [--endpoint URL] [--cli PATH]`, qwen2.5:7b passed; qwen2.5:3b agreed on 11 of 16 and once labelled a backup safe; qwen2.5:0.5b returned invalid labels. The eval sends only those fixtures and exits 1 on failure; `FOLDERLENS_API_KEY` sets a Local AI key.
 
 ### Private runs (Pi and OpenCode)
 
