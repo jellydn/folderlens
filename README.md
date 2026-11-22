@@ -4,7 +4,7 @@
 
 A notch-first macOS app for reviewing cleanup candidates, disk space and system usage, with optional agent analysis and a menu-bar fallback.
 
-**Record choice records a selection in memory. It never deletes files or runs cleanup.** Sizes are estimates, not reclaimed space.
+**Record choice records a selection in memory and moves nothing.** The only file action is **Move to Trash…**: you start it, FolderLens confirms every item, protections win, and items go to the Trash, never deleted permanently ([ADR 4](docs/adr/0004-move-to-trash-with-confirmation.md)). Sizes are estimates, not reclaimed space.
 
 FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, folder protections, manual agent help and publisher-verified update checks remain available. The [codebase map](.planning/codebase/ARCHITECTURE.md) documents the current source.
 
@@ -29,7 +29,7 @@ For Homebrew trust or source builds, see the [guide](docs/guide.md#install). Exi
 ## Use
 
 1. Expand the notch and choose **Review / AI**, or click the menu-bar archivebox. Choose a preset or eligible folders; review reasons and exclusions.
-2. **Record choice** records without deleting. Selection changes clear the record.
+2. **Record choice** records without moving anything. Selection changes clear the record. **Move to Trash…** opens a confirmation sheet with every item and the total; Return and Escape never move anything, and each item is checked again just before it moves.
 3. For **Ask Agent**, configure **Settings → Agent** and **Settings → Privacy**. Requests are manual; provider costs and data policies apply.
 4. With no agent set up, or after a failed review, Agent help shows **Local summary · no AI**: item count, total, top kinds, largest folders and the estimate. It is computed on this Mac from the current selection, sends nothing and changes nothing.
 
@@ -116,7 +116,7 @@ Intervals never launch AI or cleanup. These controls are available starting with
 
 ## Feature gallery
 
-These current Rune renders use example Agent states, not real model turns or native popup verification. [Full gallery](docs/guide.md#feature-gallery-beta5) covers review/recording, folder actions, General, provider/model Apply, selected-path access, protection, Agent progress/Cancel, errors/Retry, saved chat and Updates. Filled buttons mark the main action; secondary actions are outlined, and removing an exclusion uses a warning style. Record choice never deletes.
+These current Rune renders use example Agent states, not real model turns or native popup verification. [Full gallery](docs/guide.md#feature-gallery-beta5) covers review/recording, folder actions, General, provider/model Apply, selected-path access, protection, Agent progress/Cancel, errors/Retry, saved chat and Updates. Filled buttons mark the main action; secondary actions are outlined, and removing an exclusion uses a warning style. Record choice moves nothing; Move to Trash… needs its own confirmation.
 
 | Agent setup and model | Updates (General › Advanced) |
 | --- | --- |

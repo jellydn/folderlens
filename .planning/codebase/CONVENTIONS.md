@@ -84,9 +84,9 @@ Examples: `src/agent.rs`, `src/broker.rs`, `src/main.rs`. `cargo fmt` sorts with
 
 **Return Values:** Authority checks return a denial, not fallback access (`src/broker.rs`). Reviews return only nonempty completed output; empty output is an error (`src/agent.rs`). `poll` returns `bool` for "state changed" (`src/main.rs`).
 
-**No deletion path:** Record choice (key `"confirm"`) only sets `s.confirmed = true` in memory (`src/main.rs`). Production code has no `remove_dir`/`trash` call on scanned paths. The only production `remove_file` deletes FolderLens's own temporary import file (`src/prefs.rs`). Do not add a delete or cleanup path (`AGENTS.md`).
+**No deletion path:** Record choice (key `"confirm"`) only sets `s.confirmed = true` in memory (`src/main.rs`). The only call that moves scanned paths is `trash::to_trash` behind the confirmed Move to Trash sheet (ADR 4). Production code has no `remove_dir`/`unlink` on scanned paths. The only production `remove_file` deletes FolderLens's own temporary import file (`src/prefs.rs`). Do not add permanent deletion (`AGENTS.md`).
 
-**Estimate wording:** Sizes are labelled as estimates and never as reclaimed space: "Estimated · review only, not reclaimed" and "Estimated {} · review only, not reclaimed. FolderLens deletes nothing." (`src/main.rs`), "Estimated cleanup candidates {}, not reclaimed space" and "Cleanup candidates · estimated" (`src/notch.rs`). Keep this wording in new UI (`AGENTS.md`).
+**Estimate wording:** Sizes are labelled as estimates and never as reclaimed space: "Estimated · review only, not reclaimed" and "Estimated {} · review only, not reclaimed. Nothing moves until you confirm Move to Trash." (`src/main.rs`), "Estimated cleanup candidates {}, not reclaimed space" and "Cleanup candidates · estimated" (`src/notch.rs`). Keep this wording in new UI (`AGENTS.md`).
 
 ## Module Design
 

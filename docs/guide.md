@@ -4,11 +4,11 @@ Detailed implementation, usage and verification notes. Start with the [short REA
 
 <img src="../assets/folderlens-icon.png" width="128" height="128" alt="FolderLens: a green folder under an orange lens">
 
-> FolderLens reviews folder selections. Record choice records a choice; it does not delete files or run cleanup.
+> FolderLens reviews folder selections. Record choice records a choice and moves nothing. Move to Trash… moves a confirmed selection to the Trash; FolderLens never deletes files permanently.
 
 ## Current status
 
-FolderLens is the new name of Shelf, starting with **0.2.1**. It is not a cleanup engine. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory; FolderLens does not delete the selected files.** Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
+FolderLens is the new name of Shelf, starting with **0.2.1**. It is not a cleanup engine. Careful, Balanced and Aggressive presets preview which items are selected and their estimated footprint. **Record choice only records a choice in memory.** Move to Trash… is the only file action: it moves a confirmed selection to the Trash and never deletes permanently. Changing the selection or its exclusions clears the recorded indicator. An empty selection cannot be recorded.
 
 The app includes manual Ask Agent adapters, per-agent model settings, a bounded selected-folder reader, saved-session launchers and signed-update checks. Protocol stubs, headless UI tests and limited native metadata/download checks exercise these implementations. They do **not** establish end-to-end native model analysis, tool routing during a model turn, Terminal continuation, tray event routing, or actual update installation/restart and Gatekeeper behavior. Earlier screenshots, releases and history remain available; they are not evidence of completed safety review.
 
@@ -17,6 +17,10 @@ The app includes manual Ask Agent adapters, per-agent model settings, a bounded 
 ## Quick review (0.4.0)
 
 Quick review has short labels, explicit Close controls, folder reasons, protection rules and optional Agent help.
+
+### Move to Trash
+
+**Move to Trash…** in the review footer opens a FolderLens sheet that lists every eligible selected item, its estimated size and the total. Protected, held, in-use and unselected items are never listed. **Cancel** holds focus: Return and Escape never move anything, and Escape or Cancel changes nothing. Only a press on **Move to Trash** in the sheet moves items, with `NSFileManager trashItemAtURL`. Just before each move, FolderLens checks the item again (still selected and eligible, same size class, opened with `O_NOFOLLOW` at the reviewed path) and skips one that changed. The first refused move stops the run, and the footer reports what moved and what did not. A rescan starts afterwards. You can drag items back out of the Trash in Finder (Put Back is not reliable for these items); space is not freed until you empty the Trash. No agent, AI label or schedule can start it ([ADR 4](adr/0004-move-to-trash-with-confirmation.md)).
 
 ### Notch and local checks
 
@@ -146,7 +150,9 @@ All current images below are headless Rune GPU renders. Folder examples and Agen
 
 ![Quick review, synthetic example](../shots/review-ledger.png)
 
-![Recorded choice, no deletion](../shots/review-receipt.png)
+![Recorded choice, nothing moved](../shots/review-receipt.png)
+
+![Move to Trash confirmation, synthetic example](../shots/review-trash.png)
 
 Folder actions show the target and its reason. **Measure folder again** (⌘R) runs on the scan worker: the status shows "Measuring…", new sizes replace the estimates when it finishes, and Record choice clears. There is no queue: while a scan runs, it asks you to measure again after the scan. Ask Agent still uses the eligible selection, not the action target. Keep safe settings explain user exclusions, recent-change holds and built-in exclusions separately; their rules are unchanged.
 

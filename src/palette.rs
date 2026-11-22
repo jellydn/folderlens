@@ -1,4 +1,4 @@
-//! The action list for one row. The window shrinks to the list. Record choice still deletes nothing.
+//! The action list for one row. The window shrinks to the list. Record choice moves nothing.
 
 use rune::tok::{type_, TextStyle};
 use rune::{col, row, text, El, Key, KeyEvent, ScrollSpec, Transition, Tx};
@@ -81,6 +81,15 @@ pub fn on_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     if ev.is_command('q') {
         _tx.quit();
         return true;
+    }
+    // The Move to Trash sheet. Return never confirms it because the sheet has no default
+    // button and a focused Rune button ignores Return; this branch closes it on Escape
+    // (instead of hiding the panel) and keeps palette shortcuts out while it is open.
+    if s.trash.is_some() {
+        if matches!(ev.key, Key::Escape) {
+            s.trash = None;
+        }
+        return matches!(ev.key, Key::Escape | Key::Enter);
     }
     if !s.palette {
         if matches!(ev.key, Key::Escape) {
@@ -498,7 +507,7 @@ fn analyse(s: &mut State) {
 }
 
 /// The eligible ticked items, as Ask and Sort send them.
-fn selected_leaves(s: &State) -> Vec<catalog::Leaf> {
+pub(crate) fn selected_leaves(s: &State) -> Vec<catalog::Leaf> {
     (0..s.catalog.leaves.len())
         .filter(|&index| super::is_ticked(s, index))
         .map(|index| leaf_view(s, index))

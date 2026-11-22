@@ -513,7 +513,7 @@ fn view(s: &Notch, _: &mut Cx<Notch>) -> El {
                     ),
             )
             .child(label(
-                "Review only. Nothing deleted. AI requests stay manual.",
+                "Review only. Nothing moves without your confirmation. AI requests stay manual.",
                 11.0,
                 MUTED,
             )),

@@ -581,7 +581,7 @@ const PLACEMENT_NOTE: &str = "Top center uses the camera row on notched displays
 const THEME_NOTE: &str = "Notch, Review and Settings";
 const READINGS_NOTE: &str = "Shown with your selection. Estimates are not reclaimed space.";
 const RECORD_CHOICE_NOTE: &str =
-    "Record choice keeps the selection in memory and deletes nothing. Changes save automatically.";
+    "Record choice keeps the selection in memory and moves no files. Changes save automatically.";
 
 const POSITIONS: [(&str, NotchPosition); 4] = [
     ("Top left", NotchPosition::Left),

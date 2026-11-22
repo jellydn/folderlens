@@ -14,6 +14,7 @@ use crate::prefs;
 
 #[path = "broker.rs"]
 mod broker;
+pub(crate) use broker::opened_path;
 #[path = "private_cli.rs"]
 pub(crate) mod private_cli;
 #[path = "provider.rs"]

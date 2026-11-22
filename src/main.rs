@@ -2,7 +2,8 @@
 //!
 //! The compact notch opens local controls and the full review. A native menu-bar
 //! item remains the fallback. Accessory windows have no Dock icon. Record choice
-//! deletes nothing. Settings, the notch and the review are never open together.
+//! moves nothing; only a confirmed Move to Trash moves files (`trash.rs`, ADR 4).
+//! Settings, the notch and the review are never open together.
 //!
 //! The list, the free-space line, and the gauges come from this Mac.
 //! FolderLens ships its own hint catalog and measures the folders itself.
@@ -20,6 +21,7 @@ mod prefs;
 mod settings;
 mod status;
 mod theme;
+mod trash;
 mod triage;
 mod update;
 
@@ -76,6 +78,12 @@ struct State {
     sort_pending: bool,
     /// Advisory AI labels by path (ADR 5). Never ticks; cleared on a rescan.
     triage: triage::Labels,
+    /// The Move to Trash sheet is open with these reviewed items (ADR 4).
+    trash: Option<Vec<trash::Item>>,
+    /// What the last Move to Trash moved and did not move. A rescan keeps it.
+    trash_report: String,
+    /// A Move to Trash found the worker busy; rescan when it finishes.
+    rescan_after_trash: bool,
 }
 
 /// Work for the scan worker thread.
@@ -123,6 +131,9 @@ fn state_from(catalog: Catalog) -> State {
         switch_open: false,
         sort_pending: false,
         triage: triage::Labels::new(),
+        trash: None,
+        trash_report: String::new(),
+        rescan_after_trash: false,
     }
 }
 
@@ -239,6 +250,7 @@ fn finish_measure(s: &mut State, name: &str, sizes: Vec<(String, u64)>) {
     }
     s.note = format!("Measured {name}.");
     s.confirmed = false;
+    rescan_after_trash(s);
 }
 
 fn schedule_scan(s: &mut State, now: Instant) {
@@ -268,6 +280,7 @@ fn shutdown(s: &mut State, _: &mut Tx) {
 fn finish_scan(s: &mut State, catalog: Catalog, now: Instant) {
     s.scanning = false;
     schedule_scan(s, now);
+    rescan_after_trash(s);
     if catalog.missing {
         s.note = "Scan unavailable. Previous results kept; try Scan now again.".into();
         return;
@@ -444,6 +457,54 @@ fn is_ticked(s: &State, index: usize) -> bool {
     match s.ticks.get(index).copied().flatten() {
         Some(on) => on,
         None => catalog::auto_tick(&leaf, s.level),
+    }
+}
+
+/// The eligible ticked leaves, as the Move to Trash sheet lists them.
+fn trash_items(s: &State) -> Vec<trash::Item> {
+    palette::selected_leaves(s)
+        .into_iter()
+        .map(|leaf| trash::Item {
+            path: leaf.path,
+            name: leaf.name,
+            bytes: leaf.bytes,
+        })
+        .collect()
+}
+
+/// A reviewed item must still be an eligible ticked leaf with the same size class.
+fn still_eligible(s: &State, item: &trash::Item) -> Result<(), String> {
+    let index = s
+        .catalog
+        .leaves
+        .iter()
+        .position(|leaf| leaf.path == item.path)
+        .ok_or("it is no longer in the scan")?;
+    if !is_ticked(s, index) {
+        return Err("it is protected or no longer selected".into());
+    }
+    if trash::size_class(s.catalog.leaves[index].bytes) != trash::size_class(item.bytes) {
+        return Err("its size estimate changed".into());
+    }
+    Ok(())
+}
+
+/// Only the sheet's Move to Trash button calls this. `mover` is `trash::to_trash` outside tests.
+fn move_to_trash(s: &mut State, mover: impl FnMut(&std::path::Path) -> Result<(), String>) {
+    let Some(items) = s.trash.take() else {
+        return;
+    };
+    let report = trash::run(&items, |item| still_eligible(s, item), mover);
+    s.trash_report = report.summary();
+    s.confirmed = false;
+    // A busy worker rescans when it finishes, even with interval scans paused.
+    s.rescan_after_trash = !report.moved.is_empty() && !start_scan_work(s, ScanRequest::All);
+}
+
+/// Starts the rescan a Move to Trash asked for while the worker was busy.
+fn rescan_after_trash(s: &mut State) {
+    if std::mem::take(&mut s.rescan_after_trash) {
+        start_scan_work(s, ScanRequest::All);
     }
 }
 
@@ -983,19 +1044,23 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         )
         .child(rule())
         .child(
-            col()
-                .w_full()
-                .padding(18.0)
-                .gap(16.0)
-                .child(overview(s))
-                .child(scan_controls(s))
-                .child(status_line(s))
-                .child(workspace)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .grow(1.0)
-                .min_h(0.0),
+            if let Some(items) = &s.trash {
+                col().w_full().padding(18.0).child(trash_sheet(items))
+            } else {
+                col()
+                    .w_full()
+                    .padding(18.0)
+                    .gap(16.0)
+                    .child(overview(s))
+                    .child(scan_controls(s))
+                    .child(status_line(s))
+                    .child(workspace)
+            }
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .grow(1.0)
+            .min_h(0.0),
         )
         .child(rule())
         .child(record_choice(s))
@@ -1577,7 +1642,7 @@ fn local_summary(s: &State) -> El {
         ))
         .child(line(
             format!(
-                "Estimated {} · review only, not reclaimed. FolderLens deletes nothing.",
+                "Estimated {} · review only, not reclaimed. Nothing moves until you confirm Move to Trash.",
                 catalog::format_bytes(total)
             ),
             "local-summary-estimate",
@@ -1615,6 +1680,28 @@ fn record_choice(s: &State) -> El {
                     .key("receipt-summary"),
                 )
                 .child({
+                    let open = button(
+                        "Move to Trash…",
+                        if selected == 0 {
+                            ButtonStyle::Disabled
+                        } else {
+                            ButtonStyle::Destructive
+                        },
+                    )
+                    .key("trash-open");
+                    if selected > 0 {
+                        open.on_press_tx(|state: &mut State, tx: &mut Tx| {
+                            tx.instant();
+                            state.trash = Some(trash_items(state));
+                            state.trash_report.clear();
+                            // Cancel holds focus, so Space cancels; Return and Escape never move.
+                            tx.focus("trash-cancel", false);
+                        })
+                    } else {
+                        open
+                    }
+                })
+                .child({
                     let record = button(
                         if s.confirmed {
                             "Choice recorded"
@@ -1640,14 +1727,105 @@ fn record_choice(s: &State) -> El {
                     }
                 }),
         )
+        .child(if s.trash_report.is_empty() {
+            el()
+        } else {
+            label(s.trash_report.clone(), INK).key("trash-report")
+        })
         .child(
             text(format!(
-                "Nothing deleted · in memory only · {excluded} protected / unavailable"
+                "Record choice moves nothing · {excluded} protected / unavailable"
             ))
             .font(type_::LABEL)
             .color(paint(MUTED))
             .wrap()
             .w_full(),
+        )
+}
+
+/// FolderLens's own confirmation (ADR 4): every item, its estimate and the total. No default
+/// button, so Return does nothing; Escape and Cancel close it and change nothing.
+fn trash_sheet(items: &[trash::Item]) -> El {
+    let total: u64 = items.iter().map(|item| item.bytes).sum();
+    let mut list = col().key("trash-items").w_full().gap(8.0);
+    for item in items {
+        list = list.child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .center_y()
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(2.0)
+                        .child(
+                            text(item.name.clone())
+                                .font(TextStyle::new(13.0, 500.0))
+                                .color(paint(INK))
+                                .truncate(),
+                        )
+                        .child(
+                            text(item.path.clone())
+                                .font(type_::LABEL)
+                                .color(paint(MUTED))
+                                .truncate(),
+                        ),
+                )
+                .child(
+                    text(catalog::format_bytes(item.bytes))
+                        .font(type_::LABEL)
+                        .color(paint(INK)),
+                ),
+        );
+    }
+    let count = match items.len() {
+        1 => "1 item".to_string(),
+        n => format!("{n} items"),
+    };
+    col()
+        .key("trash-sheet")
+        .label("Move to Trash")
+        .w_full()
+        .gap(12.0)
+        .padding(16.0)
+        .radius(12.0)
+        .fill(paint(TRACK))
+        .border(1.0, paint(DANGER_BORDER))
+        .modal(false, |state: &mut State| state.trash = None)
+        .child(
+            text(format!("Move {count} to the Trash?"))
+                .font(TextStyle::new(15.0, 600.0))
+                .color(paint(INK)),
+        )
+        .child(label(
+            "FolderLens checks each item again just before it moves and skips any that changed. Protected, held, in-use and unselected items are not listed. You can drag items back out of the Trash in Finder. Space is not freed until you empty the Trash.",
+            MUTED,
+        ))
+        .child(rule())
+        .child(list)
+        .child(rule())
+        .child(
+            text(format!("Estimated total {}", catalog::format_bytes(total)))
+                .key("trash-total")
+                .font(TextStyle::new(13.0, 600.0))
+                .color(paint(INK)),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .child(el().grow(1.0))
+                .child(
+                    button("Cancel", ButtonStyle::Secondary)
+                        .key("trash-cancel")
+                        .on_press(|state: &mut State| state.trash = None),
+                )
+                .child(
+                    button("Move to Trash", ButtonStyle::Destructive)
+                        .key("trash-confirm")
+                        .on_press(|state: &mut State| move_to_trash(state, trash::to_trash)),
+                ),
         )
 }
 
@@ -1801,6 +1979,14 @@ fn main() {
             ("local-consent-example", |s: &mut State| {
                 local_preview(s);
                 s.consent_open = true;
+            }),
+            ("trash-example", |s: &mut State| {
+                apply_level(s, Level::Balanced);
+                s.trash = Some(trash_items(s));
+            }),
+            ("trash-report-example", |s: &mut State| {
+                apply_level(s, Level::Balanced);
+                s.trash_report = "Moved 1 item to the Trash (estimated 5.70 GB). Stopped at Spotify cache: volume has no Trash.".into();
             }),
             ("quick-switch-example", |s: &mut State| {
                 local_preview(s);
@@ -2336,6 +2522,172 @@ mod tests {
             assert_eq!(ticked_ids(&rt.state), before);
             assert_eq!(rt.state.catalog.leaves.len(), 7);
         }
+    }
+
+    fn press_key(rt: &mut Runtime<State>, key: rune::Key) {
+        rt.key(KeyEvent {
+            key,
+            mods: Default::default(),
+        });
+        rt.frame(0.0);
+    }
+
+    /// Points the fixture leaves at real temp folders, so the `O_NOFOLLOW` recheck can pass.
+    fn trash_fixture(s: &mut State, name: &str) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("folderlens-sheet-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        for leaf in &mut s.catalog.leaves {
+            let path = root.join(&leaf.id);
+            std::fs::create_dir(&path).unwrap();
+            leaf.path = path.display().to_string();
+        }
+        root
+    }
+
+    #[test]
+    fn return_escape_and_cancel_close_the_trash_sheet_without_moving_anything() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Balanced));
+        rt.frame(0.0);
+        let root = trash_fixture(&mut rt.state, "cancel");
+        let catalog = format!("{:?}", rt.state.catalog);
+        click(&mut rt, "trash-open");
+        assert_eq!(
+            rt.state.trash.as_ref().map(|items| items.len()),
+            Some(2),
+            "only the eligible ticked leaves are listed"
+        );
+        assert!(rt.find("trash-total").is_some());
+        press_key(&mut rt, rune::Key::Enter);
+        assert!(rt.state.trash.is_some(), "Return never confirms the sheet");
+        press_key(&mut rt, rune::Key::Escape);
+        assert!(rt.state.trash.is_none());
+        click(&mut rt, "trash-open");
+        press_key(&mut rt, rune::Key::Text(" ".into()));
+        assert!(
+            rt.state.trash.is_none(),
+            "Cancel holds focus, so Space cancels"
+        );
+        click(&mut rt, "trash-open");
+        click(&mut rt, "trash-cancel");
+        assert!(rt.state.trash.is_none());
+        assert!(rt.state.trash_report.is_empty());
+        assert_eq!(format!("{:?}", rt.state.catalog), catalog);
+        assert!(rt
+            .state
+            .catalog
+            .leaves
+            .iter()
+            .all(|leaf| std::path::Path::new(&leaf.path).exists()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_protected_item_never_reaches_the_trash_call_and_the_report_says_moved_to_trash() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Aggressive));
+        rt.frame(0.0);
+        let root = trash_fixture(&mut rt.state, "move");
+        let (sender, receiver) = std::sync::mpsc::channel();
+        rt.state.scan_requests = Some(sender);
+        click(&mut rt, "trash-open");
+        let listed: Vec<String> = rt
+            .state
+            .trash
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|i| i.name.clone())
+            .collect();
+        assert!(
+            !listed.iter().any(|name| name == "Backups and archives"),
+            "locked leaves are not listed"
+        );
+        // A Keep safe rule added after review protects "deps" before the move.
+        let deps = rt.state.catalog.leaves[leaf_at(&rt.state, "deps")]
+            .path
+            .clone();
+        rt.state.prefs.kept.push(deps.clone());
+        let mut calls = Vec::new();
+        move_to_trash(&mut rt.state, |path| {
+            calls.push(path.display().to_string());
+            Ok(())
+        });
+        assert!(!calls.contains(&deps));
+        assert!(calls
+            .iter()
+            .all(|path| !path.ends_with("/backups") && !path.ends_with("/cache-held")));
+        assert_eq!(calls.len(), 2, "logs and spotify move");
+        assert!(rt.state.trash.is_none());
+        assert!(rt
+            .state
+            .trash_report
+            .starts_with("Moved 2 items to the Trash"));
+        assert!(rt
+            .state
+            .trash_report
+            .contains("protected or no longer selected"));
+        assert!(
+            !rt.state.trash_report.contains("freed") && !rt.state.trash_report.contains("reclaim")
+        );
+        assert_eq!(
+            receiver.try_recv().unwrap(),
+            ScanRequest::All,
+            "a rescan starts"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_item_whose_size_class_changed_or_left_the_scan_is_skipped() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Balanced));
+        rt.frame(0.0);
+        let root = trash_fixture(&mut rt.state, "recheck");
+        click(&mut rt, "trash-open");
+        // A Measure while the sheet is open: 5.70 GB becomes 12 GB, and a rescan drops spotify.
+        let logs = leaf_at(&rt.state, "logs");
+        rt.state.catalog.leaves[logs].bytes = 12_000_000_000;
+        let spotify = leaf_at(&rt.state, "spotify");
+        rt.state.catalog.leaves[spotify].path.push_str("-renamed");
+        let mut calls = 0;
+        move_to_trash(&mut rt.state, |_| {
+            calls += 1;
+            Ok(())
+        });
+        assert_eq!(calls, 0);
+        assert!(rt
+            .state
+            .trash_report
+            .starts_with("Nothing moved to the Trash."));
+        assert!(rt.state.trash_report.contains("its size estimate changed"));
+        assert!(rt
+            .state
+            .trash_report
+            .contains("it is no longer in the scan"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_move_while_the_worker_is_busy_rescans_when_it_finishes_even_when_paused() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Balanced));
+        rt.frame(0.0);
+        let root = trash_fixture(&mut rt.state, "busy");
+        let (sender, receiver) = std::sync::mpsc::channel();
+        rt.state.scan_requests = Some(sender);
+        rt.state.scanning = true;
+        assert!(!rt.state.scans_running);
+        click(&mut rt, "trash-open");
+        move_to_trash(&mut rt.state, |_| Ok(()));
+        assert!(receiver.try_recv().is_err(), "the worker takes one request");
+        finish_scan(&mut rt.state, catalog::fixture(), Instant::now());
+        assert_eq!(receiver.try_recv().unwrap(), ScanRequest::All);
+        assert!(rt.state.scanning);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
