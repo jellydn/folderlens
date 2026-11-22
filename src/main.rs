@@ -82,6 +82,8 @@ struct State {
     trash: Option<Vec<trash::Item>>,
     /// What the last Move to Trash moved and did not move. A rescan keeps it.
     trash_report: String,
+    /// A Move to Trash found the worker busy; rescan when it finishes.
+    rescan_after_trash: bool,
 }
 
 /// Work for the scan worker thread.
@@ -131,6 +133,7 @@ fn state_from(catalog: Catalog) -> State {
         triage: triage::Labels::new(),
         trash: None,
         trash_report: String::new(),
+        rescan_after_trash: false,
     }
 }
 
@@ -247,6 +250,7 @@ fn finish_measure(s: &mut State, name: &str, sizes: Vec<(String, u64)>) {
     }
     s.note = format!("Measured {name}.");
     s.confirmed = false;
+    rescan_after_trash(s);
 }
 
 fn schedule_scan(s: &mut State, now: Instant) {
@@ -276,6 +280,7 @@ fn shutdown(s: &mut State, _: &mut Tx) {
 fn finish_scan(s: &mut State, catalog: Catalog, now: Instant) {
     s.scanning = false;
     schedule_scan(s, now);
+    rescan_after_trash(s);
     if catalog.missing {
         s.note = "Scan unavailable. Previous results kept; try Scan now again.".into();
         return;
@@ -457,15 +462,12 @@ fn is_ticked(s: &State, index: usize) -> bool {
 
 /// The eligible ticked leaves, as the Move to Trash sheet lists them.
 fn trash_items(s: &State) -> Vec<trash::Item> {
-    (0..s.catalog.leaves.len())
-        .filter(|&index| is_ticked(s, index))
-        .map(|index| {
-            let leaf = &s.catalog.leaves[index];
-            trash::Item {
-                path: leaf.path.clone(),
-                name: leaf.name.clone(),
-                bytes: leaf.bytes,
-            }
+    palette::selected_leaves(s)
+        .into_iter()
+        .map(|leaf| trash::Item {
+            path: leaf.path,
+            name: leaf.name,
+            bytes: leaf.bytes,
         })
         .collect()
 }
@@ -495,9 +497,14 @@ fn move_to_trash(s: &mut State, mover: impl FnMut(&std::path::Path) -> Result<()
     let report = trash::run(&items, |item| still_eligible(s, item), mover);
     s.trash_report = report.summary();
     s.confirmed = false;
-    if !report.moved.is_empty() && !start_scan_work(s, ScanRequest::All) {
-        // The worker is busy; rescan on the next poll.
-        s.next_scan = Some(Instant::now());
+    // A busy worker rescans when it finishes, even with interval scans paused.
+    s.rescan_after_trash = !report.moved.is_empty() && !start_scan_work(s, ScanRequest::All);
+}
+
+/// Starts the rescan a Move to Trash asked for while the worker was busy.
+fn rescan_after_trash(s: &mut State) {
+    if std::mem::take(&mut s.rescan_after_trash) {
+        start_scan_work(s, ScanRequest::All);
     }
 }
 
@@ -1792,7 +1799,7 @@ fn trash_sheet(items: &[trash::Item]) -> El {
                 .color(paint(INK)),
         )
         .child(label(
-            "FolderLens checks each item again just before it moves and skips any that changed. Protected, held, in-use and unselected items are not listed. Put items back from the Trash in Finder. Space is not freed until you empty the Trash.",
+            "FolderLens checks each item again just before it moves and skips any that changed. Protected, held, in-use and unselected items are not listed. You can drag items back out of the Trash in Finder. Space is not freed until you empty the Trash.",
             MUTED,
         ))
         .child(rule())
@@ -2559,6 +2566,12 @@ mod tests {
         press_key(&mut rt, rune::Key::Escape);
         assert!(rt.state.trash.is_none());
         click(&mut rt, "trash-open");
+        press_key(&mut rt, rune::Key::Text(" ".into()));
+        assert!(
+            rt.state.trash.is_none(),
+            "Cancel holds focus, so Space cancels"
+        );
+        click(&mut rt, "trash-open");
         click(&mut rt, "trash-cancel");
         assert!(rt.state.trash.is_none());
         assert!(rt.state.trash_report.is_empty());
@@ -2625,6 +2638,55 @@ mod tests {
             ScanRequest::All,
             "a rescan starts"
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_item_whose_size_class_changed_or_left_the_scan_is_skipped() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Balanced));
+        rt.frame(0.0);
+        let root = trash_fixture(&mut rt.state, "recheck");
+        click(&mut rt, "trash-open");
+        // A Measure while the sheet is open: 5.70 GB becomes 12 GB, and a rescan drops spotify.
+        let logs = leaf_at(&rt.state, "logs");
+        rt.state.catalog.leaves[logs].bytes = 12_000_000_000;
+        let spotify = leaf_at(&rt.state, "spotify");
+        rt.state.catalog.leaves[spotify].path.push_str("-renamed");
+        let mut calls = 0;
+        move_to_trash(&mut rt.state, |_| {
+            calls += 1;
+            Ok(())
+        });
+        assert_eq!(calls, 0);
+        assert!(rt
+            .state
+            .trash_report
+            .starts_with("Nothing moved to the Trash."));
+        assert!(rt.state.trash_report.contains("its size estimate changed"));
+        assert!(rt
+            .state
+            .trash_report
+            .contains("it is no longer in the scan"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_move_while_the_worker_is_busy_rescans_when_it_finishes_even_when_paused() {
+        let mut rt = runtime();
+        rt.update(|s, _| apply_level(s, Level::Balanced));
+        rt.frame(0.0);
+        let root = trash_fixture(&mut rt.state, "busy");
+        let (sender, receiver) = std::sync::mpsc::channel();
+        rt.state.scan_requests = Some(sender);
+        rt.state.scanning = true;
+        assert!(!rt.state.scans_running);
+        click(&mut rt, "trash-open");
+        move_to_trash(&mut rt.state, |_| Ok(()));
+        assert!(receiver.try_recv().is_err(), "the worker takes one request");
+        finish_scan(&mut rt.state, catalog::fixture(), Instant::now());
+        assert_eq!(receiver.try_recv().unwrap(), ScanRequest::All);
+        assert!(rt.state.scanning);
         std::fs::remove_dir_all(root).unwrap();
     }
 

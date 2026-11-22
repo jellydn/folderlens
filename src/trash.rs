@@ -68,7 +68,11 @@ fn unchanged(path: &Path) -> Result<(), String> {
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
-        .map_err(|_| "it is missing or became a link".to_string())?;
+        .map_err(|error| match error.raw_os_error() {
+            Some(libc::ENOENT) => "it is missing".to_string(),
+            Some(libc::ELOOP) => "it became a link".to_string(),
+            _ => "macOS denied access to it".to_string(),
+        })?;
     if crate::agent::opened_path(&file)? != path {
         return Err("its location changed after review".into());
     }
@@ -99,45 +103,61 @@ impl Report {
     }
 }
 
-/// Moves one item to the Trash of its volume. Finder can put it back.
+/// Moves one item to the Trash of its volume. `trashItemAtURL` takes a path, not the
+/// descriptor `unchanged` checked, so a parent folder swapped between the two by a process of
+/// this user is not caught; such a process could already change the files itself.
 pub fn to_trash(path: &Path) -> Result<(), String> {
     let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| "invalid path")?;
     unsafe {
-        let send1: unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_void) -> *mut c_void =
-            std::mem::transmute(objc_msgSend as *const ());
-        let send0: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
-            std::mem::transmute(objc_msgSend as *const ());
-        let trash_item: unsafe extern "C" fn(
-            *mut c_void,
-            *mut c_void,
-            *mut c_void,
-            *mut c_void,
-            *mut *mut c_void,
-        ) -> i8 = std::mem::transmute(objc_msgSend as *const ());
-        let string = send1(
-            class(c"NSString"),
-            sel(c"stringWithUTF8String:"),
-            path.as_ptr().cast(),
-        );
-        let url = send1(class(c"NSURL"), sel(c"fileURLWithPath:"), string.cast());
-        let manager = send0(class(c"NSFileManager"), sel(c"defaultManager"));
-        if url.is_null() || manager.is_null() {
-            return Err("macOS could not prepare the move".into());
-        }
-        let mut error = std::ptr::null_mut();
-        let selector = sel(c"trashItemAtURL:resultingItemURL:error:");
-        if trash_item(manager, selector, url, std::ptr::null_mut(), &mut error) != 0 {
-            return Ok(());
-        }
-        let text = send0(
-            send0(error, sel(c"localizedDescription")),
-            sel(c"UTF8String"),
-        );
-        if error.is_null() || text.is_null() {
-            return Err("macOS refused the move".into());
-        }
-        Err(CStr::from_ptr(text.cast()).to_string_lossy().into_owned())
+        let pool = objc_autoreleasePoolPush();
+        let result = trash_in_pool(&path);
+        objc_autoreleasePoolPop(pool);
+        result
     }
+}
+
+unsafe fn trash_in_pool(path: &CStr) -> Result<(), String> {
+    let send1: unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_void) -> *mut c_void =
+        std::mem::transmute(objc_msgSend as *const ());
+    let send0: unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void =
+        std::mem::transmute(objc_msgSend as *const ());
+    let trash_item: unsafe extern "C" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut *mut c_void,
+        *mut *mut c_void,
+    ) -> i8 = std::mem::transmute(objc_msgSend as *const ());
+    let string = send1(
+        class(c"NSString"),
+        sel(c"stringWithUTF8String:"),
+        path.as_ptr().cast(),
+    );
+    if string.is_null() {
+        return Err("macOS could not prepare the move".into());
+    }
+    let url = send1(class(c"NSURL"), sel(c"fileURLWithPath:"), string.cast());
+    let manager = send0(class(c"NSFileManager"), sel(c"defaultManager"));
+    if url.is_null() || manager.is_null() {
+        return Err("macOS could not prepare the move".into());
+    }
+    let mut resulting = std::ptr::null_mut();
+    let mut error = std::ptr::null_mut();
+    let selector = sel(c"trashItemAtURL:resultingItemURL:error:");
+    if trash_item(manager, selector, url, &mut resulting, &mut error) != 0 {
+        return Ok(());
+    }
+    if error.is_null() {
+        return Err("macOS refused the move".into());
+    }
+    let text = send0(
+        send0(error, sel(c"localizedDescription")),
+        sel(c"UTF8String"),
+    );
+    if text.is_null() {
+        return Err("macOS refused the move".into());
+    }
+    Err(CStr::from_ptr(text.cast()).to_string_lossy().into_owned())
 }
 
 fn class(name: &CStr) -> *mut c_void {
@@ -154,6 +174,8 @@ unsafe extern "C" {
     fn objc_getClass(name: *const std::ffi::c_char) -> *mut c_void;
     fn sel_registerName(name: *const std::ffi::c_char) -> *mut c_void;
     fn objc_msgSend();
+    fn objc_autoreleasePoolPush() -> *mut c_void;
+    fn objc_autoreleasePoolPop(pool: *mut c_void);
 }
 
 #[cfg(test)]
