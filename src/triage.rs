@@ -151,28 +151,15 @@ pub fn summary(labels: &[(usize, Label, String)], count: usize) -> String {
     )
 }
 
-/// Turns a finished sort job's answer into labels by path, or its result into the parse error.
-pub fn finish(job: &mut crate::agent::Job) -> Option<Labels> {
-    job.result.as_ref()?;
-    let paths = job.triage.take()?;
-    let Some(Ok(answer)) = &job.result else {
-        return None;
-    };
-    match parse(answer, paths.len()) {
-        Ok(labels) => {
-            job.result = Some(Ok(summary(&labels, paths.len())));
-            Some(
-                labels
-                    .into_iter()
-                    .map(|(i, label, reason)| (paths[i].clone(), (label, reason)))
-                    .collect(),
-            )
-        }
-        Err(error) => {
-            job.result = Some(Err(error));
-            None
-        }
-    }
+/// A sort answer for `paths` (same order) as labels by path and the summary to show.
+pub fn label(answer: &str, paths: &[String]) -> Result<(Labels, String), String> {
+    let labels = parse(answer, paths.len())?;
+    let shown = summary(&labels, paths.len());
+    let by_path = labels
+        .into_iter()
+        .map(|(i, label, reason)| (paths[i].clone(), (label, reason)))
+        .collect();
+    Ok((by_path, shown))
 }
 
 /// Synthetic items with the label a careful person would give. Never the real disk.
@@ -286,11 +273,16 @@ pub fn eval_cli() -> Option<i32> {
         eprintln!("Usage: folderlens --eval-triage --model M [--endpoint URL] [--cli PATH]");
         return Some(2);
     };
-    let user = items(
-        FIXTURES
-            .iter()
-            .map(|(name, size, note, _)| (*name, *size, *note)),
-    );
+    // The same system prompt, message and stdin wrapping the app sends for a sort.
+    let task = crate::agent::Task::Sort {
+        items: items(
+            FIXTURES
+                .iter()
+                .map(|(name, size, note, _)| (*name, *size, *note)),
+        ),
+        paths: Vec::new(),
+    };
+    let (system, user, _) = task.split();
     let started = std::time::Instant::now();
     let answer = match value("--cli") {
         Some(bin) => {
@@ -298,7 +290,7 @@ pub fn eval_cli() -> Option<i32> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_default();
             let cancel = std::sync::atomic::AtomicU8::new(0);
-            let stdin = format!("{SYSTEM}\n\n{user}\n");
+            let stdin = crate::agent::private_stdin(system, &user);
             let outcome = crate::agent::private_cli::review(&bin, &model, &stdin, &cancel, &home);
             if let Some(dir) = outcome.wrote {
                 eprintln!("Warning: the CLI wrote to {}.", dir.display());
@@ -311,7 +303,7 @@ pub fn eval_cli() -> Option<i32> {
                 .ok()
                 .filter(|key| !key.is_empty())
                 .map(crate::local_ai::ApiKey::new);
-            crate::local_ai::chat(&endpoint, true, &model, key.as_ref(), SYSTEM, &user)
+            crate::local_ai::chat(&endpoint, true, &model, key.as_ref(), system, &user)
         }
     };
     let seconds = started.elapsed().as_secs_f32();

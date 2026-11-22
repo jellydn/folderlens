@@ -321,6 +321,9 @@ fn finish_scan(s: &mut State, catalog: Catalog, now: Instant) {
     s.confirmed = false;
     s.note.clear();
     s.triage.clear();
+    if let Some(job) = &mut s.agent {
+        job.discard_sort();
+    }
     if let Some(job) = &s.agent {
         job.set_access(palette::ask_access(s));
     }
@@ -377,7 +380,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     }
     if let Some(job) = &mut s.agent {
         changed |= job.poll();
-        if let Some(labels) = triage::finish(job) {
+        if let Some(labels) = job.take_labels() {
             s.triage = labels;
         }
     }
@@ -2674,7 +2677,7 @@ mod tests {
             rt.update(|s, _| {
                 let job = s.agent.as_mut().unwrap();
                 job.poll();
-                if let Some(labels) = triage::finish(job) {
+                if let Some(labels) = job.take_labels() {
                     s.triage = labels;
                 }
             });
@@ -2695,6 +2698,65 @@ mod tests {
             s.prefs.kept.push(path);
         });
         assert!(selection_reason(&rt.state, selected[0]).starts_with("Excluded"));
+        let _ = std::fs::remove_file(&rt.state.prefs_path);
+    }
+
+    #[test]
+    fn a_rescan_during_a_sort_drops_its_labels() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (release, gate) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut seen = Vec::new();
+            let mut chunk = [0; 4096];
+            while !seen.ends_with(b"}") {
+                let n = stream.read(&mut chunk).unwrap();
+                seen.extend_from_slice(&chunk[..n]);
+            }
+            // Answer only after the rescan below has finished.
+            let _ = gate.recv();
+            let answer = r#"{"i":0,"label":"safe","reason":"Cache"}"#;
+            let body = serde_json::json!({"choices":[{"message":{"content":answer}}]}).to_string();
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        let mut rt = runtime();
+        rt.update(|s, _| {
+            apply_level(s, Level::Balanced);
+            s.prefs.agent_id = prefs::LOCAL.into();
+            s.prefs.agent_bin = prefs::LOCAL.into();
+            s.prefs.local_endpoint = format!("http://127.0.0.1:{port}/v1");
+            s.prefs
+                .models
+                .insert(prefs::LOCAL.into(), "qwen2.5:3b".into());
+            s.prefs.allow_start = true;
+            s.prefs.consent.insert(s.prefs.consent_key());
+            palette::sort(s);
+        });
+        assert!(rt.state.agent.is_some());
+        finish_scan(&mut rt.state, catalog::fixture(), Instant::now());
+        release.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while rt.state.agent.as_ref().unwrap().result.is_none() && Instant::now() < deadline {
+            rt.update(|s, _| {
+                let job = s.agent.as_mut().unwrap();
+                job.poll();
+                if let Some(labels) = job.take_labels() {
+                    s.triage = labels;
+                }
+            });
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(rt.state.agent.as_ref().unwrap().result.is_some());
+        assert!(
+            rt.state.triage.is_empty(),
+            "labels from before the rescan stay dropped"
+        );
         let _ = std::fs::remove_file(&rt.state.prefs_path);
     }
 

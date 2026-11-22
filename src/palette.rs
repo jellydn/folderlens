@@ -497,11 +497,16 @@ fn analyse(s: &mut State) {
     close(s);
 }
 
-pub fn ask_prompt(s: &State) -> Result<String, &'static str> {
-    let selected: Vec<_> = (0..s.catalog.leaves.len())
+/// The eligible ticked items, as Ask and Sort send them.
+fn selected_leaves(s: &State) -> Vec<catalog::Leaf> {
+    (0..s.catalog.leaves.len())
         .filter(|&index| super::is_ticked(s, index))
         .map(|index| leaf_view(s, index))
-        .collect();
+        .collect()
+}
+
+pub fn ask_prompt(s: &State) -> Result<String, &'static str> {
+    let selected = selected_leaves(s);
     let detail = format!(
         "Selected items: {}, {} total.\n{}",
         selected.len(),
@@ -556,10 +561,7 @@ pub fn sort(s: &mut State) {
 
 /// The selected items as a sort task: names, or full paths with path sharing on.
 fn sort_task(s: &State) -> crate::agent::Task {
-    let selected: Vec<_> = (0..s.catalog.leaves.len())
-        .filter(|&index| super::is_ticked(s, index))
-        .map(|index| leaf_view(s, index))
-        .collect();
+    let selected = selected_leaves(s);
     let items = crate::triage::items(selected.iter().map(|leaf| {
         let name = if s.prefs.send_paths {
             leaf.path.as_str()

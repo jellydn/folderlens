@@ -28,6 +28,11 @@ pub fn reader_helper() -> Option<i32> {
     provider::resume_helper().or_else(broker::helper)
 }
 
+/// The one stdin a private CLI run gets: the system prompt, then the message.
+pub fn private_stdin(system: &str, user: &str) -> String {
+    format!("{system}\n\n{user}\n")
+}
+
 /// What a Local AI or private CLI job asks: a free-text review of the saved context, or a
 /// triage sort of `items` whose answer is parsed into labels for `paths` (same order).
 pub enum Task {
@@ -37,7 +42,7 @@ pub enum Task {
 
 impl Task {
     /// The system prompt and user message, and the paths a sort labels.
-    fn split(self) -> (&'static str, String, Option<Vec<String>>) {
+    pub(crate) fn split(self) -> (&'static str, String, Option<Vec<String>>) {
         match self {
             Self::Review(context) => (
                 crate::local_ai::SYSTEM,
@@ -106,8 +111,10 @@ pub struct Job {
     /// Local AI cannot abort a ureq request, so a cancel ends the job at once and drops the
     /// late answer. Jobs with a child keep waiting until it is reaped.
     drop_on_cancel: bool,
-    /// For a triage sort: the labelled paths, by index. `triage::finish` takes them.
-    pub triage: Option<Vec<String>>,
+    /// For a triage sort in flight: the labelled paths, by index.
+    triage: Option<Vec<String>>,
+    /// A finished sort's labels, until `take_labels`; `result` then holds the summary.
+    labels: Option<crate::triage::Labels>,
 }
 
 impl Drop for Job {
@@ -170,6 +177,7 @@ impl Job {
             broker: Some(broker),
             drop_on_cancel: false,
             triage: None,
+            labels: None,
         };
         let script = job.script.clone();
         let bin = job.bin.clone();
@@ -245,7 +253,7 @@ impl Job {
         let (name, prefs_path) = (job.name.clone(), prefs_path.to_path_buf());
         let (system, user, paths) = task.split();
         job.triage = paths;
-        let stdin = format!("{system}\n\n{user}\n");
+        let stdin = private_stdin(system, &user);
         std::thread::spawn(move || {
             let home = std::env::var_os("HOME")
                 .map(PathBuf::from)
@@ -264,6 +272,17 @@ impl Job {
             let _ = sender.send(outcome.answer.map_err(|error| redact_diagnostics(&error)));
         });
         job
+    }
+
+    /// A finished sort's labels, once.
+    pub fn take_labels(&mut self) -> Option<crate::triage::Labels> {
+        self.labels.take()
+    }
+
+    /// A rescan made this sort's input stale: its answer still shows, but sets no labels.
+    pub fn discard_sort(&mut self) {
+        self.triage = None;
+        self.labels = None;
     }
 
     pub fn set_access(&self, access: Access) {
@@ -286,6 +305,7 @@ impl Job {
             broker: None,
             drop_on_cancel: false,
             triage: None,
+            labels: None,
         }
     }
 
@@ -317,7 +337,16 @@ impl Job {
                         broker.stop();
                     }
                 }
-                self.result = Some(result);
+                // A sort's raw JSON never reaches `result`: it becomes labels and a summary.
+                self.result = Some(match (self.triage.take(), result) {
+                    (Some(paths), Ok(answer)) => {
+                        crate::triage::label(&answer, &paths).map(|(labels, shown)| {
+                            self.labels = Some(labels);
+                            shown
+                        })
+                    }
+                    (_, result) => result,
+                });
                 return true;
             }
             Err(mpsc::TryRecvError::Disconnected) => {
