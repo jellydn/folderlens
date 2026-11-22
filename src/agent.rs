@@ -14,6 +14,8 @@ use crate::prefs;
 
 #[path = "broker.rs"]
 mod broker;
+#[path = "private_cli.rs"]
+pub(crate) mod private_cli;
 #[path = "provider.rs"]
 pub(crate) mod provider;
 use provider::{Launch, Provider};
@@ -80,6 +82,9 @@ pub struct Job {
     access: Arc<Mutex<Access>>,
     cancel: Arc<AtomicU8>,
     broker: Option<broker::Broker>,
+    /// Local AI cannot abort a ureq request, so a cancel ends the job at once and drops the
+    /// late answer. Jobs with a child keep waiting until it is reaped.
+    drop_on_cancel: bool,
 }
 
 impl Drop for Job {
@@ -140,6 +145,7 @@ impl Job {
             access: shared.clone(),
             cancel: cancel.clone(),
             broker: Some(broker),
+            drop_on_cancel: false,
         };
         let script = job.script.clone();
         let bin = job.bin.clone();
@@ -166,6 +172,7 @@ impl Job {
         job.model = prefs.model().into();
         job.consent_key = prefs.consent_key();
         job.elapsed = 0;
+        job.drop_on_cancel = true;
         let (sender, receiver) = mpsc::channel();
         job.receiver = Some(receiver);
         let endpoint = prefs.local_endpoint.clone();
@@ -189,6 +196,51 @@ impl Job {
         job
     }
 
+    /// A private Pi or OpenCode review (ADR 5): one run with no tools, session or run folder.
+    /// When the write guard finds a change, the worker itself turns the adapter off in the
+    /// settings at `prefs_path`, so the finding survives Quit or a replaced job.
+    pub fn start_private(
+        prefs: &prefs::Prefs,
+        prefs_path: &Path,
+        name: &str,
+        context: &str,
+    ) -> Self {
+        let mut job = Self::preview(None);
+        job.name = name.into();
+        job.bin = prefs.agent_bin.clone();
+        job.model = prefs.model().into();
+        job.consent_key = prefs.consent_key();
+        job.elapsed = 0;
+        let (sender, receiver) = mpsc::channel();
+        job.receiver = Some(receiver);
+        let (bin, model, cancel) = (job.bin.clone(), job.model.clone(), job.cancel.clone());
+        // Captured now: the agent that runs, not whichever is chosen when the run ends.
+        let agent = prefs.model_key();
+        let (name, prefs_path) = (job.name.clone(), prefs_path.to_path_buf());
+        let stdin = format!(
+            "{}\n\n<selection>\n{context}\n</selection>\n",
+            crate::local_ai::SYSTEM
+        );
+        std::thread::spawn(move || {
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let outcome = private_cli::review(&bin, &model, &stdin, &cancel, &home);
+            if let Some(dir) = outcome.wrote {
+                let shown = dir.strip_prefix(&home).map_or_else(
+                    |_| "its data folder".into(),
+                    |rest| format!("~/{}", rest.display()),
+                );
+                let reason = format!("{name} wrote to {shown} during a private run, so FolderLens turned it off. Nothing was deleted.");
+                let mut saved = prefs::load_from(&prefs_path);
+                saved.adapter_disabled.insert(agent, reason);
+                prefs::save_to(&prefs_path, &saved);
+            }
+            let _ = sender.send(outcome.answer.map_err(|error| redact_diagnostics(&error)));
+        });
+        job
+    }
+
     pub fn set_access(&self, access: Access) {
         *self.access.lock().unwrap() = access;
     }
@@ -207,6 +259,7 @@ impl Job {
             access: Arc::new(Mutex::new(Access::default())),
             cancel: Arc::new(AtomicU8::new(RUNNING)),
             broker: None,
+            drop_on_cancel: false,
         }
     }
 
@@ -226,7 +279,7 @@ impl Job {
         };
         // A Local AI job has no broker or child to stop; ureq cannot abort a request in flight.
         // Dropping the receiver ends the job now, and the worker's late answer goes nowhere.
-        if self.broker.is_none() && self.cancel.load(Ordering::SeqCst) == CANCELLED {
+        if self.drop_on_cancel && self.cancel.load(Ordering::SeqCst) == CANCELLED {
             self.receiver = None;
             self.result = Some(Err("Analysis cancelled.".into()));
             return true;

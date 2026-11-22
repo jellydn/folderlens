@@ -12,6 +12,8 @@ fn local_ai_settings_and_consent_round_trip_but_the_key_never_does() {
         local_key_saved: true,
         local_models: vec!["qwen2.5:3b".into()],
         consent: BTreeSet::from([r#"["local@100.101.1.2:9931","qwen2.5:3b"]"#.into()]),
+        private_cli: true,
+        adapter_disabled: BTreeMap::from([("pi".into(), "Pi wrote to ~/.pi".into())]),
         ..Prefs::default()
     };
     save_to(&path, &prefs);

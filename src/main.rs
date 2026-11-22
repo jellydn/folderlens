@@ -351,6 +351,12 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
         if s.prefs.theme != prefs.theme {
             tx.instant();
         }
+        // A private run's write guard turned the chosen agent off; say why.
+        if s.prefs.disabled_reason().is_none() {
+            if let Some(reason) = prefs.disabled_reason() {
+                s.note = reason.to_string();
+            }
+        }
         s.prefs = prefs;
         s.consent_open = false;
         changed = true;
@@ -2583,6 +2589,29 @@ mod tests {
             assert_eq!(job.result, Some(Err("Analysis cancelled.".into())));
         });
         let _ = std::fs::remove_file(&rt.state.prefs_path);
+    }
+
+    #[test]
+    fn an_adapter_the_write_guard_turned_off_sends_nothing() {
+        let mut rt = runtime();
+        rt.update(|s, _| {
+            apply_level(s, Level::Balanced);
+            s.prefs.agent_id = "pi".into();
+            s.prefs.agent_bin = "/opt/bin/pi".into();
+            s.prefs.allow_start = true;
+            s.prefs.private_cli = true;
+            s.prefs.consent.insert(s.prefs.consent_key());
+            s.prefs
+                .adapter_disabled
+                .insert("pi".into(), "Pi wrote to ~/.pi/agent/sessions.".into());
+            palette::ask(s);
+        });
+        assert!(rt.state.agent.is_none());
+        assert!(
+            rt.state.note.contains("Turn it on again"),
+            "{}",
+            rt.state.note
+        );
     }
 
     #[test]

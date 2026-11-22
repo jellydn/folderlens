@@ -229,6 +229,12 @@ Only servers on this Mac are accepted until you turn on the network switch. Then
 
 Before the first request to each provider and exact model (and each server outside this Mac), Agent help asks for consent and names what is sent. **Settings → Privacy → Revoke all** asks again. The provider and model menu in Agent help switches between adapted CLIs and listed Local AI models.
 
+### Private runs (Pi and OpenCode)
+
+With Pi or OpenCode chosen, **Settings → Agent → Private runs** asks the CLI for one answer with no tools, no session and no run folder, so there is no Terminal chat afterwards. Pi runs with `--no-session --no-tools --offline`; OpenCode keeps its database in memory and its data and config in a private temp folder that FolderLens removes afterwards, with every tool denied. The selection goes on stdin, never in the command line. Only Pi 1.5.2 and OpenCode 2.3.0 are accepted; other versions are refused before anything is sent.
+
+FolderLens compares the CLI's own data folders (`~/.pi/agent/sessions`, and OpenCode's folders under `~/.local/share`, `~/.local/state`, `~/.cache` and `~/.config`) before and after each run. If something changed, it turns that agent off, says which folder changed and deletes nothing. **Turn on again** on the Agent page clears it. The model provider may still keep its own logs.
+
 Agent-start permission still applies. Requests remain manual; there are no automatic paid calls. Destructive work requires separate approval, and FolderLens itself never deletes files. Run files can contain shared paths and remain on disk until you remove them. On this Mac, the installed Grok read-only sandbox currently refuses startup because of a socket-symlink deny-list error; FolderLens reports it rather than disabling the sandbox. Harmless native metadata checks verified Copilot's plan/Auto selection, Pi's model state, and OpenCode's private-mode loading and exact model selection without sending a model prompt. Live model analysis, native tool routing during a model turn, and native Terminal continuation have not been verified; protocol stubs cover the handoff and failures.
 
 ## Updates
