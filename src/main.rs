@@ -1820,9 +1820,7 @@ fn main() {
                 for (path, (label, reason)) in paths.into_iter().zip(picks) {
                     s.triage.insert(path, (label, reason.into()));
                 }
-                for open in &mut s.open {
-                    *open = true;
-                }
+                s.open.fill(true);
                 s.note = "Example data · no disk scan or agent request".into();
             }),
             ("overview-example", |s: &mut State| {
