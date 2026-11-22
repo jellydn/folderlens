@@ -162,7 +162,11 @@ pub fn spec() -> AppSpec<Settings> {
             }),
             ("consent-example", |state| {
                 state.page = Page::Access;
-                state.prefs.consent = ["local:qwen2.5:3b".into(), "pi:openrouter/x".into()].into();
+                state.prefs.consent = [
+                    r#"["local","qwen2.5:3b"]"#.into(),
+                    r#"["pi","openrouter/x"]"#.into(),
+                ]
+                .into();
             }),
             ("updates", |state| state.advanced_open = true),
             ("updates-preview", |state| {

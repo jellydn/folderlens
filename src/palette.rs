@@ -546,10 +546,8 @@ pub fn ask(s: &mut State) {
     match ask_prompt(s) {
         // An executable without an adapter fails visibly below; nothing is sent, so no question.
         Ok(_)
-            if !s.prefs.has_consent()
-                && (s.prefs.is_local()
-                    || crate::agent::validate_model(&s.prefs.agent_bin, s.prefs.model())
-                        .is_ok()) =>
+            if crate::agent::validate_model(&s.prefs.agent_bin, s.prefs.model()).is_ok()
+                && !s.prefs.has_consent() =>
         {
             s.consent_open = true;
         }
@@ -567,7 +565,8 @@ pub fn ask(s: &mut State) {
                 &prompt,
                 ask_access(s),
             ) {
-                Ok(job) => {
+                Ok(mut job) => {
+                    job.consent_key = s.prefs.consent_key();
                     s.agent = Some(job);
                 }
                 Err(err) => {

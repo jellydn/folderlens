@@ -357,7 +357,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     }
     if let Some(job) = &s.agent {
         job.set_access(palette::ask_access(s));
-        if !s.prefs.allow_start || s.prefs.agent_bin != job.bin || s.prefs.model() != job.model {
+        if !job.allowed_by(&s.prefs) {
             job.cancel();
         }
     }
@@ -2544,7 +2544,7 @@ mod tests {
                 .models
                 .insert(prefs::LOCAL.into(), "qwen2.5:3b".into());
             s.prefs.allow_start = true;
-            s.prefs.consent.insert("local:other-model".into());
+            s.prefs.consent.insert(r#"["local","other-model"]"#.into());
         });
         rt.frame(0.0);
         let before = ticked_ids(&rt.state);
@@ -2571,8 +2571,17 @@ mod tests {
         assert!(rt.state.agent.is_some());
         assert!(prefs::load_from(&rt.state.prefs_path)
             .consent
-            .contains("local:qwen2.5:3b"));
+            .contains(r#"["local","qwen2.5:3b"]"#));
         assert_eq!(ticked_ids(&rt.state), before);
+        // Revoke all ends the request at once; no late answer can show as the review.
+        rt.update(|s, _| {
+            s.prefs.consent.clear();
+            let job = s.agent.as_mut().unwrap();
+            assert!(!job.allowed_by(&s.prefs));
+            job.cancel();
+            job.poll();
+            assert_eq!(job.result, Some(Err("Analysis cancelled.".into())));
+        });
         let _ = std::fs::remove_file(&rt.state.prefs_path);
     }
 

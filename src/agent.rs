@@ -15,7 +15,7 @@ use crate::prefs;
 #[path = "broker.rs"]
 mod broker;
 #[path = "provider.rs"]
-mod provider;
+pub(crate) mod provider;
 use provider::{Launch, Provider};
 
 const RUNNING: u8 = 0;
@@ -70,6 +70,8 @@ pub struct Job {
     pub name: String,
     pub bin: String,
     pub model: String,
+    /// The consent this job runs under; a change of provider, model, host or consent ends it.
+    pub consent_key: String,
     pub script: PathBuf,
     pub result: Option<Result<String, String>>,
     started: Instant,
@@ -129,6 +131,7 @@ impl Job {
             name: name.into(),
             bin: bin.into(),
             model: model.into(),
+            consent_key: String::new(),
             script,
             result: None,
             started: Instant::now(),
@@ -161,6 +164,7 @@ impl Job {
         job.name = "Local AI".into();
         job.bin = prefs.agent_bin.clone();
         job.model = prefs.model().into();
+        job.consent_key = prefs.consent_key();
         job.elapsed = 0;
         let (sender, receiver) = mpsc::channel();
         job.receiver = Some(receiver);
@@ -172,17 +176,14 @@ impl Job {
         let cancel = job.cancel.clone();
         std::thread::spawn(move || {
             // The Keychain may prompt, so it is read here, never on the UI thread.
-            let key = key_saved
-                .then(crate::keychain::local_api_key)
-                .flatten()
-                .map(crate::local_ai::ApiKey);
+            let key = key_saved.then(crate::keychain::local_api_key).flatten();
+            // A cancel during a Keychain prompt must not send the selection afterwards.
+            if cancel.load(Ordering::SeqCst) == CANCELLED {
+                return;
+            }
             let result =
-                crate::local_ai::review(&endpoint, allow_network, &model, key.as_ref(), &context);
-            let result = if cancel.load(Ordering::SeqCst) == CANCELLED {
-                Err("Analysis cancelled.".into())
-            } else {
-                result.map_err(|error| redact_diagnostics(&error))
-            };
+                crate::local_ai::review(&endpoint, allow_network, &model, key.as_ref(), &context)
+                    .map_err(|error| redact_diagnostics(&error));
             let _ = sender.send(result);
         });
         job
@@ -197,6 +198,7 @@ impl Job {
             name: "Antigravity".into(),
             bin: "preview-only".into(),
             model: String::new(),
+            consent_key: String::new(),
             script: PathBuf::new(),
             result,
             started: Instant::now(),
@@ -222,6 +224,13 @@ impl Job {
         let Some(receiver) = &self.receiver else {
             return false;
         };
+        // A Local AI job has no broker or child to stop; ureq cannot abort a request in flight.
+        // Dropping the receiver ends the job now, and the worker's late answer goes nowhere.
+        if self.broker.is_none() && self.cancel.load(Ordering::SeqCst) == CANCELLED {
+            self.receiver = None;
+            self.result = Some(Err("Analysis cancelled.".into()));
+            return true;
+        }
         match receiver.try_recv() {
             Ok(result) => {
                 if result.is_err() {
@@ -267,8 +276,19 @@ impl Job {
         }
     }
 
+    /// Whether `prefs` still allow this job: the same agent and model and, for a job that
+    /// recorded one, the same consent, not revoked.
+    pub fn allowed_by(&self, prefs: &prefs::Prefs) -> bool {
+        prefs.allow_start
+            && prefs.agent_bin == self.bin
+            && prefs.model() == self.model
+            && (self.consent_key.is_empty()
+                || (prefs.consent_key() == self.consent_key
+                    && prefs.consent.contains(&self.consent_key)))
+    }
+
     pub fn open_chat(&self, prefs: &prefs::Prefs) -> Result<(), String> {
-        if !prefs.allow_start || prefs.agent_bin != self.bin || prefs.model() != self.model {
+        if !self.allowed_by(prefs) {
             return Err(
                 "Grant access to the same agent and model in Settings before opening this chat."
                     .into(),

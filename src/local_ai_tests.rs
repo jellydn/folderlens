@@ -258,3 +258,22 @@ fn a_closed_port_says_the_server_is_not_running_and_a_lan_address_needs_the_opt_
     let error = review("http://192.168.1.5:11434/v1", false, "m", None, "x").unwrap_err();
     assert!(error.contains("Allow LAN and Tailscale"), "{error}");
 }
+
+#[test]
+fn the_key_never_travels_in_plain_http_to_a_lan_host() {
+    let key = ApiKey::new("s3cret".into());
+    // Refused before any connection, so the stub-free address is never contacted.
+    let error = review("http://192.168.1.20:8080/v1", true, "m", Some(&key), "x").unwrap_err();
+    assert!(error.contains("only over https://"), "{error}");
+    let error = list_models("http://studio.local:1234/v1", true, Some(&key)).unwrap_err();
+    assert!(error.contains("only over https://"), "{error}");
+    // Tailscale encrypts plain http, so its 100.64/10 and fd7a:115c:a1e0::/48 addresses may.
+    assert!(key_may_travel("http://100.101.1.2:9931/v1"));
+    assert!(key_may_travel("http://[fd7a:115c:a1e0::1]:9931/v1"));
+    assert!(key_may_travel("https://studio.local:1234/v1"));
+    assert!(key_may_travel("http://127.0.0.1:8080/v1"));
+    assert!(
+        !key_may_travel("http://100.128.0.1:9931/v1"),
+        "outside 100.64/10"
+    );
+}

@@ -42,20 +42,22 @@ pub(super) fn listed_models(state: &Settings) -> Vec<El> {
     rows
 }
 
-fn list_button(state: &Settings) -> El {
-    let style = if state.local_busy {
+fn busy_style(state: &Settings) -> ButtonStyle {
+    if state.local_busy {
         ButtonStyle::Disabled
     } else {
         ButtonStyle::Secondary
-    };
-    button("List models", style)
+    }
+}
+
+fn list_button(state: &Settings) -> El {
+    button("List models", busy_style(state))
         .key("list-models")
         .on_press(start_list_models)
 }
 
 const NETWORK_NOTE: &str = "Off: only servers on this Mac. On: also private LAN and Tailscale addresses and names. Public addresses are always refused, also when a name resolves to one.";
-const KEY_NOTE: &str =
-    "Optional, for llama-server --api-key. Kept in the Keychain and sent as a Bearer token.";
+const KEY_NOTE: &str = "Optional, for llama-server --api-key. Kept in the Keychain and sent as a Bearer token, only over https, to this Mac or to a Tailscale address.";
 
 pub(super) fn server(state: &Settings) -> El {
     let p = &state.prefs;
@@ -68,7 +70,7 @@ pub(super) fn server(state: &Settings) -> El {
             })
     };
     let key_control = if p.local_key_saved {
-        button("Remove", ButtonStyle::Secondary)
+        button("Remove", busy_style(state))
             .key("remove-key")
             .on_press(remove_key)
     } else {
@@ -90,7 +92,7 @@ pub(super) fn server(state: &Settings) -> El {
                     .on_edit(|state: &mut Settings| &mut state.api_key),
             )
             .child(
-                button("Save", ButtonStyle::Secondary)
+                button("Save", busy_style(state))
                     .key("save-key")
                     .on_press(save_key),
             )
@@ -237,10 +239,7 @@ fn start_list_models(state: &mut Settings) {
         state,
         "Asking the server for its models…",
         move || {
-            let key = saved
-                .then(crate::keychain::local_api_key)
-                .flatten()
-                .map(crate::local_ai::ApiKey);
+            let key = saved.then(crate::keychain::local_api_key).flatten();
             let models = crate::local_ai::list_models(&endpoint, network, key.as_ref());
             (endpoint, models)
         },
@@ -248,47 +247,54 @@ fn start_list_models(state: &mut Settings) {
     );
 }
 
+/// Applies a finished background result to the settings saved now, not to the copy Settings
+/// loaded when it opened: the panel may have saved a choice or consent in between.
+fn save_result(state: &mut Settings, apply: impl FnOnce(&mut prefs::Prefs)) {
+    let mut saved = prefs::load_from(&state.path);
+    apply(&mut saved);
+    prefs::save_to(&state.path, &saved);
+    state.prefs = saved;
+}
+
 fn finish_list_models(
     state: &mut Settings,
     (endpoint, models): (String, Result<Vec<String>, String>),
 ) {
-    if endpoint != state.prefs.local_endpoint {
+    let models = match models {
+        Ok(models) => models,
+        Err(error) => {
+            state.local_note = error;
+            return;
+        }
+    };
+    if endpoint != prefs::load_from(&state.path).local_endpoint {
         state.local_note = "The address changed while listing. List models again.".into();
         return;
     }
-    state.local_note = match models {
-        Ok(models) if models.is_empty() => {
-            "The server reports no models. Load one in the server first.".into()
-        }
-        Ok(models) => {
-            let note = match models.len() {
-                1 => "1 model listed.".to_string(),
-                n => format!("{n} models listed."),
-            };
-            state.prefs.local_models = models;
-            persist(state);
-            note
-        }
-        Err(error) => error,
+    state.local_note = match models.len() {
+        0 => "The server reports no models. Load one in the server first.".into(),
+        1 => "1 model listed.".into(),
+        n => format!("{n} models listed."),
     };
+    // An empty list replaces the old one too, so the quick switch offers no stale models.
+    save_result(state, |saved| saved.local_models = models);
 }
 
 fn save_key(state: &mut Settings) {
     let key = state.api_key.text.trim().to_string();
-    // The field never keeps the key once Save is pressed.
-    state.api_key = TextEdit::default().secure();
-    if key.is_empty() {
+    if key.is_empty() || state.local_busy {
         return;
     }
+    // The field never keeps the key once the save starts.
+    state.api_key = TextEdit::default().secure();
     in_background(
         state,
         "Saving the key in the Keychain…",
         move || crate::keychain::set_local_api_key(&key),
         |state, result| match result {
             Ok(()) => {
-                state.prefs.local_key_saved = true;
                 state.local_note = "API key saved in the Keychain.".into();
-                persist(state);
+                save_result(state, |saved| saved.local_key_saved = true);
             }
             Err(error) => state.local_note = error,
         },
@@ -302,9 +308,8 @@ fn remove_key(state: &mut Settings) {
         crate::keychain::remove_local_api_key,
         |state, result| match result {
             Ok(()) => {
-                state.prefs.local_key_saved = false;
                 state.local_note = "API key removed.".into();
-                persist(state);
+                save_result(state, |saved| saved.local_key_saved = false);
             }
             Err(error) => state.local_note = error,
         },
