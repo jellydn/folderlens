@@ -543,6 +543,11 @@ pub fn ask(s: &mut State) {
         close(s);
         return;
     }
+    if let Some(reason) = s.prefs.disabled_reason() {
+        s.note = format!("{reason} Turn it on again in Settings › Agent, or choose another agent.");
+        close(s);
+        return;
+    }
     match ask_prompt(s) {
         // An executable without an adapter fails visibly below; nothing is sent, so no question.
         Ok(_)
@@ -553,6 +558,12 @@ pub fn ask(s: &mut State) {
         }
         Ok(prompt) if s.prefs.is_local() => {
             s.agent = Some(crate::agent::Job::start_local(&s.prefs, &prompt));
+            s.note.clear();
+            s.agent_details = false;
+        }
+        Ok(prompt) if s.prefs.private_run() => {
+            let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
+            s.agent = Some(crate::agent::Job::start_private(&s.prefs, who, &prompt));
             s.note.clear();
             s.agent_details = false;
         }

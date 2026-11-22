@@ -99,6 +99,14 @@ pub fn spec() -> AppSpec<Settings> {
             ("agent-pi", |state| {
                 preview_agent(state, "pi", "openrouter/openrouter/free")
             }),
+            ("agent-private", |state| {
+                preview_agent(state, "pi", "openrouter/openrouter/free");
+                state.prefs.private_cli = true;
+                state.prefs.adapter_disabled.insert(
+                    "pi".into(),
+                    "Pi wrote to ~/.pi/agent/sessions during a private run, so FolderLens turned it off. Nothing was deleted.".into(),
+                );
+            }),
             ("agent-advanced", |state| {
                 preview_agent(state, "pi", "openrouter/openrouter/free");
                 state.sub = Some(SubPage::Agent);
@@ -766,6 +774,8 @@ fn agent_label(state: &Settings) -> &'static str {
     })
 }
 
+const PRIVATE_NOTE: &str = "One answer with no tools, session or run folder; no Terminal chat. Pi 1.5.2 and OpenCode 2.3.0 only. If the CLI still writes to its own data folder, FolderLens turns it off.";
+
 fn agent(state: &Settings) -> El {
     let p = &state.prefs;
     let command = if p.agent_bin.is_empty() {
@@ -795,6 +805,34 @@ fn agent(state: &Settings) -> El {
                 |s| s.sub = Some(SubPage::Server),
             ),
         ));
+    }
+    if crate::agent::private_cli::supports(&p.agent_bin) {
+        rows.push(setting(
+            &icons::PRIVACY,
+            "Private runs",
+            PRIVATE_NOTE,
+            switch("private-cli", "Private runs", p.private_cli, |s| {
+                s.prefs.private_cli = !s.prefs.private_cli;
+                persist(s);
+            }),
+        ));
+    }
+    if let Some(reason) = p.disabled_reason() {
+        rows.push(
+            setting(
+                &icons::NOTE,
+                "Turned off",
+                reason,
+                button("Turn on again", ButtonStyle::Secondary)
+                    .key("enable-adapter")
+                    .on_press(|s: &mut Settings| {
+                        let key = s.prefs.model_key();
+                        s.prefs.adapter_disabled.remove(&key);
+                        persist(s);
+                    }),
+            )
+            .key("adapter-disabled"),
+        );
     }
     sheet(
         state,

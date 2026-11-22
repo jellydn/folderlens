@@ -81,6 +81,10 @@ pub struct Prefs {
     pub local_models: Vec<String>,
     /// Consent keys from `consent_key`: one per provider and exact model (and host).
     pub consent: BTreeSet<String>,
+    /// Pi and OpenCode run once without tools, sessions or a run folder (ADR 5).
+    pub private_cli: bool,
+    /// Adapters the write guard turned off, by agent id, with the reason shown in Settings.
+    pub adapter_disabled: BTreeMap<String, String>,
 }
 
 impl Default for Prefs {
@@ -107,6 +111,8 @@ impl Default for Prefs {
             local_key_saved: false,
             local_models: Vec::new(),
             consent: BTreeSet::new(),
+            private_cli: false,
+            adapter_disabled: BTreeMap::new(),
         }
     }
 }
@@ -129,6 +135,18 @@ impl Prefs {
 
     pub fn is_local(&self) -> bool {
         self.agent_id == LOCAL
+    }
+
+    /// Whether Ask runs the chosen CLI in private mode: Pi or OpenCode with the switch on.
+    pub fn private_run(&self) -> bool {
+        self.private_cli && crate::agent::private_cli::supports(&self.agent_bin)
+    }
+
+    /// Why the write guard turned off the chosen adapter, if it did.
+    pub fn disabled_reason(&self) -> Option<&str> {
+        self.adapter_disabled
+            .get(&self.model_key())
+            .map(String::as_str)
     }
 
     /// What one consent covers: the provider and exact model, plus the host for a Local AI
@@ -277,6 +295,10 @@ pub fn load_from(path: &Path) -> Prefs {
             "local_key_saved" => prefs.local_key_saved = value == "1",
             "local_models" => prefs.local_models = serde_json::from_str(value).unwrap_or_default(),
             "consent" => prefs.consent = serde_json::from_str(value).unwrap_or_default(),
+            "private_cli" => prefs.private_cli = value == "1",
+            "adapter_disabled" => {
+                prefs.adapter_disabled = serde_json::from_str(value).unwrap_or_default()
+            }
             _ => {}
         }
     }
@@ -338,6 +360,11 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
     text.push_str(&format!(
         "consent={}\n",
         serde_json::to_string(&prefs.consent).unwrap()
+    ));
+    text.push_str(&format!("private_cli={}\n", flag(prefs.private_cli)));
+    text.push_str(&format!(
+        "adapter_disabled={}\n",
+        serde_json::to_string(&prefs.adapter_disabled).unwrap()
     ));
     for path in &prefs.kept {
         text.push_str("kept=");
@@ -424,6 +451,7 @@ pub fn quick_choices(prefs: &Prefs, agents: &[Agent]) -> Vec<Choice> {
         .iter()
         .filter(|agent| {
             crate::agent::provider::Provider::for_bin(&agent.bin.to_string_lossy()).is_ok()
+                && !prefs.adapter_disabled.contains_key(agent.id)
         })
         .map(|agent| {
             let model = prefs.models.get(agent.id).cloned().unwrap_or_default();

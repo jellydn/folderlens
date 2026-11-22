@@ -14,6 +14,8 @@ use crate::prefs;
 
 #[path = "broker.rs"]
 mod broker;
+#[path = "private_cli.rs"]
+pub(crate) mod private_cli;
 #[path = "provider.rs"]
 pub(crate) mod provider;
 use provider::{Launch, Provider};
@@ -80,6 +82,10 @@ pub struct Job {
     access: Arc<Mutex<Access>>,
     cancel: Arc<AtomicU8>,
     broker: Option<broker::Broker>,
+    /// A private CLI run's write-guard finding: the data folder that changed.
+    wrote: Arc<Mutex<Option<PathBuf>>>,
+    /// Private runs stop their child within a poll, so they keep their result after cancel.
+    ends_on_cancel: bool,
 }
 
 impl Drop for Job {
@@ -140,6 +146,8 @@ impl Job {
             access: shared.clone(),
             cancel: cancel.clone(),
             broker: Some(broker),
+            wrote: Arc::default(),
+            ends_on_cancel: false,
         };
         let script = job.script.clone();
         let bin = job.bin.clone();
@@ -189,6 +197,44 @@ impl Job {
         job
     }
 
+    /// A private Pi or OpenCode review (ADR 5): one run with no tools, session or run folder.
+    /// The worker reports a changed CLI data folder, and the caller turns the adapter off.
+    pub fn start_private(prefs: &prefs::Prefs, name: &str, context: &str) -> Self {
+        let mut job = Self::preview(None);
+        job.name = name.into();
+        job.bin = prefs.agent_bin.clone();
+        job.model = prefs.model().into();
+        job.consent_key = prefs.consent_key();
+        job.elapsed = 0;
+        job.ends_on_cancel = false;
+        let (sender, receiver) = mpsc::channel();
+        job.receiver = Some(receiver);
+        let (bin, model, cancel, wrote) = (
+            job.bin.clone(),
+            job.model.clone(),
+            job.cancel.clone(),
+            job.wrote.clone(),
+        );
+        let stdin = format!(
+            "{}\n\n<selection>\n{context}\n</selection>\n",
+            crate::local_ai::SYSTEM
+        );
+        std::thread::spawn(move || {
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let outcome = private_cli::review(&bin, &model, &stdin, &cancel, &home);
+            *wrote.lock().unwrap() = outcome.wrote;
+            let _ = sender.send(outcome.answer.map_err(|error| redact_diagnostics(&error)));
+        });
+        job
+    }
+
+    /// The data folder a private run wrote into, once; the caller turns the adapter off.
+    pub fn take_wrote(&self) -> Option<PathBuf> {
+        self.wrote.lock().unwrap().take()
+    }
+
     pub fn set_access(&self, access: Access) {
         *self.access.lock().unwrap() = access;
     }
@@ -207,6 +253,8 @@ impl Job {
             access: Arc::new(Mutex::new(Access::default())),
             cancel: Arc::new(AtomicU8::new(RUNNING)),
             broker: None,
+            wrote: Arc::default(),
+            ends_on_cancel: true,
         }
     }
 
@@ -226,7 +274,10 @@ impl Job {
         };
         // A Local AI job has no broker or child to stop; ureq cannot abort a request in flight.
         // Dropping the receiver ends the job now, and the worker's late answer goes nowhere.
-        if self.broker.is_none() && self.cancel.load(Ordering::SeqCst) == CANCELLED {
+        if self.ends_on_cancel
+            && self.broker.is_none()
+            && self.cancel.load(Ordering::SeqCst) == CANCELLED
+        {
             self.receiver = None;
             self.result = Some(Err("Analysis cancelled.".into()));
             return true;
