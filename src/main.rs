@@ -12,6 +12,8 @@
 
 mod agent;
 mod catalog;
+mod keychain;
+mod local_ai;
 mod notch;
 mod palette;
 mod prefs;
@@ -65,6 +67,10 @@ struct State {
     next_scan: Option<Instant>,
     /// Last height sent to the window. Arrow keys must not resize again.
     window_h: f32,
+    /// The consent question for the current provider and model is shown.
+    consent_open: bool,
+    /// The quick provider and model list in Agent help is open.
+    switch_open: bool,
 }
 
 /// Work for the scan worker thread.
@@ -108,6 +114,8 @@ fn state_from(catalog: Catalog) -> State {
         scans_running: false,
         next_scan: None,
         window_h: palette::TRAY_H,
+        consent_open: false,
+        switch_open: false,
     }
 }
 
@@ -344,6 +352,7 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
             tx.instant();
         }
         s.prefs = prefs;
+        s.consent_open = false;
         changed = true;
     }
     if let Some(job) = &s.agent {
@@ -1243,7 +1252,13 @@ fn agent_help(s: &State) -> El {
             .color(paint(INK)),
         )
         .child(label(access_summary(s), MUTED).key("access-summary"))
+        .child(quick_switch(s))
         .child(if running { el() } else { ask_button(s) })
+        .child(if s.consent_open {
+            consent_card(s)
+        } else {
+            el()
+        })
         .child(label("Manual request. Provider costs may apply.", MUTED))
         .child(
             button("Agent setup", ButtonStyle::Quiet)
@@ -1274,6 +1289,102 @@ fn agent_help(s: &State) -> El {
         } else {
             el()
         })
+}
+
+/// The current provider and model; pressing it lists the others to switch to.
+fn quick_switch(s: &State) -> El {
+    let choices = prefs::quick_choices(&s.prefs, prefs::agents());
+    if choices.is_empty() {
+        return el();
+    }
+    let current = choices
+        .iter()
+        .find(|choice| s.prefs.is_chosen(choice))
+        .map_or_else(
+            || "Choose provider and model".to_string(),
+            |c| c.label.clone(),
+        );
+    let mut col = col().w_full().gap(4.0).child(
+        row()
+            .key("agent-switch")
+            .role("button")
+            .label(format!("Provider and model: {current}"))
+            .expanded(s.switch_open)
+            .focusable(true)
+            .w_full()
+            .h(28.0)
+            .px(8.0)
+            .gap(4.0)
+            .center_y()
+            .radius(6.0)
+            .fill(paint(PANEL))
+            .on_press(|state: &mut State| state.switch_open = !state.switch_open)
+            .child(
+                text(current)
+                    .font(type_::LABEL)
+                    .color(paint(INK))
+                    .truncate()
+                    .grow(1.0)
+                    .min_w(0.0),
+            )
+            .child(text("⌄").font(type_::LABEL).color(paint(MUTED))),
+    );
+    if s.switch_open {
+        for (index, choice) in choices.into_iter().enumerate() {
+            let on = s.prefs.is_chosen(&choice);
+            col = col.child(
+                text(choice.label.clone())
+                    .key(format!("quick-choice-{index}"))
+                    .role("radio")
+                    .checked(on)
+                    .focusable(true)
+                    .font(type_::LABEL)
+                    .color(paint(if on { BLUE } else { MUTED }))
+                    .truncate()
+                    .w_full()
+                    .px(8.0)
+                    .h(24.0)
+                    .on_press(move |state: &mut State| {
+                        state.prefs.choose(&choice);
+                        prefs::save_to(&state.prefs_path, &state.prefs);
+                        state.switch_open = false;
+                        state.consent_open = false;
+                    }),
+            );
+        }
+    }
+    col
+}
+
+/// Asks once per provider and exact model (and host) before any data leaves FolderLens.
+fn consent_card(s: &State) -> El {
+    col()
+        .key("consent")
+        .w_full()
+        .gap(8.0)
+        .padding(10.0)
+        .radius(10.0)
+        .border(1.0, paint(BLUE))
+        .child(label(s.prefs.consent_question(), INK).key("consent-question"))
+        .child(
+            row()
+                .gap(8.0)
+                .child(
+                    button("Allow and ask", ButtonStyle::Primary)
+                        .key("consent-allow")
+                        .on_press(|state: &mut State| {
+                            state.prefs.consent.insert(state.prefs.consent_key());
+                            prefs::save_to(&state.prefs_path, &state.prefs);
+                            state.consent_open = false;
+                            palette::ask(state);
+                        }),
+                )
+                .child(
+                    button("Cancel", ButtonStyle::Quiet)
+                        .key("consent-cancel")
+                        .on_press(|state: &mut State| state.consent_open = false),
+                ),
+        )
 }
 
 /// A wrapped label line in the Agent help card.
@@ -1625,6 +1736,22 @@ fn agent_review(s: &State) -> El {
     panel
 }
 
+/// Synthetic Local AI setup for scenes: Balanced selection, listed models, no request.
+fn local_preview(s: &mut State) {
+    apply_level(s, Level::Balanced);
+    s.prefs.agent_id = prefs::LOCAL.into();
+    s.prefs.agent_bin = prefs::LOCAL.into();
+    s.prefs.allow_start = true;
+    s.prefs
+        .models
+        .insert(prefs::LOCAL.into(), "qwen2.5:3b".into());
+    s.prefs.local_models = vec!["qwen2.5:7b".into(), "qwen2.5:3b".into()];
+    s.note = "Example data · no disk scan or agent request".into();
+    // `poll` reloads settings from disk, so the scene keeps its own file, never the user's.
+    s.prefs_path = std::env::temp_dir().join("folderlens-local-scene.txt");
+    prefs::save_to(&s.prefs_path, &s.prefs);
+}
+
 fn launch_size() -> (f32, f32) {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -1647,6 +1774,14 @@ fn main() {
     let size = launch_size();
     let spec = AppSpec {
         scenes: &[
+            ("local-consent-example", |s: &mut State| {
+                local_preview(s);
+                s.consent_open = true;
+            }),
+            ("quick-switch-example", |s: &mut State| {
+                local_preview(s);
+                s.switch_open = true;
+            }),
             ("overview-example", |s: &mut State| {
                 s.note = "Example data · no disk scan or agent request".into();
             }),
@@ -2390,6 +2525,55 @@ mod tests {
         }
         assert_eq!(ticked_ids(&rt.state), before);
         assert_eq!(ticked_bytes(&rt.state), 56_480_000_000);
+    }
+
+    #[test]
+    fn no_request_starts_until_this_provider_and_model_have_consent() {
+        let mut rt = runtime();
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        rt.update(|s, _| {
+            apply_level(s, Level::Balanced);
+            s.prefs.agent_id = prefs::LOCAL.into();
+            s.prefs.agent_bin = prefs::LOCAL.into();
+            s.prefs.local_endpoint = format!("http://127.0.0.1:{port}/v1");
+            s.prefs
+                .models
+                .insert(prefs::LOCAL.into(), "qwen2.5:3b".into());
+            s.prefs.allow_start = true;
+            s.prefs.consent.insert("local:other-model".into());
+        });
+        rt.frame(0.0);
+        let before = ticked_ids(&rt.state);
+        click(&mut rt, "ask-agent");
+        // The question fades in; until it is opaque it takes no presses.
+        rt.frame(1.0);
+        assert!(rt.state.agent.is_none(), "nothing is sent before consent");
+        assert!(rt.find("consent-question").is_some());
+        let question = rt.state.prefs.consent_question();
+        assert!(
+            question.contains("on this Mac") && question.contains("qwen2.5:3b"),
+            "{question}"
+        );
+        assert!(question.contains("(no full paths)"), "{question}");
+        click(&mut rt, "consent-cancel");
+        assert!(rt.state.agent.is_none(), "cancel sends nothing");
+        assert!(
+            rt.find("consent-question").is_none(),
+            "cancel closes the question"
+        );
+        click(&mut rt, "ask-agent");
+        rt.frame(2.0);
+        click(&mut rt, "consent-allow");
+        assert!(rt.state.agent.is_some());
+        assert!(prefs::load_from(&rt.state.prefs_path)
+            .consent
+            .contains("local:qwen2.5:3b"));
+        assert_eq!(ticked_ids(&rt.state), before);
+        let _ = std::fs::remove_file(&rt.state.prefs_path);
     }
 
     #[test]

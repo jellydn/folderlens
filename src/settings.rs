@@ -54,6 +54,8 @@ impl List {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubPage {
     Agent,
+    /// The Local AI server: address, network opt-in, API key and model list.
+    Server,
     Model,
     Kept,
 }
@@ -71,6 +73,12 @@ pub struct Settings {
     pub advanced_open: bool,
     pub open_list: Option<List>,
     pub logo: Option<Image>,
+    pub endpoint: TextEdit,
+    pub api_key: TextEdit,
+    /// The last List models, key or address result, or an error, shown on the Server page.
+    pub local_note: String,
+    /// A List models or Keychain request is running on a worker.
+    pub local_busy: bool,
 }
 
 pub fn spec() -> AppSpec<Settings> {
@@ -128,6 +136,31 @@ pub fn spec() -> AppSpec<Settings> {
                 preview_displays(state);
                 state.prefs.theme = crate::theme::Theme::Lotus;
                 state.open_list = Some(List::Theme);
+            }),
+            ("agent-local", |state| {
+                preview_agent(state, prefs::LOCAL, "qwen2.5:3b");
+                state.prefs.local_models = vec!["qwen2.5:3b".into(), "llama3.2:1b".into()];
+            }),
+            ("local-server", |state| {
+                preview_agent(state, prefs::LOCAL, "qwen2.5:3b");
+                state.prefs.local_endpoint = "http://100.101.1.2:9931/v1".into();
+                state.prefs.local_allow_network = true;
+                load_endpoint(state);
+                state.prefs.local_models = vec!["qwen2.5:3b".into(), "llama3.2:1b".into()];
+                state.sub = Some(SubPage::Server);
+                state.local_note = "2 models listed.".into();
+            }),
+            ("local-models", |state| {
+                preview_agent(state, prefs::LOCAL, "qwen2.5:3b");
+                state.prefs.local_models = vec![
+                    "qwen2.5:3b".into(),
+                    "/Users/me/models/llama-3.2-3b-q4_k_m.gguf".into(),
+                ];
+                state.sub = Some(SubPage::Model);
+            }),
+            ("consent-example", |state| {
+                state.page = Page::Access;
+                state.prefs.consent = ["local:qwen2.5:3b".into(), "pi:openrouter/x".into()].into();
             }),
             ("updates", |state| state.advanced_open = true),
             ("updates-preview", |state| {
@@ -198,8 +231,13 @@ pub fn state() -> Settings {
         advanced_open: false,
         open_list: None,
         logo: None,
+        endpoint: TextEdit::default(),
+        api_key: TextEdit::default().secure(),
+        local_note: String::new(),
+        local_busy: false,
     };
     load_model(&mut state);
+    load_endpoint(&mut state);
     state
 }
 
@@ -229,6 +267,13 @@ fn preview_displays(state: &mut Settings) {
     })
     .collect();
     state.prefs.notch_display = Some("example-external".into());
+}
+
+fn load_endpoint(state: &mut Settings) {
+    state.endpoint = TextEdit::default();
+    state.endpoint.text = state.prefs.local_endpoint.clone();
+    state.endpoint.anchor = state.endpoint.text.len();
+    state.endpoint.focus = state.endpoint.anchor;
 }
 
 fn load_model(state: &mut Settings) {
@@ -285,6 +330,7 @@ pub fn open(page: Page) {
         select_page(state, page);
         state.prefs = prefs::load_from(&state.path);
         load_model(state);
+        load_endpoint(state);
     });
     handle.open();
 }
@@ -471,6 +517,7 @@ fn select_page(state: &mut Settings, page: Page) {
 fn page(state: &Settings) -> El {
     let body = match (state.page, state.sub) {
         (_, Some(SubPage::Agent)) => agent_choice(state),
+        (_, Some(SubPage::Server)) => server(state),
         (_, Some(SubPage::Model)) => model(state),
         (_, Some(SubPage::Kept)) => kept(state),
         (Page::General, None) => general(state),
@@ -720,11 +767,29 @@ fn agent(state: &Settings) -> El {
     } else {
         format!("Selected command: {}", p.agent_bin)
     };
-    let model = if p.model().is_empty() {
-        "CLI default"
-    } else {
-        p.model()
+    let model = match (p.model().is_empty(), p.is_local()) {
+        (true, true) => "Not set",
+        (true, false) => "CLI default",
+        (false, _) => crate::local_ai::short_model_name(p.model()),
     };
+    let command = if p.is_local() {
+        format!("Server: {}", p.local_endpoint)
+    } else {
+        command
+    };
+    let mut rows = vec![];
+    if p.is_local() {
+        rows.push(setting(
+            &icons::SERVER,
+            "Server",
+            "Address, network access and API key",
+            value_link(
+                "local-server-link",
+                crate::local_ai::network_host(&p.local_endpoint).unwrap_or("This Mac"),
+                |s| s.sub = Some(SubPage::Server),
+            ),
+        ));
+    }
     sheet(
         state,
         "Agent",
@@ -741,7 +806,11 @@ fn agent(state: &Settings) -> El {
             setting(
                 &icons::MODEL,
                 "Model",
-                "Passed with --model where supported",
+                if p.is_local() {
+                    "Exact ID from the server"
+                } else {
+                    "Passed with --model where supported"
+                },
                 value_link("agent-model-link", model, |s| s.sub = Some(SubPage::Model)),
             ),
             setting(
@@ -758,7 +827,10 @@ fn agent(state: &Settings) -> El {
                     },
                 ),
             ),
-        ],
+        ]
+        .into_iter()
+        .chain(rows)
+        .collect(),
         Some(vec![setting(
             &icons::NOTE,
             "Run files",
@@ -769,11 +841,26 @@ fn agent(state: &Settings) -> El {
 }
 
 fn agent_choice(state: &Settings) -> El {
-    let mut rows: Vec<El> = prefs::agents()
-        .iter()
-        .map(|agent| agent_row(state, agent))
-        .collect();
-    if rows.is_empty() {
+    let local = state.prefs.is_local();
+    let mut rows: Vec<El> = vec![setting(
+        &icons::SERVER,
+        "Local AI",
+        "Ollama, LM Studio or llama.cpp; on this Mac unless you allow your network",
+        radio(local),
+    )
+    .key("agent-local")
+    .role("radio")
+    .label("Local AI")
+    .checked(local)
+    .focusable(true)
+    .on_press(|state: &mut Settings| {
+        state.prefs.agent_id = prefs::LOCAL.into();
+        state.prefs.agent_bin = prefs::LOCAL.into();
+        load_model(state);
+        persist(state);
+    })];
+    rows.extend(prefs::agents().iter().map(|agent| agent_row(state, agent)));
+    if rows.len() == 1 {
         rows.push(setting(
             &icons::TERMINAL,
             "No agent found on PATH.",
@@ -866,7 +953,11 @@ fn model(state: &Settings) -> El {
     let mut rows = vec![setting(
         &icons::MODEL,
         "Model ID",
-        "Leave empty for the CLI default",
+        if state.prefs.is_local() {
+            "Or type an exact ID"
+        } else {
+            "Leave empty for the CLI default"
+        },
         row()
             .gap(8.0)
             .center_y()
@@ -901,13 +992,326 @@ fn model(state: &Settings) -> El {
                 .key("model-error"),
         );
     }
+    let mut page = col()
+        .w_full()
+        .gap(14.0)
+        .child(back("Agent"))
+        .child(page_title(&format!("Model for {name}")));
+    if state.prefs.is_local() {
+        page = page.child(card("listed-models", listed_models(state)));
+    }
+    page.child(card("card", rows))
+        .child(note(crate::agent::model_note(&state.prefs.agent_bin)))
+}
+
+fn listed_models(state: &Settings) -> Vec<El> {
+    let p = &state.prefs;
+    let mut rows: Vec<El> = p
+        .local_models
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let on = p.model() == id;
+            let shown = crate::local_ai::short_model_name(id);
+            let help = if shown == id { "" } else { id.as_str() };
+            let chosen = id.clone();
+            setting(&icons::MODEL, shown, help, radio(on))
+                .key(format!("local-model-{index}"))
+                .role("radio")
+                .label(shown.to_string())
+                .checked(on)
+                .focusable(true)
+                .on_press(move |state: &mut Settings| {
+                    state
+                        .prefs
+                        .models
+                        .insert(prefs::LOCAL.into(), chosen.clone());
+                    load_model(state);
+                    persist(state);
+                })
+        })
+        .collect();
+    let help = if state.local_note.is_empty() {
+        "Models the server reports at /v1/models"
+    } else {
+        state.local_note.as_str()
+    };
+    rows.push(setting(
+        &icons::SERVER,
+        "Server models",
+        help,
+        list_button(state),
+    ));
+    rows
+}
+
+fn list_button(state: &Settings) -> El {
+    let style = if state.local_busy {
+        ButtonStyle::Disabled
+    } else {
+        ButtonStyle::Secondary
+    };
+    button("List models", style)
+        .key("list-models")
+        .on_press(start_list_models)
+}
+
+const NETWORK_NOTE: &str = "Off: only servers on this Mac. On: also private LAN and Tailscale addresses and names. Public addresses are always refused, also when a name resolves to one.";
+const KEY_NOTE: &str =
+    "Optional, for llama-server --api-key. Kept in the Keychain and sent as a Bearer token.";
+
+fn server(state: &Settings) -> El {
+    let p = &state.prefs;
+    let preset = |key: &'static str, label: &'static str, url: &'static str| {
+        button(label, ButtonStyle::Secondary)
+            .key(key)
+            .on_press(move |s: &mut Settings| {
+                s.endpoint.text = url.into();
+                apply_endpoint(s);
+            })
+    };
+    let key_control = if p.local_key_saved {
+        button("Remove", ButtonStyle::Secondary)
+            .key("remove-key")
+            .on_press(remove_key)
+    } else {
+        row()
+            .gap(8.0)
+            .center_y()
+            .child(
+                text_input(&state.api_key, TextStyle::new(13.0, 400.0))
+                    .key("api-key")
+                    .w(140.0)
+                    .h(28.0)
+                    .px(8.0)
+                    .radius(6.0)
+                    .border(1.0, paint(TRACK))
+                    .fill(paint(PANEL))
+                    .single_line()
+                    .placeholder("API key", paint(MUTED))
+                    .color(paint(INK))
+                    .on_edit(|state: &mut Settings| &mut state.api_key),
+            )
+            .child(
+                button("Save", ButtonStyle::Secondary)
+                    .key("save-key")
+                    .on_press(save_key),
+            )
+    };
+    let mut rows = vec![
+        setting(
+            &icons::SERVER,
+            "Address",
+            "Ends in /v1",
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    text_input(&state.endpoint, TextStyle::new(13.0, 400.0))
+                        .key("local-endpoint")
+                        .w(200.0)
+                        .h(28.0)
+                        .px(8.0)
+                        .radius(6.0)
+                        .border(1.0, paint(TRACK))
+                        .fill(paint(PANEL))
+                        .single_line()
+                        .placeholder(crate::local_ai::OLLAMA, paint(MUTED))
+                        .color(paint(INK))
+                        .on_edit(|state: &mut Settings| &mut state.endpoint),
+                )
+                .child(
+                    button("Apply", ButtonStyle::Primary)
+                        .key("apply-endpoint")
+                        .on_press(apply_endpoint),
+                ),
+        ),
+        setting(
+            &icons::TERMINAL,
+            "On this Mac",
+            "",
+            row()
+                .gap(6.0)
+                .child(preset("preset-ollama", "Ollama", crate::local_ai::OLLAMA))
+                .child(preset(
+                    "preset-lm-studio",
+                    "LM Studio",
+                    crate::local_ai::LM_STUDIO,
+                ))
+                .child(preset(
+                    "preset-llama-cpp",
+                    "llama.cpp",
+                    crate::local_ai::LLAMA_CPP,
+                )),
+        ),
+        setting(
+            &icons::SHARE,
+            "Allow LAN and Tailscale servers",
+            NETWORK_NOTE,
+            switch(
+                "local-network",
+                "Allow LAN and Tailscale servers",
+                p.local_allow_network,
+                |s| {
+                    s.prefs.local_allow_network = !s.prefs.local_allow_network;
+                    persist(s);
+                },
+            ),
+        ),
+        setting(
+            &icons::KEY,
+            "API key",
+            if p.local_key_saved {
+                "Saved in the Keychain. Sent as a Bearer token."
+            } else {
+                KEY_NOTE
+            },
+            key_control,
+        ),
+        setting(
+            &icons::MODEL,
+            "Models",
+            if p.local_models.is_empty() {
+                "None listed yet"
+            } else {
+                "Choose one in Agent › Model"
+            },
+            list_button(state),
+        ),
+    ];
+    if !state.local_note.is_empty() {
+        rows.push(setting(&icons::NOTE, &state.local_note, "", el()).key("local-note"));
+    }
     col()
         .w_full()
         .gap(14.0)
         .child(back("Agent"))
-        .child(page_title(&format!("Model for {name}")))
+        .child(page_title("Local AI server"))
         .child(card("card", rows))
-        .child(note(crate::agent::model_note(&state.prefs.agent_bin)))
+        .child(note("FolderLens sends item names and estimated sizes, and full paths only with path sharing on. It never sends file contents to Local AI and writes no run folder for it. The server may keep its own logs."))
+}
+
+fn apply_endpoint(state: &mut Settings) {
+    match crate::local_ai::validate_endpoint(&state.endpoint.text, state.prefs.local_allow_network)
+    {
+        Ok(url) => {
+            if url != state.prefs.local_endpoint {
+                // Models belong to a server; a new address lists its own.
+                state.prefs.local_models.clear();
+            }
+            state.prefs.local_endpoint = url;
+            load_endpoint(state);
+            state.local_note = "Address saved. Use List models to check the server.".into();
+            persist(state);
+        }
+        Err(error) => state.local_note = error,
+    }
+}
+
+/// Runs `work` on a worker and applies its result through the Settings handle. The Keychain
+/// can prompt and the network can be slow, so neither runs in the frame loop.
+fn in_background<T: Send + 'static>(
+    state: &mut Settings,
+    note: &str,
+    work: impl FnOnce() -> T + Send + 'static,
+    finish: fn(&mut Settings, T),
+) {
+    if state.local_busy {
+        return;
+    }
+    state.local_busy = true;
+    state.local_note = note.into();
+    std::thread::spawn(move || {
+        let result = work();
+        if let Some(handle) = HANDLE.get() {
+            handle.update(move |state, _tx: &mut Tx| {
+                state.local_busy = false;
+                finish(state, result);
+            });
+        }
+    });
+}
+
+fn start_list_models(state: &mut Settings) {
+    let endpoint = state.prefs.local_endpoint.clone();
+    let network = state.prefs.local_allow_network;
+    let saved = state.prefs.local_key_saved;
+    in_background(
+        state,
+        "Asking the server for its models…",
+        move || {
+            let key = saved
+                .then(crate::keychain::local_api_key)
+                .flatten()
+                .map(crate::local_ai::ApiKey);
+            let models = crate::local_ai::list_models(&endpoint, network, key.as_ref());
+            (endpoint, models)
+        },
+        finish_list_models,
+    );
+}
+
+fn finish_list_models(
+    state: &mut Settings,
+    (endpoint, models): (String, Result<Vec<String>, String>),
+) {
+    if endpoint != state.prefs.local_endpoint {
+        state.local_note = "The address changed while listing. List models again.".into();
+        return;
+    }
+    state.local_note = match models {
+        Ok(models) if models.is_empty() => {
+            "The server reports no models. Load one in the server first.".into()
+        }
+        Ok(models) => {
+            let note = match models.len() {
+                1 => "1 model listed.".to_string(),
+                n => format!("{n} models listed."),
+            };
+            state.prefs.local_models = models;
+            persist(state);
+            note
+        }
+        Err(error) => error,
+    };
+}
+
+fn save_key(state: &mut Settings) {
+    let key = state.api_key.text.trim().to_string();
+    // The field never keeps the key once Save is pressed.
+    state.api_key = TextEdit::default().secure();
+    if key.is_empty() {
+        return;
+    }
+    in_background(
+        state,
+        "Saving the key in the Keychain…",
+        move || crate::keychain::set_local_api_key(&key),
+        |state, result| match result {
+            Ok(()) => {
+                state.prefs.local_key_saved = true;
+                state.local_note = "API key saved in the Keychain.".into();
+                persist(state);
+            }
+            Err(error) => state.local_note = error,
+        },
+    );
+}
+
+fn remove_key(state: &mut Settings) {
+    in_background(
+        state,
+        "Removing the key from the Keychain…",
+        crate::keychain::remove_local_api_key,
+        |state, result| match result {
+            Ok(()) => {
+                state.prefs.local_key_saved = false;
+                state.local_note = "API key removed.".into();
+                persist(state);
+            }
+            Err(error) => state.local_note = error,
+        },
+    );
 }
 
 const RULES_NOTE: &str = "These rules apply before presets and manual selection. Excluded folders stay out of the selected-folder reader. Removing a rule can select eligible folders through the active preset or a retained manual selection. Nothing is deleted.";
@@ -1067,6 +1471,24 @@ fn access(state: &Settings) -> El {
                 ),
             ),
             setting(
+                &icons::PRIVACY,
+                "Allowed providers and models",
+                &consent_help(state),
+                button(
+                    "Revoke all",
+                    if state.prefs.consent.is_empty() {
+                        ButtonStyle::Disabled
+                    } else {
+                        ButtonStyle::Secondary
+                    },
+                )
+                .key("revoke-consent")
+                .on_press(|s: &mut Settings| {
+                    s.prefs.consent.clear();
+                    persist(s);
+                }),
+            ),
+            setting(
                 &icons::DISK,
                 "Full Disk Access",
                 DISK_ACCESS_NOTE,
@@ -1077,6 +1499,20 @@ fn access(state: &Settings) -> El {
         ],
         None,
     )
+}
+
+fn consent_help(state: &Settings) -> String {
+    let what = match state.prefs.consent.len() {
+        0 => "None yet. FolderLens asks before the first request to each provider and model."
+            .to_string(),
+        1 => "1 provider and model may receive your selection.".to_string(),
+        n => format!("{n} provider and model choices may receive your selection."),
+    };
+    if state.prefs.consent.is_empty() {
+        what
+    } else {
+        format!("{what} Revoking asks again before the next request.")
+    }
 }
 
 #[cfg(test)]

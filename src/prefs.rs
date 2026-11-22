@@ -1,7 +1,7 @@
 //! FolderLens's own settings file. The tray and the settings window share the path
 //! under Application Support. Tests each get a fresh file.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -71,6 +71,16 @@ pub struct Prefs {
     /// Extra hold, in hours. A leaf used more recently than this stays unticked. Zero is off.
     pub keep_hours: u32,
     pub kept: Vec<String>,
+    /// The OpenAI-compatible base URL used when `agent_id` is `local`.
+    pub local_endpoint: String,
+    /// The opt-in for LAN and Tailscale servers; public addresses are never accepted.
+    pub local_allow_network: bool,
+    /// Whether a Local AI key is in the Keychain. The key itself never is in this file.
+    pub local_key_saved: bool,
+    /// Model IDs from the last List models, for the quick switch.
+    pub local_models: Vec<String>,
+    /// Consent keys from `consent_key`: one per provider and exact model (and host).
+    pub consent: BTreeSet<String>,
 }
 
 impl Default for Prefs {
@@ -92,6 +102,11 @@ impl Default for Prefs {
             update_prereleases: false,
             keep_hours: 0,
             kept: Vec::new(),
+            local_endpoint: crate::local_ai::OLLAMA.into(),
+            local_allow_network: false,
+            local_key_saved: false,
+            local_models: Vec::new(),
+            consent: BTreeSet::new(),
         }
     }
 }
@@ -110,6 +125,55 @@ impl Prefs {
             .get(&self.model_key())
             .map(String::as_str)
             .unwrap_or("")
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.agent_id == LOCAL
+    }
+
+    /// What one consent covers: the provider and exact model, plus the host for a Local AI
+    /// server outside this Mac, so a new model or server asks again.
+    pub fn consent_key(&self) -> String {
+        if self.is_local() {
+            return match crate::local_ai::network_host(&self.local_endpoint) {
+                Some(host) => format!("local@{host}:{}", self.model()),
+                None => format!("local:{}", self.model()),
+            };
+        }
+        format!("{}:{}", self.model_key(), self.model())
+    }
+
+    pub fn has_consent(&self) -> bool {
+        self.consent.contains(&self.consent_key())
+    }
+
+    /// The consent question for the current provider and model.
+    pub fn consent_question(&self) -> String {
+        let model = if self.model().is_empty() {
+            "its default model".to_string()
+        } else {
+            format!("model {}", crate::local_ai::short_model_name(self.model()))
+        };
+        let shared = if self.send_paths {
+            "item names, estimated sizes, FolderLens notes and the selected full paths"
+        } else {
+            "item names, estimated sizes and FolderLens notes (no full paths)"
+        };
+        if self.is_local() {
+            let mut question = match crate::local_ai::network_host(&self.local_endpoint) {
+                Some(host) => format!("Send {shared} to the Local AI server at {host} ({model})?"),
+                None => format!("Send {shared} to the Local AI server on this Mac ({model})?"),
+            };
+            if crate::local_ai::network_host(&self.local_endpoint).is_some()
+                && self.local_endpoint.starts_with("http://")
+            {
+                question.push_str(" Plain http is not encrypted on the network.");
+            }
+            question.push_str(" No file contents are sent.");
+            return question;
+        }
+        let name = agent_name(&self.agent_id).unwrap_or("your agent");
+        format!("Send {shared} to {name} ({model})? Its provider's costs and data policy apply.")
     }
 }
 
@@ -209,6 +273,11 @@ pub fn load_from(path: &Path) -> Prefs {
                 prefs.keep_hours = value.parse::<u32>().unwrap_or(0).min(MAX_KEEP_HOURS)
             }
             "kept" if !value.is_empty() => prefs.kept.push(value.to_string()),
+            "local_endpoint" if !value.is_empty() => prefs.local_endpoint = value.to_string(),
+            "local_allow_network" => prefs.local_allow_network = value == "1",
+            "local_key_saved" => prefs.local_key_saved = value == "1",
+            "local_models" => prefs.local_models = serde_json::from_str(value).unwrap_or_default(),
+            "consent" => prefs.consent = serde_json::from_str(value).unwrap_or_default(),
             _ => {}
         }
     }
@@ -254,6 +323,23 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
         flag(prefs.update_prereleases)
     ));
     text.push_str(&format!("keep_hours={}\n", prefs.keep_hours));
+    text.push_str(&format!("local_endpoint={}\n", prefs.local_endpoint));
+    text.push_str(&format!(
+        "local_allow_network={}\n",
+        flag(prefs.local_allow_network)
+    ));
+    text.push_str(&format!(
+        "local_key_saved={}\n",
+        flag(prefs.local_key_saved)
+    ));
+    text.push_str(&format!(
+        "local_models={}\n",
+        serde_json::to_string(&prefs.local_models).unwrap()
+    ));
+    text.push_str(&format!(
+        "consent={}\n",
+        serde_json::to_string(&prefs.consent).unwrap()
+    ));
     for path in &prefs.kept {
         text.push_str("kept=");
         text.push_str(path);
@@ -323,9 +409,75 @@ fn find_bin(name: &str) -> Option<PathBuf> {
     })
 }
 
+/// One quick-switch entry: a provider and the exact model it would use.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Choice {
+    pub label: String,
+    pub agent_id: String,
+    pub agent_bin: String,
+    pub model: String,
+}
+
+/// CLIs with a FolderLens adapter, then each listed Local AI model. Detected tools without an
+/// adapter are left out, because they cannot run a review.
+pub fn quick_choices(prefs: &Prefs, agents: &[Agent]) -> Vec<Choice> {
+    const ADAPTED: [&str; 5] = ["grok", "agy", "copilot", "pi", "opencode"];
+    let mut choices: Vec<Choice> = agents
+        .iter()
+        .filter(|agent| ADAPTED.contains(&agent.id))
+        .map(|agent| {
+            let model = prefs.models.get(agent.id).cloned().unwrap_or_default();
+            let shown = if model.is_empty() {
+                "default model"
+            } else {
+                model.as_str()
+            };
+            Choice {
+                label: format!("{} · {shown}", agent.name),
+                agent_id: agent.id.into(),
+                agent_bin: agent.bin.to_string_lossy().into_owned(),
+                model,
+            }
+        })
+        .collect();
+    let mut local = prefs.local_models.clone();
+    if let Some(saved) = prefs.models.get(LOCAL).filter(|m| !m.is_empty()) {
+        if !local.contains(saved) {
+            local.insert(0, saved.clone());
+        }
+    }
+    choices.extend(local.into_iter().map(|model| Choice {
+        label: format!("Local AI · {}", crate::local_ai::short_model_name(&model)),
+        agent_id: LOCAL.into(),
+        agent_bin: LOCAL.into(),
+        model,
+    }));
+    choices
+}
+
+impl Prefs {
+    pub fn choose(&mut self, choice: &Choice) {
+        self.agent_id.clone_from(&choice.agent_id);
+        self.agent_bin.clone_from(&choice.agent_bin);
+        self.models.insert(self.model_key(), choice.model.clone());
+    }
+
+    pub fn is_chosen(&self, choice: &Choice) -> bool {
+        self.agent_id == choice.agent_id
+            && self.agent_bin == choice.agent_bin
+            && self.model() == choice.model
+    }
+}
+
+/// `agent_id` for the Local AI provider; `agent_bin` then holds its endpoint.
+pub const LOCAL: &str = "local";
+
 pub fn agent_name(id: &str) -> Option<&'static str> {
     if id == "custom" {
         return Some("your agent");
+    }
+    if id == LOCAL {
+        return Some("Local AI");
     }
     TOOLS
         .iter()
@@ -506,6 +658,105 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_ai_settings_and_consent_round_trip_but_the_key_never_does() {
+        let path = path_for_state();
+        let prefs = Prefs {
+            agent_id: LOCAL.into(),
+            agent_bin: LOCAL.into(),
+            models: BTreeMap::from([(LOCAL.into(), "/models/llama 3.2.gguf".into())]),
+            local_endpoint: "http://100.101.1.2:9931/v1".into(),
+            local_allow_network: true,
+            local_key_saved: true,
+            local_models: vec!["qwen2.5:3b".into()],
+            consent: BTreeSet::from(["local@100.101.1.2:9931:qwen2.5:3b".into()]),
+            ..Prefs::default()
+        };
+        save_to(&path, &prefs);
+        assert_eq!(load_from(&path), prefs);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.to_ascii_lowercase().contains("bearer"));
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn consent_covers_one_provider_model_and_host() {
+        let mut prefs = Prefs {
+            agent_id: LOCAL.into(),
+            agent_bin: LOCAL.into(),
+            models: BTreeMap::from([(LOCAL.into(), "qwen2.5:3b".into())]),
+            ..Prefs::default()
+        };
+        assert_eq!(prefs.consent_key(), "local:qwen2.5:3b");
+        prefs.consent.insert(prefs.consent_key());
+        assert!(prefs.has_consent());
+        // Another model, or the same model on another server, asks again.
+        prefs.models.insert(LOCAL.into(), "qwen2.5:7b".into());
+        assert!(!prefs.has_consent());
+        prefs.models.insert(LOCAL.into(), "qwen2.5:3b".into());
+        prefs.local_endpoint = "http://studio.local:1234/v1".into();
+        assert_eq!(prefs.consent_key(), "local@studio.local:1234:qwen2.5:3b");
+        assert!(!prefs.has_consent());
+        assert!(prefs
+            .consent_question()
+            .contains("Plain http is not encrypted"));
+        prefs.local_endpoint = "https://studio.local:1234/v1".into();
+        assert!(!prefs.consent_question().contains("Plain http"));
+        // A CLI key uses its agent and model, so Pi's consent never covers Local AI.
+        prefs.agent_id = "pi".into();
+        prefs.agent_bin = "/opt/bin/pi".into();
+        prefs.models.insert("pi".into(), "qwen2.5:3b".into());
+        assert_eq!(prefs.consent_key(), "pi:qwen2.5:3b");
+    }
+
+    #[test]
+    fn the_quick_switch_offers_adapted_clis_and_each_local_model_once() {
+        let agents = vec![
+            Agent {
+                id: "pi",
+                name: "Pi",
+                bin: "/opt/bin/pi".into(),
+            },
+            Agent {
+                id: "claude",
+                name: "Claude",
+                bin: "/opt/bin/claude".into(),
+            },
+        ];
+        let mut prefs = Prefs {
+            models: BTreeMap::from([
+                ("pi".into(), "openrouter/free".into()),
+                (LOCAL.into(), "typed:1b".into()),
+            ]),
+            local_models: vec!["qwen2.5:3b".into(), "/m/llama.gguf".into()],
+            ..Prefs::default()
+        };
+        let choices = quick_choices(&prefs, &agents);
+        let labels: Vec<_> = choices.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "Pi · openrouter/free",
+                "Local AI · typed:1b",
+                "Local AI · qwen2.5:3b",
+                "Local AI · llama.gguf"
+            ]
+        );
+        prefs.choose(&choices[3]);
+        assert_eq!(
+            (prefs.agent_id.as_str(), prefs.model()),
+            (LOCAL, "/m/llama.gguf")
+        );
+        assert!(prefs.is_chosen(&choices[3]) && !prefs.is_chosen(&choices[2]));
+        // The saved model is now listed, so it is not added twice.
+        assert_eq!(quick_choices(&prefs, &agents).len(), 3);
+        prefs.choose(&choices[0]);
+        assert_eq!(
+            (prefs.agent_bin.as_str(), prefs.model()),
+            ("/opt/bin/pi", "openrouter/free")
+        );
+    }
 
     #[test]
     fn legacy_settings_are_imported_once_without_changing_the_original() {

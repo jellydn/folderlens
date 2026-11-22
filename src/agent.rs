@@ -40,10 +40,23 @@ impl Access {
 }
 
 pub fn validate_model(bin: &str, model: &str) -> Result<(), String> {
+    if bin == prefs::LOCAL {
+        // Ollama names and llama-server GGUF paths; never flags or more than one line.
+        if model.trim().is_empty() {
+            return Err("Choose a model. Use List models in Settings › Agent › Model.".into());
+        }
+        if model.len() > 512 || model.starts_with('-') || model.chars().any(char::is_control) {
+            return Err("Enter one model ID from List models, not flags or a command.".into());
+        }
+        return Ok(());
+    }
     Provider::for_bin(bin)?.validate_model(model)
 }
 
 pub fn model_note(bin: &str) -> &'static str {
+    if bin == prefs::LOCAL {
+        return "Use the exact ID from List models. 3B parameters or larger is recommended (for example qwen2.5:3b); smaller models often give vague or repeated answers. The model gets names and sizes only, never file contents.";
+    }
     match Provider::for_bin(bin) {
         Ok(Provider::Copilot) => "auto: Copilot Free uses an account-limited allowance, not unlimited free use. Explicit models may require a paid plan and credits. GitHub login required.",
         Ok(Provider::Pi) => "Use exact provider/model. Example: openrouter/openrouter/free requires your OpenRouter account/key and rate limits apply. Pi itself provides no free inference. Blank uses your CLI default, which may be paid.",
@@ -136,6 +149,43 @@ impl Job {
         });
         job.poll();
         Ok(job)
+    }
+
+    /// A Local AI review: one HTTP request on a worker, with names and sizes only. No run
+    /// folder, session or continuation is written, and the model gets no reader.
+    pub fn start_local(prefs: &prefs::Prefs, context: &str) -> Self {
+        if let Err(error) = validate_model(prefs::LOCAL, prefs.model()) {
+            return Self::failed("Local AI", &prefs.agent_bin, &error);
+        }
+        let mut job = Self::preview(None);
+        job.name = "Local AI".into();
+        job.bin = prefs.agent_bin.clone();
+        job.model = prefs.model().into();
+        job.elapsed = 0;
+        let (sender, receiver) = mpsc::channel();
+        job.receiver = Some(receiver);
+        let endpoint = prefs.local_endpoint.clone();
+        let allow_network = prefs.local_allow_network;
+        let key_saved = prefs.local_key_saved;
+        let model = job.model.clone();
+        let context = context.to_string();
+        let cancel = job.cancel.clone();
+        std::thread::spawn(move || {
+            // The Keychain may prompt, so it is read here, never on the UI thread.
+            let key = key_saved
+                .then(crate::keychain::local_api_key)
+                .flatten()
+                .map(crate::local_ai::ApiKey);
+            let result =
+                crate::local_ai::review(&endpoint, allow_network, &model, key.as_ref(), &context);
+            let result = if cancel.load(Ordering::SeqCst) == CANCELLED {
+                Err("Analysis cancelled.".into())
+            } else {
+                result.map_err(|error| redact_diagnostics(&error))
+            };
+            let _ = sender.send(result);
+        });
+        job
     }
 
     pub fn set_access(&self, access: Access) {

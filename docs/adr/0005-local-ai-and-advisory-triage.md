@@ -3,7 +3,7 @@
 Date: 2026-11-22
 
 ## Status
-Accepted by the owner on 2026-11-22. Not implemented yet. Earlier release notes say there is no direct AI API; they stay as they were, and the release that adds this provider says what changed.
+Accepted by the owner on 2026-11-22. Phase 2 implements the Local AI provider, consent per provider and model, and the quick switch (free-text review only). The no-history CLI mode and triage labels are not implemented yet. Earlier release notes say there is no direct AI API; they stay as they were, and the release that adds this provider says what changed.
 
 ## Context
 Users want to sort a selection into safe / review / keep with a short reason, using a model on their own machine or a CLI they already use. The current agent feature only runs five CLI adapters with one global agent-start switch, keeps provider sessions in Run folders, and returns free text. Retone (jellydn/retone, PRs #15 and #16) already ships an OpenAI-compatible Local AI provider and CLI adapters that keep no history.

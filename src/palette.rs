@@ -544,6 +544,20 @@ pub fn ask(s: &mut State) {
         return;
     }
     match ask_prompt(s) {
+        // An executable without an adapter fails visibly below; nothing is sent, so no question.
+        Ok(_)
+            if !s.prefs.has_consent()
+                && (s.prefs.is_local()
+                    || crate::agent::validate_model(&s.prefs.agent_bin, s.prefs.model())
+                        .is_ok()) =>
+        {
+            s.consent_open = true;
+        }
+        Ok(prompt) if s.prefs.is_local() => {
+            s.agent = Some(crate::agent::Job::start_local(&s.prefs, &prompt));
+            s.note.clear();
+            s.agent_details = false;
+        }
         Ok(prompt) => {
             let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
             match crate::agent::Job::start(
