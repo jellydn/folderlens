@@ -5,8 +5,8 @@ use std::sync::OnceLock;
 
 use rune::tok::{type_, TextStyle};
 use rune::{
-    col, el, icon, row, text, text_input, AppHandle, AppSpec, Color, Cx, El, ScrollSpec, TextEdit,
-    Tx,
+    col, el, icon, row, text, text_input, AppHandle, AppSpec, Color, Cx, El, Image, ImageCache,
+    ScrollSpec, TextEdit, Tx,
 };
 
 use crate::prefs::{self, Agent, NotchPosition, Prefs};
@@ -70,6 +70,7 @@ pub struct Settings {
     pub sub: Option<SubPage>,
     pub advanced_open: bool,
     pub open_list: Option<List>,
+    pub logo: Option<Image>,
 }
 
 pub fn spec() -> AppSpec<Settings> {
@@ -136,6 +137,14 @@ pub fn spec() -> AppSpec<Settings> {
                 state.prefs.update_prereleases = true;
             }),
         ],
+        setup: Some(|state, waker| {
+            let logo = ImageCache::new(waker).load(LOGO);
+            // A headless snapshot draws one frame, so it waits for the decode the window does not.
+            if rune::is_headless() {
+                let _ = logo.wait();
+            }
+            state.logo = Some(logo);
+        }),
         poll: Some(|state, _, tx| {
             tx.wake_after(std::time::Duration::from_secs(1));
             if rune::is_headless() {
@@ -188,6 +197,7 @@ pub fn state() -> Settings {
         sub: None,
         advanced_open: false,
         open_list: None,
+        logo: None,
     };
     load_model(&mut state);
     state
@@ -291,6 +301,7 @@ fn persist(state: &Settings) {
 
 const RELEASES: &str = "https://github.com/jellydn/folderlens/releases";
 const SIDEBAR_W: f32 = 184.0;
+const LOGO: &[u8] = include_bytes!("../assets/icon-192.png");
 
 fn view(state: &Settings, _: &mut Cx<Settings>) -> El {
     let _theme = crate::theme::scope(state.prefs.theme);
@@ -319,10 +330,12 @@ fn sidebar(state: &Settings) -> El {
         .w(SIDEBAR_W)
         .h_full()
         .px(8.0)
-        .pt(28.0)
+        // Clears the traffic lights, which macOS draws over the full-size content view.
+        .pt(44.0)
         .pb(14.0)
         .gap(2.0)
-        .fill(paint(INK).alpha(0.03));
+        .fill(paint(INK).alpha(0.03))
+        .child(brand(state));
     for (page, key, glyph, label) in [
         (Page::General, "nav-general", &icons::GENERAL, "General"),
         (Page::Agent, "nav-agent", &icons::AGENT, "Agent"),
@@ -366,6 +379,27 @@ fn sidebar(state: &Settings) -> El {
         );
     }
     bar.child(el().grow(1.0)).child(footer(state))
+}
+
+/// The app icon and name above the pages, as in Hex's sidebar header.
+fn brand(state: &Settings) -> El {
+    let mut mark = el().w(22.0).h(22.0).a11y_hidden();
+    if let Some(logo) = &state.logo {
+        mark = mark.pixels(logo.pixels());
+    }
+    row()
+        .key("brand")
+        .h(32.0)
+        .px(10.0)
+        .mb(10.0)
+        .gap(8.0)
+        .center_y()
+        .child(mark)
+        .child(
+            text("FolderLens")
+                .font(TextStyle::new(15.0, 600.0))
+                .color(paint(INK)),
+        )
 }
 
 /// What's new, the version, and Check for updates, as in Hex's sidebar footer.
