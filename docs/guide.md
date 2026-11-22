@@ -2,7 +2,7 @@
 
 Detailed implementation, usage and verification notes. Start with the [short README](../README.md).
 
-<img src="../assets/folderlens-icon.png" width="128" height="128" alt="FolderLens: a folder in an archive tray on a shelf">
+<img src="../assets/folderlens-icon.png" width="128" height="128" alt="FolderLens: a green folder under an orange lens">
 
 > FolderLens reviews folder selections. Record choice records a choice; it does not delete files or run cleanup.
 

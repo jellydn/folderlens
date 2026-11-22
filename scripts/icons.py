@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 root = Path(__file__).resolve().parent.parent
 assets = root / "assets"
@@ -12,7 +12,8 @@ source = Image.open(assets / "folderlens-icon.png").convert("RGBA")
 source = source.resize((1024, 1024), Image.Resampling.LANCZOS)
 mask = Image.new("L", source.size)
 ImageDraw.Draw(mask).rounded_rectangle((8, 8, 1016, 1016), radius=210, fill=255)
-source.putalpha(mask)
+# Keep the source's own transparent corners; the mask only trims the edge.
+source.putalpha(ImageChops.multiply(source.getchannel("A"), mask))
 source.save(assets / "folderlens-icon.png", optimize=True)
 with tempfile.TemporaryDirectory(prefix="folderlens-icon-") as temporary:
     iconset = Path(temporary) / "FolderLens.iconset"
@@ -33,9 +34,11 @@ def favicon(size):
 
 favicon(64).save(assets / "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
 favicon(32).save(assets / "favicon.png")
+# The 16–64 px favicons use the simplified SVG; larger sizes use the full icon.
 for size in (192, 512):
-    favicon(size).save(assets / f"icon-{size}.png")
-touch = Image.new("RGB", (180, 180), "#064c40")
-touch.paste(favicon(180), mask=favicon(180).getchannel("A"))
+    source.resize((size, size), Image.Resampling.LANCZOS).save(assets / f"icon-{size}.png")
+touch = Image.new("RGB", (180, 180), "#f6e3c6")
+large = source.resize((180, 180), Image.Resampling.LANCZOS)
+touch.paste(large, mask=large.getchannel("A"))
 touch.save(assets / "apple-touch-icon.png")
 print("Generated FolderLens.icns and favicon package")
