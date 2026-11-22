@@ -11,7 +11,7 @@ Users review a selection, may ask an agent to explain it, and then want to act o
 ## Decision
 Add one destructive action, **Move to Trash…**, with these rules:
 
-- **Trash only.** Items move with `NSFileManager trashItemAtURL`. FolderLens never calls `rm`, `unlink` or `remove_dir_all` on user files and never empties the Trash. The user can drag items back out of the Trash in Finder (Finder's Put Back is not reliable for items `trashItemAtURL` moved).
+- **Trash only.** Items move with `NSFileManager trashItemAtURL`. FolderLens never calls `rm`, `unlink` or `remove_dir_all` on user files and never empties the Trash. The user can drag items back out of the Trash in Finder (Finder's Put Back works only for the first item of a move: when `trashItemAtURL` calls follow each other with no pause, Finder does not record where the later items came from).
 - **The user starts it.** Only a direct press on the action in FolderLens starts it. No agent, provider, tool, MCP route, prompt answer, schedule or interval can start it or pass items to it. AI labels ([ADR 5](0005-local-ai-and-advisory-triage.md)) never tick items and never reach this action.
 - **FolderLens confirms it.** A sheet that FolderLens draws lists every item, its estimated size and the total. The destructive button is not the default, so ⏎ and Escape do not trash anything. Escape or Cancel closes the sheet and changes nothing.
 - **Protections win.** ALWAYS roots (Unlock does not apply), Keep safe exclusions, holds, in-use paths and unticked leaves are left out of the list and cannot be added back. Only eligible ticked leaves reach the sheet.
