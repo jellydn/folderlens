@@ -351,6 +351,12 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
         if s.prefs.theme != prefs.theme {
             tx.instant();
         }
+        // A private run's write guard turned the chosen agent off; say why.
+        if s.prefs.disabled_reason().is_none() {
+            if let Some(reason) = prefs.disabled_reason() {
+                s.note = reason.to_string();
+            }
+        }
         s.prefs = prefs;
         s.consent_open = false;
         changed = true;
@@ -363,30 +369,6 @@ fn poll(s: &mut State, _now: f64, tx: &mut Tx) -> bool {
     }
     if let Some(job) = &mut s.agent {
         changed |= job.poll();
-    }
-    if let Some((job, dir)) = s
-        .agent
-        .as_ref()
-        .and_then(|job| Some((job, job.take_wrote()?)))
-    {
-        // The write guard found a change in the CLI's own data folder: turn the adapter off and
-        // keep its files. The consent key's first part names the agent the job ran under.
-        let agent = serde_json::from_str::<(String, String)>(&job.consent_key)
-            .map_or_else(|_| s.prefs.model_key(), |(agent, _)| agent);
-        let shown = std::env::var_os("HOME")
-            .and_then(|home| {
-                dir.strip_prefix(home)
-                    .ok()
-                    .map(|rest| format!("~/{}", rest.display()))
-            })
-            .unwrap_or_else(|| "its data folder".into());
-        let reason = format!("{} wrote to {shown} during a private run, so FolderLens turned it off. Nothing was deleted.", job.name);
-        let mut saved = prefs::load_from(&s.prefs_path);
-        saved.adapter_disabled.insert(agent, reason.clone());
-        prefs::save_to(&s.prefs_path, &saved);
-        s.prefs = saved;
-        s.note = reason;
-        changed = true;
     }
     notch::sync(s);
     changed

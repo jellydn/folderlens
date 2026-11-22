@@ -556,34 +556,28 @@ pub fn ask(s: &mut State) {
         {
             s.consent_open = true;
         }
-        Ok(prompt) if s.prefs.is_local() => {
-            s.agent = Some(crate::agent::Job::start_local(&s.prefs, &prompt));
-            s.note.clear();
-            s.agent_details = false;
-        }
-        Ok(prompt) if s.prefs.private_run() => {
-            let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
-            s.agent = Some(crate::agent::Job::start_private(&s.prefs, who, &prompt));
-            s.note.clear();
-            s.agent_details = false;
-        }
         Ok(prompt) => {
             let who = prefs::agent_name(&s.prefs.agent_id).unwrap_or("your agent");
-            match crate::agent::Job::start(
-                &s.prefs.agent_bin,
-                who,
-                s.prefs.model(),
-                &prompt,
-                ask_access(s),
-            ) {
-                Ok(mut job) => {
-                    job.consent_key = s.prefs.consent_key();
-                    s.agent = Some(job);
+            let job = if s.prefs.is_local() {
+                crate::agent::Job::start_local(&s.prefs, &prompt)
+            } else if s.prefs.private_run() {
+                crate::agent::Job::start_private(&s.prefs, &s.prefs_path, who, &prompt)
+            } else {
+                match crate::agent::Job::start(
+                    &s.prefs.agent_bin,
+                    who,
+                    s.prefs.model(),
+                    &prompt,
+                    ask_access(s),
+                ) {
+                    Ok(mut job) => {
+                        job.consent_key = s.prefs.consent_key();
+                        job
+                    }
+                    Err(err) => crate::agent::Job::failed(who, &s.prefs.agent_bin, &err),
                 }
-                Err(err) => {
-                    s.agent = Some(crate::agent::Job::failed(who, &s.prefs.agent_bin, &err))
-                }
-            }
+            };
+            s.agent = Some(job);
             s.note.clear();
             s.agent_details = false;
         }
