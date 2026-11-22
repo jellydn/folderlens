@@ -10,13 +10,13 @@ FolderLens is the new name for Shelf, starting with **0.2.1**. Quick review, fol
 
 ![Review with CPU, Disk and Memory cards at the top; synthetic example data](shots/review-ledger.png)
 
-**New in 0.4.0:** optional **Local AI** reviews through an OpenAI-compatible server on this
-Mac (Ollama, LM Studio, llama.cpp) or, after you opt in, on your LAN or Tailscale. FolderLens
-asks before it sends anything to each provider and model. New folder-and-lens icon.
+**New in 0.5.0:** **Move to Trash…** moves a confirmed selection to the Trash after
+FolderLens checks each item again. **Sort selection with AI** adds advisory safe / review /
+keep labels, and **Private runs** ask Pi or OpenCode for one answer with no tools or session.
 
 ## Install
 
-Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.4.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.4.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
+Apple Silicon, macOS 14+. Get the DMG or ZIP containing `FolderLens.app` from the [0.5.0 stable release](https://github.com/jellydn/folderlens/releases/tag/v0.5.0) and check `SHA256SUMS`. Builds are ad-hoc signed, **not notarized**; macOS may require **Privacy & Security → Open Anyway**. Publisher signatures are not Apple approval.
 
 Or install the stable release through Homebrew. Version 0.2.1 and later install `FolderLens.app`; older cask versions installed `Shelf.app`. The cask checks for new stable versions every six hours, so it can lag behind a new release. Run `brew update` first.
 
