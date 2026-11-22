@@ -57,7 +57,7 @@ fn list_button(state: &Settings) -> El {
 }
 
 const NETWORK_NOTE: &str = "Off: only servers on this Mac. On: also private LAN and Tailscale addresses and names. Public addresses are always refused, also when a name resolves to one.";
-const KEY_NOTE: &str = "Optional, for llama-server --api-key. Kept in the Keychain and sent as a Bearer token, only over https, to this Mac or to a Tailscale address.";
+const KEY_NOTE: &str = "Optional, for llama-server --api-key. Kept in the Keychain and sent as a Bearer token, only over https or to this Mac.";
 
 pub(super) fn server(state: &Settings) -> El {
     let p = &state.prefs;
@@ -276,7 +276,8 @@ fn finish_list_models(
         1 => "1 model listed.".into(),
         n => format!("{n} models listed."),
     };
-    // An empty list replaces the old one too, so the quick switch offers no stale models.
+    // An empty list replaces the old one too, so no stale listed models remain; the quick switch
+    // still offers the model saved in Agent › Model.
     save_result(state, |saved| saved.local_models = models);
 }
 

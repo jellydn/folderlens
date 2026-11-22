@@ -267,13 +267,10 @@ fn the_key_never_travels_in_plain_http_to_a_lan_host() {
     assert!(error.contains("only over https://"), "{error}");
     let error = list_models("http://studio.local:1234/v1", true, Some(&key)).unwrap_err();
     assert!(error.contains("only over https://"), "{error}");
-    // Tailscale encrypts plain http, so its 100.64/10 and fd7a:115c:a1e0::/48 addresses may.
-    assert!(key_may_travel("http://100.101.1.2:9931/v1"));
-    assert!(key_may_travel("http://[fd7a:115c:a1e0::1]:9931/v1"));
+    // 100.64/10 is also carrier-grade NAT, so a Tailscale-looking address needs https too.
+    assert!(!key_may_travel("http://100.101.1.2:9931/v1"));
+    assert!(!key_may_travel("http://[fd7a:115c:a1e0::1]:9931/v1"));
+    assert!(key_may_travel("https://100.101.1.2:9931/v1"));
     assert!(key_may_travel("https://studio.local:1234/v1"));
     assert!(key_may_travel("http://127.0.0.1:8080/v1"));
-    assert!(
-        !key_may_travel("http://100.128.0.1:9931/v1"),
-        "outside 100.64/10"
-    );
 }

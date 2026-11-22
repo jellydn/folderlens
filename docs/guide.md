@@ -223,7 +223,7 @@ OpenCode continuations recheck the verified CLI version even when FolderLens is 
 
 ### Local AI
 
-Choose **Local AI** in **Settings → Agent → Agent** to use an OpenAI-compatible server: Ollama (`http://127.0.0.1:11434/v1`), LM Studio (`:1234/v1`), llama.cpp `llama-server` (`:8080/v1`) or the Llama menu-bar app. **Server** sets the address, the **Allow LAN and Tailscale servers** switch, and an optional API key (kept in the Keychain, sent as a Bearer token only over https, to this Mac or to a Tailscale address; a plain-http LAN server with a key is refused). **List models** reads `/v1/models`; pick one in **Agent → Model**. 3B parameters or larger is recommended.
+Choose **Local AI** in **Settings → Agent → Agent** to use an OpenAI-compatible server: Ollama (`http://127.0.0.1:11434/v1`), LM Studio (`:1234/v1`), llama.cpp `llama-server` (`:8080/v1`) or the Llama menu-bar app. **Server** sets the address, the **Allow LAN and Tailscale servers** switch, and an optional API key (kept in the Keychain, sent as a Bearer token only over https or to this Mac; a plain-http server elsewhere, Tailscale included, is refused while a key is saved. Use `tailscale serve` for https, or no key). **List models** reads `/v1/models`; pick one in **Agent → Model**. 3B parameters or larger is recommended.
 
 Only servers on this Mac are accepted until you turn on the network switch. Then private LAN and Tailscale addresses and names work too; public addresses are always refused, also when a name resolves to one. HTTPS uses the macOS trust store. Local AI gets item names, estimated sizes and FolderLens notes (full paths only with path sharing on), never file contents or tools, and FolderLens writes no run folder for it. The server may keep its own logs.
 
