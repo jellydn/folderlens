@@ -4,7 +4,7 @@ macOS menu-bar app that reviews what a cleanup level would tick. Rust + Rune (GP
 
 Record choice (formerly Confirm) never deletes. It records a nonempty eligible selection in memory, and tests assert the catalog is unchanged. The only file-moving path allowed is Move to Trash under [ADR 4](docs/adr/0004-move-to-trash-with-confirmation.md): user-started, FolderLens-confirmed, protections first, Trash only. Never add permanent deletion, emptying the Trash, or a path an agent or AI label can start.
 
-The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md), [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md), [review without an agent](docs/adr/0003-review-works-without-ai.md), [move to Trash with confirmation](docs/adr/0004-move-to-trash-with-confirmation.md) and [Local AI and advisory triage](docs/adr/0005-local-ai-and-advisory-triage.md). ADRs 4 and 5 are accepted but not implemented yet. Keep them aligned when you change their contracts.
+The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md). Accepted boundary decisions are [scoped agent sessions](docs/adr/0001-scoped-agent-sessions.md), [publisher-verified updates](docs/adr/0002-publisher-verified-updates.md), [review without an agent](docs/adr/0003-review-works-without-ai.md), [move to Trash with confirmation](docs/adr/0004-move-to-trash-with-confirmation.md) and [Local AI and advisory triage](docs/adr/0005-local-ai-and-advisory-triage.md). ADR 4 is accepted but not implemented; ADR 5 is implemented only for the Local AI provider, consent and the quick switch. Keep them aligned when you change their contracts.
 
 ## Commands
 
@@ -35,7 +35,9 @@ The codebase map starts at [.planning/codebase/ARCHITECTURE.md](.planning/codeba
 ## Ask Agent safety
 
 - Each request writes a new private run folder under `~/Library/Application Support/FolderLens/Runs/`. Never overwrite earlier runs, and never auto-delete runs, settings or conversations, including during verification.
-- Keep the configured provider. Only `grok`, `agy`, `copilot`, `pi` and `opencode` have adapters; other CLIs fail visibly. Do not guess flags or switch tools.
+- Keep the configured provider. Only `grok`, `agy`, `copilot`, `pi` and `opencode` have CLI adapters, plus the Local AI provider (`agent_id=local`); other CLIs fail visibly. Do not guess flags or switch tools.
+- Local AI (`src/local_ai.rs`): loopback only unless `local_allow_network`; public addresses are refused in the resolver, not only at validation. No proxy, no redirects. The API key lives only in the Keychain (`src/keychain.rs`), read on workers, and is sent only over https or to loopback (a 100.64/10 address is not proof of Tailscale). Local AI gets names, sizes and FolderLens notes (full paths only with path sharing on), never file contents or tools, and writes no run folder. Consent keys are JSON `[provider, model]` pairs; a running job ends when its consent key changes or is revoked. Tests use a loopback stub server, never a real model.
+- Nothing is sent before consent for the exact `consent_key()` (provider + model, plus host outside this Mac).
 - Pass models with `--model` where supported, never by command-string interpolation. Do not use fuzzy model matches or paid fallbacks. OpenCode: only 2.0.23 is verified; wait for its `config_option_update` with `folderlens-readonly`, not a fixed sleep.
 - Require agent-start permission before a review. Model or account access is not proof of free inference. No automatic paid requests.
 - Path sharing off means saved context only. With sharing on, reads are limited to eligible selected paths (512 KiB, 2,000 lines, 1,024 entries) and the original ∩ current scope; new grants never widen it, and old grants never revive after restart.

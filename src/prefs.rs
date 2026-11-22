@@ -1,7 +1,7 @@
 //! FolderLens's own settings file. The tray and the settings window share the path
 //! under Application Support. Tests each get a fresh file.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -71,6 +71,16 @@ pub struct Prefs {
     /// Extra hold, in hours. A leaf used more recently than this stays unticked. Zero is off.
     pub keep_hours: u32,
     pub kept: Vec<String>,
+    /// The OpenAI-compatible base URL used when `agent_id` is `local`.
+    pub local_endpoint: String,
+    /// The opt-in for LAN and Tailscale servers; public addresses are never accepted.
+    pub local_allow_network: bool,
+    /// Whether a Local AI key is in the Keychain. The key itself never is in this file.
+    pub local_key_saved: bool,
+    /// Model IDs from the last List models, for the quick switch.
+    pub local_models: Vec<String>,
+    /// Consent keys from `consent_key`: one per provider and exact model (and host).
+    pub consent: BTreeSet<String>,
 }
 
 impl Default for Prefs {
@@ -92,6 +102,11 @@ impl Default for Prefs {
             update_prereleases: false,
             keep_hours: 0,
             kept: Vec::new(),
+            local_endpoint: crate::local_ai::OLLAMA.into(),
+            local_allow_network: false,
+            local_key_saved: false,
+            local_models: Vec::new(),
+            consent: BTreeSet::new(),
         }
     }
 }
@@ -110,6 +125,54 @@ impl Prefs {
             .get(&self.model_key())
             .map(String::as_str)
             .unwrap_or("")
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.agent_id == LOCAL
+    }
+
+    /// What one consent covers: the provider and exact model, plus the host for a Local AI
+    /// server outside this Mac, so a new model or server asks again. A JSON pair, because hosts
+    /// (`host:port`) and model IDs (`qwen2.5:3b`) both contain `:` and must not run together.
+    pub fn consent_key(&self) -> String {
+        let provider = match crate::local_ai::network_host(&self.local_endpoint) {
+            Some(host) if self.is_local() => format!("{LOCAL}@{host}"),
+            _ => self.model_key(),
+        };
+        serde_json::to_string(&[provider.as_str(), self.model()]).unwrap()
+    }
+
+    pub fn has_consent(&self) -> bool {
+        self.consent.contains(&self.consent_key())
+    }
+
+    /// The consent question for the current provider and model.
+    pub fn consent_question(&self) -> String {
+        let model = if self.model().is_empty() {
+            "its default model".to_string()
+        } else {
+            format!("model {}", crate::local_ai::short_model_name(self.model()))
+        };
+        let shared = if self.send_paths {
+            "item names, estimated sizes, FolderLens notes and the selected full paths"
+        } else {
+            "item names, estimated sizes and FolderLens notes (no full paths)"
+        };
+        if self.is_local() {
+            let mut question = match crate::local_ai::network_host(&self.local_endpoint) {
+                Some(host) => format!("Send {shared} to the Local AI server at {host} ({model})?"),
+                None => format!("Send {shared} to the Local AI server on this Mac ({model})?"),
+            };
+            if crate::local_ai::network_host(&self.local_endpoint).is_some()
+                && self.local_endpoint.starts_with("http://")
+            {
+                question.push_str(" Plain http is not encrypted on the network.");
+            }
+            question.push_str(" No file contents are sent.");
+            return question;
+        }
+        let name = agent_name(&self.agent_id).unwrap_or("your agent");
+        format!("Send {shared} to {name} ({model})? Its provider's costs and data policy apply.")
     }
 }
 
@@ -209,6 +272,11 @@ pub fn load_from(path: &Path) -> Prefs {
                 prefs.keep_hours = value.parse::<u32>().unwrap_or(0).min(MAX_KEEP_HOURS)
             }
             "kept" if !value.is_empty() => prefs.kept.push(value.to_string()),
+            "local_endpoint" if !value.is_empty() => prefs.local_endpoint = value.to_string(),
+            "local_allow_network" => prefs.local_allow_network = value == "1",
+            "local_key_saved" => prefs.local_key_saved = value == "1",
+            "local_models" => prefs.local_models = serde_json::from_str(value).unwrap_or_default(),
+            "consent" => prefs.consent = serde_json::from_str(value).unwrap_or_default(),
             _ => {}
         }
     }
@@ -254,6 +322,23 @@ pub fn save_to(path: &Path, prefs: &Prefs) {
         flag(prefs.update_prereleases)
     ));
     text.push_str(&format!("keep_hours={}\n", prefs.keep_hours));
+    text.push_str(&format!("local_endpoint={}\n", prefs.local_endpoint));
+    text.push_str(&format!(
+        "local_allow_network={}\n",
+        flag(prefs.local_allow_network)
+    ));
+    text.push_str(&format!(
+        "local_key_saved={}\n",
+        flag(prefs.local_key_saved)
+    ));
+    text.push_str(&format!(
+        "local_models={}\n",
+        serde_json::to_string(&prefs.local_models).unwrap()
+    ));
+    text.push_str(&format!(
+        "consent={}\n",
+        serde_json::to_string(&prefs.consent).unwrap()
+    ));
     for path in &prefs.kept {
         text.push_str("kept=");
         text.push_str(path);
@@ -323,9 +408,76 @@ fn find_bin(name: &str) -> Option<PathBuf> {
     })
 }
 
+/// One quick-switch entry: a provider and the exact model it would use.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Choice {
+    pub label: String,
+    pub agent_id: String,
+    pub agent_bin: String,
+    pub model: String,
+}
+
+/// CLIs with a FolderLens adapter, then each listed Local AI model. Detected tools without an
+/// adapter are left out, because they cannot run a review.
+pub fn quick_choices(prefs: &Prefs, agents: &[Agent]) -> Vec<Choice> {
+    let mut choices: Vec<Choice> = agents
+        .iter()
+        .filter(|agent| {
+            crate::agent::provider::Provider::for_bin(&agent.bin.to_string_lossy()).is_ok()
+        })
+        .map(|agent| {
+            let model = prefs.models.get(agent.id).cloned().unwrap_or_default();
+            let shown = if model.is_empty() {
+                "default model"
+            } else {
+                model.as_str()
+            };
+            Choice {
+                label: format!("{} · {shown}", agent.name),
+                agent_id: agent.id.into(),
+                agent_bin: agent.bin.to_string_lossy().into_owned(),
+                model,
+            }
+        })
+        .collect();
+    let mut local = prefs.local_models.clone();
+    if let Some(saved) = prefs.models.get(LOCAL).filter(|m| !m.is_empty()) {
+        if !local.contains(saved) {
+            local.insert(0, saved.clone());
+        }
+    }
+    choices.extend(local.into_iter().map(|model| Choice {
+        label: format!("Local AI · {}", crate::local_ai::short_model_name(&model)),
+        agent_id: LOCAL.into(),
+        agent_bin: LOCAL.into(),
+        model,
+    }));
+    choices
+}
+
+impl Prefs {
+    pub fn choose(&mut self, choice: &Choice) {
+        self.agent_id.clone_from(&choice.agent_id);
+        self.agent_bin.clone_from(&choice.agent_bin);
+        self.models.insert(self.model_key(), choice.model.clone());
+    }
+
+    pub fn is_chosen(&self, choice: &Choice) -> bool {
+        self.agent_id == choice.agent_id
+            && self.agent_bin == choice.agent_bin
+            && self.model() == choice.model
+    }
+}
+
+/// `agent_id` and `agent_bin` of the Local AI provider; its address is in `local_endpoint`.
+pub const LOCAL: &str = "local";
+
 pub fn agent_name(id: &str) -> Option<&'static str> {
     if id == "custom" {
         return Some("your agent");
+    }
+    if id == LOCAL {
+        return Some("Local AI");
     }
     TOOLS
         .iter()
@@ -504,251 +656,5 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn legacy_settings_are_imported_once_without_changing_the_original() {
-        let root = path_for_state().with_extension("migration");
-        let path = root.join("FolderLens/settings.txt");
-        let legacy = root.join("Shelf/settings.txt");
-        let prefs = Prefs {
-            agent_id: "pi".into(),
-            models: BTreeMap::from([("pi".into(), "provider/exact-model".into())]),
-            keep_hours: 72,
-            kept: vec!["/work/important".into()],
-            update_checks: false,
-            ..Prefs::default()
-        };
-        save_to(&legacy, &prefs);
-        let original = std::fs::read(&legacy).unwrap();
-        assert_eq!(load_from(&path), prefs);
-        assert_eq!(std::fs::read(&path).unwrap(), original);
-        assert_eq!(std::fs::read(&legacy).unwrap(), original);
-
-        save_to(&legacy, &Prefs::default());
-        assert_eq!(load_from(&path), prefs);
-        save_to(&path, &Prefs::default());
-        save_to(&legacy, &prefs);
-        assert_eq!(load_from(&path), Prefs::default());
-        // An empty new file is authoritative too; do not revive old grants.
-        std::fs::write(&path, "").unwrap();
-        assert_eq!(load_from(&path), Prefs::default());
-        assert_eq!(
-            load_from(&root.join("Other/settings.txt")),
-            Prefs::default()
-        );
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn a_round_trip_keeps_the_agent_and_the_grant() {
-        let path =
-            std::env::temp_dir().join(format!("folderlens-prefs-round-{}", std::process::id()));
-        let prefs = Prefs {
-            agent_id: "claude".into(),
-            agent_bin: "/usr/local/bin/claude".into(),
-            models: BTreeMap::from([
-                ("copilot".into(), "auto".into()),
-                ("pi".into(), "openrouter/openrouter/free".into()),
-            ]),
-            allow_start: true,
-            send_paths: true,
-            notch_position: NotchPosition::Right,
-            notch_display: Some("AABBCCDD-1234-5678-ABCD-123456789ABC".into()),
-            theme: crate::theme::Theme::Lotus,
-            keep_hours: 36,
-            kept: vec!["/tmp/keep".into()],
-            ..Prefs::default()
-        };
-        save_to(&path, &prefs);
-        assert_eq!(load_from(&path), prefs);
-        let mut switched = load_from(&path);
-        switched.agent_id = "pi".into();
-        assert_eq!(switched.model(), "openrouter/openrouter/free");
-        switched.agent_id = "copilot".into();
-        assert_eq!(switched.model(), "auto");
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn ask_waits_for_an_agent_and_for_access() {
-        let mut prefs = Prefs::default();
-        assert_eq!(
-            prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use"),
-            Err("Choose an agent in Settings.")
-        );
-        prefs.agent_bin = "claude".into();
-        assert_eq!(
-            prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use"),
-            Err("Grant access in Settings before FolderLens starts an agent.")
-        );
-        prefs.allow_start = true;
-        let prompt = prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use").unwrap();
-        assert!(!prompt.contains("/tmp/smolvm"));
-        prefs.send_paths = true;
-        let prompt = prepare_ask(&prefs, "smolvm", "/tmp/smolvm", "In use").unwrap();
-        assert!(prompt.contains("/tmp/smolvm"));
-    }
-
-    #[test]
-    #[cfg(unix)]
-    fn ask_runs_keep_private_snapshots_and_start_the_configured_agent() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let root = path_for_state().with_extension("run test's $folder");
-        std::fs::create_dir(&root).unwrap();
-        let bin = root.join("grok");
-        std::fs::write(
-            &bin,
-            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$#\" \"$GROK_FOLDER_TRUST\" \"$1\" \"$2\"\ncat context.md\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let prefs = Prefs {
-            agent_bin: bin.to_string_lossy().into_owned(),
-            allow_start: true,
-            ..Prefs::default()
-        };
-        let context = prepare_ask(
-            &prefs,
-            "Selected",
-            "/private/cache",
-            "Selected items: 1 (42 KB)\n- cache's $(echo unsafe): 42 KB",
-        )
-        .unwrap();
-        let runs = root.join("Runs");
-        let first = prepare_run(&runs, &context).unwrap();
-        let second = prepare_run(&runs, "A different selection").unwrap();
-        assert_ne!(first, second);
-        let dir = first.parent().unwrap();
-        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 2);
-        assert_eq!(
-            std::fs::read_to_string(dir.join("context.md")).unwrap(),
-            context
-        );
-        assert_eq!(
-            std::fs::metadata(dir).unwrap().permissions().mode() & 0o777,
-            0o700
-        );
-        assert!(!Command::new(&first).output().unwrap().status.success());
-        let mut command = Command::new(&prefs.agent_bin);
-        command.arg("--resume").env("GROK_FOLDER_TRUST", "0");
-        resume_run(&first, &command, "session's $23").unwrap();
-        let output = Command::new(&first).output().unwrap();
-        assert!(output.status.success(), "{:?}", output);
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let parts: Vec<_> = stdout.splitn(6, '\n').collect();
-        assert_eq!(Path::new(parts[0]), dir);
-        assert_eq!(parts[1], "2");
-        assert_eq!(parts[2], "0");
-        assert_eq!(parts[3], "--resume");
-        assert_eq!(parts[4], "session's $23");
-        assert_eq!(parts[5], context);
-        assert!(!stdout.contains("/private/cache"));
-        assert_eq!(
-            std::fs::read_to_string(second.parent().unwrap().join("context.md")).unwrap(),
-            "A different selection"
-        );
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn an_old_file_leaves_the_hour_hold_off() {
-        let path =
-            std::env::temp_dir().join(format!("folderlens-prefs-old-{}", std::process::id()));
-        std::fs::write(&path, "agent_id=grok\nkeep_hours=nope\n").unwrap();
-        let prefs = load_from(&path);
-        assert_eq!(prefs.agent_id, "grok");
-        assert_eq!(prefs.keep_hours, 0);
-        assert!(prefs.gauge_cpu);
-        assert_eq!(prefs.notch_display, None);
-        assert_eq!(prefs.theme, crate::theme::Theme::Default);
-        std::fs::write(&path, "theme=unknown\nnotch_position=right\n").unwrap();
-        let loaded = load_from(&path);
-        assert_eq!(loaded.theme, crate::theme::Theme::Default);
-        assert_eq!(loaded.notch_position, NotchPosition::Right);
-        assert_eq!(prefs.notch_position, NotchPosition::Below);
-        for (text, expected) in [
-            ("notch_below=0\n", NotchPosition::Center),
-            ("notch_below=1\n", NotchPosition::Below),
-            (
-                "notch_below=1\nnotch_position=right\n",
-                NotchPosition::Right,
-            ),
-            ("notch_position=left\nnotch_below=0\n", NotchPosition::Left),
-            ("notch_position=unknown\n", NotchPosition::Below),
-            (
-                "notch_below=0\nnotch_position=unknown\n",
-                NotchPosition::Center,
-            ),
-        ] {
-            std::fs::write(&path, text).unwrap();
-            let loaded = load_from(&path);
-            assert_eq!(loaded.notch_position, expected);
-            assert!(!loaded.allow_start && !loaded.send_paths);
-            save_to(&path, &loaded);
-            assert_eq!(load_from(&path), loaded);
-        }
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn a_protected_root_stops_at_the_folder_boundary() {
-        assert!(path_under(
-            "/Users/me/Library/Mail/V10",
-            "/Users/me/Library/Mail"
-        ));
-        assert!(path_under(
-            "/Users/me/Library/Mail",
-            "/Users/me/Library/Mail/"
-        ));
-        assert!(!path_under(
-            "/Users/me/Library/Mailer",
-            "/Users/me/Library/Mail"
-        ));
-        assert!(!path_under(
-            "/Users/me/Library/MailExtra",
-            "/Users/me/Library/Mail"
-        ));
-        assert!(!path_under("/tmp/x", ""));
-        let mail = expand_home("~/Library/Mail/V10");
-        assert_eq!(always_name(&mail), Some("Mail"));
-        assert_eq!(
-            always_name(&expand_home("~/.kube/config")),
-            Some("Kubernetes")
-        );
-        assert_eq!(always_name(&expand_home("~/Library/Mailer")), None);
-        assert_eq!(always_name("/fixture/logs"), None);
-    }
-
-    #[test]
-    fn detection_uses_the_first_binary_and_skips_the_rest() {
-        let dir = std::env::temp_dir().join(format!("folderlens-agents-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        for name in ["kimi", "cursor", "cursor-agent", "qoder", "kiro"] {
-            std::fs::write(dir.join(name), b"").unwrap();
-        }
-        let found = detect_agents(|name| {
-            let candidate = dir.join(name);
-            candidate.is_file().then_some(candidate)
-        });
-        let ids: Vec<_> = found.iter().map(|agent| agent.id).collect();
-        assert_eq!(ids, vec!["cursor", "kimi", "qodercli", "kiro"]);
-        assert_eq!(
-            found.iter().find(|agent| agent.id == "cursor").unwrap().bin,
-            dir.join("cursor-agent")
-        );
-        assert_eq!(
-            found.iter().find(|agent| agent.id == "kiro").unwrap().bin,
-            dir.join("kiro")
-        );
-        assert!(agent_name("kimi") == Some("Kimi"));
-        assert!(agent_name("ccs") == Some("CCS"));
-        assert!(agent_name("custom") == Some("your agent"));
-        assert!(agent_name("missing").is_none());
-        assert!(choose_folder().is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
+#[path = "prefs_tests.rs"]
+mod tests;

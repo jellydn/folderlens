@@ -136,3 +136,13 @@ stroke_icon!(
     r#"<path d="M15 6l-6 6 6 6"/>"#
 );
 stroke_icon!(CHECK, "check", r#"<path d="M5 12.5l4.5 4.5L19 7"/>"#);
+stroke_icon!(
+    SERVER,
+    "server",
+    r#"<rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/>"#
+);
+stroke_icon!(
+    KEY,
+    "key",
+    r#"<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/>"#
+);

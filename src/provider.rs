@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Provider {
+pub(crate) enum Provider {
     Grok,
     Antigravity,
     Copilot,

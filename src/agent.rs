@@ -15,7 +15,7 @@ use crate::prefs;
 #[path = "broker.rs"]
 mod broker;
 #[path = "provider.rs"]
-mod provider;
+pub(crate) mod provider;
 use provider::{Launch, Provider};
 
 const RUNNING: u8 = 0;
@@ -40,10 +40,23 @@ impl Access {
 }
 
 pub fn validate_model(bin: &str, model: &str) -> Result<(), String> {
+    if bin == prefs::LOCAL {
+        // Ollama names and llama-server GGUF paths; never flags or more than one line.
+        if model.trim().is_empty() {
+            return Err("Choose a model. Use List models in Settings › Agent › Model.".into());
+        }
+        if model.len() > 512 || model.starts_with('-') || model.chars().any(char::is_control) {
+            return Err("Enter one model ID from List models, not flags or a command.".into());
+        }
+        return Ok(());
+    }
     Provider::for_bin(bin)?.validate_model(model)
 }
 
 pub fn model_note(bin: &str) -> &'static str {
+    if bin == prefs::LOCAL {
+        return "Use the exact ID from List models. 3B parameters or larger is recommended (for example qwen2.5:3b); smaller models often give vague or repeated answers. The model gets names and sizes only, never file contents.";
+    }
     match Provider::for_bin(bin) {
         Ok(Provider::Copilot) => "auto: Copilot Free uses an account-limited allowance, not unlimited free use. Explicit models may require a paid plan and credits. GitHub login required.",
         Ok(Provider::Pi) => "Use exact provider/model. Example: openrouter/openrouter/free requires your OpenRouter account/key and rate limits apply. Pi itself provides no free inference. Blank uses your CLI default, which may be paid.",
@@ -57,6 +70,8 @@ pub struct Job {
     pub name: String,
     pub bin: String,
     pub model: String,
+    /// The consent this job runs under; a change of provider, model, host or consent ends it.
+    pub consent_key: String,
     pub script: PathBuf,
     pub result: Option<Result<String, String>>,
     started: Instant,
@@ -116,6 +131,7 @@ impl Job {
             name: name.into(),
             bin: bin.into(),
             model: model.into(),
+            consent_key: String::new(),
             script,
             result: None,
             started: Instant::now(),
@@ -138,6 +154,41 @@ impl Job {
         Ok(job)
     }
 
+    /// A Local AI review: one HTTP request on a worker, with names and sizes only. No run
+    /// folder, session or continuation is written, and the model gets no reader.
+    pub fn start_local(prefs: &prefs::Prefs, context: &str) -> Self {
+        if let Err(error) = validate_model(prefs::LOCAL, prefs.model()) {
+            return Self::failed("Local AI", &prefs.agent_bin, &error);
+        }
+        let mut job = Self::preview(None);
+        job.name = "Local AI".into();
+        job.bin = prefs.agent_bin.clone();
+        job.model = prefs.model().into();
+        job.consent_key = prefs.consent_key();
+        job.elapsed = 0;
+        let (sender, receiver) = mpsc::channel();
+        job.receiver = Some(receiver);
+        let endpoint = prefs.local_endpoint.clone();
+        let allow_network = prefs.local_allow_network;
+        let key_saved = prefs.local_key_saved;
+        let model = job.model.clone();
+        let context = context.to_string();
+        let cancel = job.cancel.clone();
+        std::thread::spawn(move || {
+            // The Keychain may prompt, so it is read here, never on the UI thread.
+            let key = key_saved.then(crate::keychain::local_api_key).flatten();
+            // A cancel during a Keychain prompt must not send the selection afterwards.
+            if cancel.load(Ordering::SeqCst) == CANCELLED {
+                return;
+            }
+            let result =
+                crate::local_ai::review(&endpoint, allow_network, &model, key.as_ref(), &context)
+                    .map_err(|error| redact_diagnostics(&error));
+            let _ = sender.send(result);
+        });
+        job
+    }
+
     pub fn set_access(&self, access: Access) {
         *self.access.lock().unwrap() = access;
     }
@@ -147,6 +198,7 @@ impl Job {
             name: "Antigravity".into(),
             bin: "preview-only".into(),
             model: String::new(),
+            consent_key: String::new(),
             script: PathBuf::new(),
             result,
             started: Instant::now(),
@@ -172,6 +224,13 @@ impl Job {
         let Some(receiver) = &self.receiver else {
             return false;
         };
+        // A Local AI job has no broker or child to stop; ureq cannot abort a request in flight.
+        // Dropping the receiver ends the job now, and the worker's late answer goes nowhere.
+        if self.broker.is_none() && self.cancel.load(Ordering::SeqCst) == CANCELLED {
+            self.receiver = None;
+            self.result = Some(Err("Analysis cancelled.".into()));
+            return true;
+        }
         match receiver.try_recv() {
             Ok(result) => {
                 if result.is_err() {
@@ -217,8 +276,19 @@ impl Job {
         }
     }
 
+    /// Whether `prefs` still allow this job: the same agent and model and, for a job that
+    /// recorded one, the same consent, not revoked.
+    pub fn allowed_by(&self, prefs: &prefs::Prefs) -> bool {
+        prefs.allow_start
+            && prefs.agent_bin == self.bin
+            && prefs.model() == self.model
+            && (self.consent_key.is_empty()
+                || (prefs.consent_key() == self.consent_key
+                    && prefs.consent.contains(&self.consent_key)))
+    }
+
     pub fn open_chat(&self, prefs: &prefs::Prefs) -> Result<(), String> {
-        if !prefs.allow_start || prefs.agent_bin != self.bin || prefs.model() != self.model {
+        if !self.allowed_by(prefs) {
             return Err(
                 "Grant access to the same agent and model in Settings before opening this chat."
                     .into(),
