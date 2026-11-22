@@ -124,9 +124,10 @@ pub fn parse(answer: &str, count: usize) -> Result<Vec<(usize, Label, String)>, 
             Some("keep") => Label::Keep,
             _ => return fail("unknown label"),
         };
-        let reason: String = value["reason"]
-            .as_str()
-            .unwrap_or("")
+        let Some(reason) = value["reason"].as_str() else {
+            return fail("missing reason");
+        };
+        let reason: String = reason
             .chars()
             .filter(|c| !c.is_control())
             .take(REASON_LIMIT)

@@ -25,6 +25,8 @@ fn any_stray_text_or_bad_entry_fails_the_whole_answer() {
         "{\"i\":0,\"label\":\"safe\",\"reason\":\"a\"}\n{\"i\":0,\"label\":\"keep\",\"reason\":\"b\"}",
         r#"{"i":0,"label":"delete","reason":"not a label"}"#,
         r#"{"i":-1,"label":"safe","reason":"negative"}"#,
+        r#"{"i":0,"label":"safe","reason":42}"#,
+        r#"{"i":0,"label":"safe"}"#,
         "",
     ] {
         let error = parse(answer, 3).unwrap_err();
