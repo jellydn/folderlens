@@ -310,8 +310,15 @@ impl Job {
         }
     }
 
-    /// Only CLI reviews write a run folder with a resumable chat; Local AI, private runs and
-    /// jobs that failed before starting have none.
+    /// A finished CLI review for scenes and tests, with a run folder like a real one.
+    pub fn preview_cli(answer: &str) -> Self {
+        let mut job = Self::preview(Some(Ok(answer.into())));
+        job.script = "/tmp/FolderLens/Runs/example/run.command".into();
+        job
+    }
+
+    /// Only CLI reviews write a run folder; Local AI, private runs and jobs that failed before
+    /// starting have none.
     pub fn has_run_folder(&self) -> bool {
         !self.script.as_os_str().is_empty()
     }

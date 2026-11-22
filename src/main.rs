@@ -1511,14 +1511,6 @@ fn ask_button(s: &State) -> El {
     }
 }
 
-/// A finished CLI review for scenes and tests: it has a run folder, so its Terminal and
-/// Finder buttons show.
-fn cli_review(answer: &str) -> agent::Job {
-    let mut job = agent::Job::preview(Some(Ok(answer.into())));
-    job.script = "/tmp/FolderLens/Runs/example/run.command".into();
-    job
-}
-
 fn terminal_button() -> El {
     button("Continue saved chat in Terminal", ButtonStyle::Secondary)
         .key("agent-terminal")
@@ -2055,7 +2047,7 @@ fn main() {
             }),
             ("reviewed-example", |s| {
                 apply_level(s, Level::Balanced);
-                s.agent = Some(cli_review("Example review: check rebuild costs first. Nothing was deleted. A model answer is not proof that cleanup is safe."));
+                s.agent = Some(agent::Job::preview_cli("Example review: check rebuild costs first. Nothing was deleted. A model answer is not proof that cleanup is safe."));
             }),
             ("scanning", |s| {
                 s.catalog = catalog::pending();
@@ -2071,7 +2063,7 @@ fn main() {
             }),
             ("reviewed", |s| {
                 apply_level(s, Level::Balanced);
-                s.agent = Some(cli_review("Review the selected caches first. Keep protected and in-use folders. Check the saved context and risks in Terminal before taking action."));
+                s.agent = Some(agent::Job::preview_cli("Review the selected caches first. Keep protected and in-use folders. Check the saved context and risks in Terminal before taking action."));
             }),
             ("agent-failed", |s| {
                 apply_level(s, Level::Balanced);
@@ -3166,7 +3158,7 @@ mod tests {
             rt.find("agent-terminal").is_none(),
             "no saved chat before success"
         );
-        rt.update(|state, _| state.agent = Some(cli_review("Keep the held items.")));
+        rt.update(|state, _| state.agent = Some(agent::Job::preview_cli("Keep the held items.")));
         rt.frame(0.2);
         assert!(rt.find("agent-summary").is_some());
         assert!(rt.find("agent-terminal").is_some());
