@@ -1,3 +1,22 @@
+## FolderLens 0.4.0 — Local AI
+
+**Stable release for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual. This release adds a direct local AI connection next to the existing CLI adapters (earlier notes said "No direct AI API"; that is no longer true).
+
+- **Local AI provider** (Settings → Agent → Agent → Local AI): an OpenAI-compatible server such as Ollama (`127.0.0.1:11434`), LM Studio (`:1234`), llama.cpp `llama-server` (`:8080`) or the Llama menu-bar app. **Server** has presets, the address, and **List models**, which reads `/v1/models`. 3B parameters or larger is recommended; `qwen2.5:3b` is the smallest model that gave useful reviews in testing.
+- Only servers on this Mac by default. **Allow LAN and Tailscale servers** also accepts private addresses and names. Public addresses are always refused, also when a name resolves to one, because the check runs on the addresses the connection uses. No proxy and no redirects. HTTPS uses the macOS trust store.
+- Optional API key, kept only in the Keychain and sent as a Bearer token, **only over https or to this Mac**. With a key saved, a plain-http server elsewhere (Tailscale included) is refused; use `tailscale serve` for https, or no key.
+- Local AI gets item names, estimated sizes and FolderLens notes, and full paths only with path sharing on. It never gets file contents or tools, and FolderLens writes no run folder for it. The server may keep its own logs.
+- **Consent per provider and model** (and host for a server outside this Mac): Agent help asks before the first request to each, for Local AI and the CLI agents. **Privacy → Revoke all** clears every grant. A running review ends when its provider, model, host or consent changes.
+- **Quick switch** in Agent help changes between adapted CLI agents and listed Local AI models.
+- Errors say whether the server is down, needs a key (401), does not know the model (404) or is still loading it (503).
+- New folder-and-lens app icon (Dock, Finder, favicons and the Settings logo).
+- The Settings sidebar now starts below the macOS window buttons, with the app logo above **General**.
+- ADR 0004 (Move to Trash only, user-started and confirmed; not implemented yet) and ADR 0005 (Local AI, consent and advisory triage).
+
+Verification covers the full macOS Rust/Pi suites, formatting, Clippy, Local AI tests against a loopback stub server (address and resolver policy, exact model and delimited selection, Bearer key, 401/404/503 text, the key refused on plain http outside this Mac, cancel), consent tests (per provider, model and host; a port and a model tag never collide; no request before consent; revoke ends a running job), inspected renders of the new Settings pages, the real Settings window on this Mac in all seven themes, List models against a real Ollama (qwen2.5:0.5b, 3b, 7b), and one real review with qwen2.5:3b (about 9 s).
+
+Known limits: small models still use words like "delete" and "can be freed"; prompt rules and an eval come later. A cancelled Local AI request is dropped at once, but its connection can stay open until the server answers or 120 s pass. A full Ask from the real panel with Local AI, LAN/Tailscale servers, https servers with private CAs and the Keychain prompt on a fresh install were not checked on screen. Native pointer/keyboard routing, screen-reader output, physical-notch and multi-display behavior, real CLI AI turns/tool routing/Terminal continuation and actual manual app replacement/restart/Gatekeeper behavior remain unverified. All current installations remain manual-update-only; Homebrew users update through Homebrew, whose cask can lag publication. Builds are **ad-hoc signed, not Developer ID signed or notarized**.
+
 ## FolderLens 0.3.9 — Settings redesign
 
 **Stable patch for Apple Silicon, macOS 14+. Record choice never deletes files or runs cleanup.** AI stays optional and manual through the existing CLI adapters.
