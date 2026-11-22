@@ -1,6 +1,6 @@
 [package]
 name = "folderlens"
-version = "0.3.9"
+version = "0.4.0"
 edition = "2021"
 publish = false
 description = "Review what a cleanup level would tick. Record choice does not delete."
