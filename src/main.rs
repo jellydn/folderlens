@@ -1321,6 +1321,7 @@ const ACCESS_LIMITS: &str = "Manual request; provider costs and data policies ap
 
 fn agent_help(s: &State) -> El {
     let running = s.agent.as_ref().is_some_and(|job| job.result.is_none());
+    let run_folder = s.agent.as_ref().is_some_and(agent::Job::has_run_folder);
     let succeeded = s
         .agent
         .as_ref()
@@ -1356,12 +1357,12 @@ fn agent_help(s: &State) -> El {
         )
         .child(agent_review(s))
         .child(local_summary(s))
-        .child(if succeeded { terminal_button() } else { el() })
-        .child(if s.agent.is_some() {
-            run_files_button()
+        .child(if succeeded && run_folder {
+            terminal_button()
         } else {
             el()
         })
+        .child(if run_folder { run_files_button() } else { el() })
         .child(
             text(if s.access_details {
                 "Hide access and limits"
@@ -1508,6 +1509,14 @@ fn ask_button(s: &State) -> El {
     } else {
         ask
     }
+}
+
+/// A finished CLI review for scenes and tests: it has a run folder, so its Terminal and
+/// Finder buttons show.
+fn cli_review(answer: &str) -> agent::Job {
+    let mut job = agent::Job::preview(Some(Ok(answer.into())));
+    job.script = "/tmp/FolderLens/Runs/example/run.command".into();
+    job
 }
 
 fn terminal_button() -> El {
@@ -2046,7 +2055,7 @@ fn main() {
             }),
             ("reviewed-example", |s| {
                 apply_level(s, Level::Balanced);
-                s.agent = Some(agent::Job::preview(Some(Ok("Example review: check rebuild costs first. Nothing was deleted. A model answer is not proof that cleanup is safe.".into()))));
+                s.agent = Some(cli_review("Example review: check rebuild costs first. Nothing was deleted. A model answer is not proof that cleanup is safe."));
             }),
             ("scanning", |s| {
                 s.catalog = catalog::pending();
@@ -2062,7 +2071,7 @@ fn main() {
             }),
             ("reviewed", |s| {
                 apply_level(s, Level::Balanced);
-                s.agent = Some(agent::Job::preview(Some(Ok("Review the selected caches first. Keep protected and in-use folders. Check the saved context and risks in Terminal before taking action.".into()))));
+                s.agent = Some(cli_review("Review the selected caches first. Keep protected and in-use folders. Check the saved context and risks in Terminal before taking action."));
             }),
             ("agent-failed", |s| {
                 apply_level(s, Level::Balanced);
@@ -2112,7 +2121,11 @@ fn main() {
                     .level(3),
             ),
         );
-    let settings = WindowSpec::new("settings", settings::spec()).options(WindowOptions {
+    let settings = WindowSpec::from_app(
+        "settings",
+        App::new(settings::spec()).on_close(settings::closed),
+    )
+    .options(WindowOptions {
         visible: false,
         resizable: true,
         min_size: Some((640.0, 460.0)),
@@ -3153,13 +3166,20 @@ mod tests {
             rt.find("agent-terminal").is_none(),
             "no saved chat before success"
         );
-        rt.update(|state, _| {
-            state.agent = Some(agent::Job::preview(Some(Ok("Keep the held items.".into()))))
-        });
+        rt.update(|state, _| state.agent = Some(cli_review("Keep the held items.")));
         rt.frame(0.2);
         assert!(rt.find("agent-summary").is_some());
         assert!(rt.find("agent-terminal").is_some());
+        assert!(rt.find("agent-files").is_some());
         assert!(rt.find("agent-cancel").is_none());
+        // Local AI and private runs answer without a run folder, so nothing to resume or open.
+        rt.update(|state, _| {
+            state.agent = Some(agent::Job::preview(Some(Ok("Keep the held items.".into()))))
+        });
+        rt.frame(0.25);
+        assert!(rt.find("agent-summary").is_some());
+        assert!(rt.find("agent-terminal").is_none());
+        assert!(rt.find("agent-files").is_none());
         assert_eq!(ticked_ids(&rt.state), before);
         assert_eq!(ticked_bytes(&rt.state), bytes);
         rt.update(|state, _| {

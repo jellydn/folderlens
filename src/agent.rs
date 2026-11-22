@@ -310,6 +310,12 @@ impl Job {
         }
     }
 
+    /// Only CLI reviews write a run folder with a resumable chat; Local AI, private runs and
+    /// jobs that failed before starting have none.
+    pub fn has_run_folder(&self) -> bool {
+        !self.script.as_os_str().is_empty()
+    }
+
     pub fn failed(name: &str, bin: &str, error: &str) -> Self {
         let mut job = Self::preview(Some(Err(redact_diagnostics(error))));
         job.name = name.into();
