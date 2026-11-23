@@ -349,6 +349,15 @@ pub fn open(page: Page) {
     handle.open();
 }
 
+/// The close button only hides Settings, which hid the notch when it opened; bring the
+/// notch back, as Escape does, so FolderLens never ends up with nothing on screen. A quit
+/// closes it too; then the notch stays hidden.
+pub fn closed(_: &mut Settings, _: &mut Tx) {
+    if !rune::quitting() {
+        crate::notch::show();
+    }
+}
+
 pub fn hide() {
     if let Some(handle) = HANDLE.get() {
         handle.hide();
